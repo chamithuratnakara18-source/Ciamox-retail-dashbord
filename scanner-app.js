@@ -47,6 +47,9 @@
   backButton.addEventListener('click', goHome);
   cameraButton.addEventListener('click', () => cameraRunning ? stopCamera() : startCamera());
   document.getElementById('clearButton').addEventListener('click', clearSession);
+  document.getElementById('logoutButton').addEventListener('click', async () => {
+    try { await api('/api/auth/logout', { method: 'POST' }); } finally { location.replace('/login.html'); }
+  });
   inventoryActionButton.addEventListener('click', () => {
     inventoryFormCard.classList.remove('hidden');
     document.getElementById('productName').focus();
@@ -324,6 +327,10 @@
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
     const body = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      location.replace('/login.html?next=%2Fscanner.html');
+      throw new Error('Sign in required.');
+    }
     if (!response.ok) throw new Error(body.error || `Server error (${response.status})`);
     return body;
   }

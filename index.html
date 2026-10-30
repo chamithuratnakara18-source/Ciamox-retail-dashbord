@@ -28,7 +28,7 @@
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="./" aria-label="RetailFlow home"><span class="brand-mark">R</span><span><b>RetailFlow</b><small>STORE OPERATIONS</small></span></a>
-<span id="connectionStatus" class="local-chip"><i></i> DATABASE CHECKING</span>
+<div style="display:flex;align-items:center;gap:8px"><span id="connectionStatus" class="local-chip"><i></i> DATABASE CHECKING</span><button id="logoutButton" type="button" class="local-chip" style="cursor:pointer">Sign out</button></div>
     </header>
 
     
@@ -37,6 +37,7 @@
         <span class="sidebar-label">WORKSPACE</span>
         <button class="nav-tab active" data-view="dashboard" type="button"><span class="nav-icon">▦</span>Dashboard</button>
         <button class="nav-tab" data-view="inventory" type="button"><span class="nav-icon">▤</span>Inventory</button>
+        <a class="nav-tab" href="/scanner.html" style="text-decoration:none"><span class="nav-icon">▥</span>Scanner</a>
         <p class="sidebar-caption">Store performance<br>and stock control</p>
       </aside>
       <main class="hub-content">

@@ -20,6 +20,9 @@
   document.getElementById('closeExpenseButton').addEventListener('click', () => document.getElementById('expensePanel').classList.add('hidden'));
   document.getElementById('expenseForm').addEventListener('submit', saveExpense);
   document.getElementById('refreshInventoryButton').addEventListener('click', () => { void refreshInventory(); });
+  document.getElementById('logoutButton').addEventListener('click', async () => {
+    try { await api('/api/auth/logout', { method: 'POST' }); } finally { location.replace('/login.html'); }
+  });
   inventorySearch.addEventListener('input', renderInventoryTable);
   window.setInterval(() => {
     if (document.visibilityState === 'hidden') return;
@@ -34,6 +37,10 @@
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
     const body = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      location.replace('/login.html?next=%2F');
+      throw new Error('Sign in required.');
+    }
     if (!response.ok) throw new Error(body.error || `Server error (${response.status})`);
     return body;
   }
@@ -84,7 +91,7 @@
     } catch (error) {
       setDatabaseStatus(false, 'SQL DISCONNECTED');
       document.getElementById('dashboardUpdated').textContent = 'Waiting for database';
-      dashboardError.textContent = `Dashboard data is not available: ${error.message}. Set DATABASE_URL in Vercel and run schema.sql.`;
+      dashboardError.textContent = `Dashboard data is not available: ${error.message}. Check the TiDB variables in Vercel and confirm the tables exist.`;
       dashboardError.classList.remove('hidden');
       drawMetricsChart([]);
     }

@@ -1,4 +1,8 @@
 import mysql from 'mysql2/promise';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+
+const sessionCookie = '__Host-retailflow_session';
+const sessionLifetimeSeconds = 8 * 60 * 60;
 
 let pool;
 
@@ -60,6 +64,60 @@ function httpError(message, statusCode = 400) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
+
+function authConfig() {
+  const password = process.env.RETAILFLOW_ADMIN_PASSWORD || '';
+  const secret = process.env.RETAILFLOW_SESSION_SECRET || '';
+  if (password.length < 20 || Buffer.byteLength(secret) < 32) {
+    throw httpError('Set RETAILFLOW_ADMIN_PASSWORD (20+ characters) and RETAILFLOW_SESSION_SECRET (32+ characters) in Vercel.', 503);
+  }
+  return { password, secret };
+}
+
+function sameOrigin(req) {
+  const origin = req.headers?.origin;
+  const host = req.headers?.host;
+  if (typeof origin !== 'string' || typeof host !== 'string') return false;
+  try {
+    const url = new URL(origin);
+    return url.host === host.toLowerCase() && (
+      url.protocol === 'https:' || (url.protocol === 'http:' && url.hostname === 'localhost')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function safePasswordMatch(input, expected) {
+  if (typeof input !== 'string' || input.length > 512) return false;
+  const inputHash = createHash('sha256').update(input).digest();
+  const expectedHash = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(inputHash, expectedHash);
+}
+
+function signedSession(payload, secret) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = createHmac('sha256', secret).update(body).digest('base64url');
+  return `${body}.${signature}`;
+}
+
+function hasSession(req, secret) {
+  const cookie = String(req.headers?.cookie || '').split(';').map(value => value.trim())
+    .find(value => value.startsWith(`${sessionCookie}=`));
+  if (!cookie) return false;
+  const token = cookie.slice(sessionCookie.length + 1);
+  const pieces = token.split('.');
+  if (pieces.length !== 2 || pieces[0].length > 256 || pieces[1].length > 128) return false;
+  const expected = createHmac('sha256', secret).update(pieces[0]).digest();
+  const actual = Buffer.from(pieces[1], 'base64url');
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(pieces[0], 'base64url').toString('utf8'));
+    return payload.v === 1 && Number.isSafeInteger(payload.exp) && payload.exp > Date.now();
+  } catch {
+    return false;
+  }
 }
 
 function validDate(value) {
@@ -182,8 +240,8 @@ async function dashboardHandler(req, res) {
 
 async function inventoryHandler(req, res) {
   if (!allowMethods(req, res, ['GET', 'POST'])) return;
-  const db = getPool();
   try {
+    const db = getPool();
     if (req.method === 'GET') {
       const barcode = typeof req.query?.barcode === 'string' ? req.query.barcode.trim() : '';
       if (barcode) {
@@ -299,10 +357,41 @@ async function expensesHandler(req, res) {
 
 
 export default async function handler(req, res) {
-  const endpoint = String(req.query?.route || '').split('/').filter(Boolean).pop();
-  if (endpoint === 'dashboard') return dashboardHandler(req, res);
-  if (endpoint === 'inventory') return inventoryHandler(req, res);
-  if (endpoint === 'sales') return salesHandler(req, res);
-  if (endpoint === 'expenses') return expensesHandler(req, res);
-  return sendJson(res, 404, { error: 'API endpoint not found.' });
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  try {
+    const route = String(req.query?.route || '');
+    if (!['auth/login', 'auth/logout', 'auth/status', 'dashboard', 'inventory', 'sales', 'expenses'].includes(route)) {
+      return sendJson(res, 404, { error: 'API endpoint not found.' });
+    }
+    if (req.method !== 'GET' && !sameOrigin(req)) {
+      return sendJson(res, 403, { error: 'Request must come from this website.' });
+    }
+    const { password, secret } = authConfig();
+    if (route === 'auth/login') {
+      if (!allowMethods(req, res, ['POST'])) return;
+      if (!safePasswordMatch(parseJsonBody(req).password, password)) {
+        return sendJson(res, 401, { error: 'Incorrect password.' });
+      }
+      const token = signedSession({ v: 1, exp: Date.now() + sessionLifetimeSeconds * 1000 }, secret);
+      res.setHeader('Set-Cookie', `${sessionCookie}=${token}; Path=/; Max-Age=${sessionLifetimeSeconds}; HttpOnly; Secure; SameSite=Strict`);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (route === 'auth/logout') {
+      if (!allowMethods(req, res, ['POST'])) return;
+      res.setHeader('Set-Cookie', `${sessionCookie}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (!hasSession(req, secret)) return sendJson(res, 401, { error: 'Sign in required.' });
+    if (route === 'auth/status') {
+      if (!allowMethods(req, res, ['GET'])) return;
+      return sendJson(res, 200, { authenticated: true });
+    }
+    if (route === 'dashboard') return dashboardHandler(req, res);
+    if (route === 'inventory') return inventoryHandler(req, res);
+    if (route === 'sales') return salesHandler(req, res);
+    if (route === 'expenses') return expensesHandler(req, res);
+  } catch (error) {
+    return fail(res, error);
+  }
 }

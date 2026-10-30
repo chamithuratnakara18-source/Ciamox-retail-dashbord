@@ -24,7 +24,7 @@
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="./" aria-label="RetailFlow home"><span class="brand-mark">R</span><span><b>RetailFlow</b><small>PHONE SCANNER</small></span></a>
-<span id="connectionStatus" class="local-chip"><i></i> DATABASE CHECKING</span>
+<div style="display:flex;align-items:center;gap:8px"><span id="connectionStatus" class="local-chip"><i></i> DATABASE CHECKING</span><button id="logoutButton" type="button" class="local-chip" style="cursor:pointer">Sign out</button></div>
     </header>
 
     <main>
@@ -187,6 +187,9 @@ var ZXingWASM=function(P){"use strict";const ve=[["Aztec","M"],["Codabar","L"],[
   backButton.addEventListener('click', goHome);
   cameraButton.addEventListener('click', () => cameraRunning ? stopCamera() : startCamera());
   document.getElementById('clearButton').addEventListener('click', clearSession);
+  document.getElementById('logoutButton').addEventListener('click', async () => {
+    try { await api('/api/auth/logout', { method: 'POST' }); } finally { location.replace('/login.html'); }
+  });
   inventoryActionButton.addEventListener('click', () => {
     inventoryFormCard.classList.remove('hidden');
     document.getElementById('productName').focus();
@@ -464,6 +467,10 @@ var ZXingWASM=function(P){"use strict";const ve=[["Aztec","M"],["Codabar","L"],[
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
     const body = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      location.replace('/login.html?next=%2Fscanner.html');
+      throw new Error('Sign in required.');
+    }
     if (!response.ok) throw new Error(body.error || `Server error (${response.status})`);
     return body;
   }
