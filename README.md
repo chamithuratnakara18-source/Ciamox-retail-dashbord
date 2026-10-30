@@ -1,21 +1,25 @@
-# RetailFlow store hub and scanner
+# RetailFlow store hub and phone scanner
 
-`index.html` is the main hub. Its left sidebar contains only Dashboard and Inventory. `scanner.html` is a separate scanner page; it is not a tab in the hub. Both pages use the same `/api` routes and PostgreSQL database, so inbound receipts and completed sales appear in the hub. Dashboard and inventory refresh automatically while open.
+`index.html` is the main hub. `scanner.html` is the separate phone scanner. Both use the same Vercel API and TiDB MySQL database: inbound receipts and completed sales update the hub inventory and dashboard.
 
-## What is included
+## Features
 
-- Dashboard: all-time revenue, gross profit, net profit, units on hand, and a 30-day line chart.
-- Inventory: current products, quantity, original sale price, latest arrival date, and supplier.
-- Separate phone scanner: inbound receipt form and Sell cart.
-- Vercel API routes for inventory, sales, dashboard data, and operating expenses.
+- Dashboard: revenue, gross profit, net profit, units on hand, and a 30-day trend.
+- Inventory: current stock, barcode, sale price, arrival date, and supplier.
+- Scanner: inbound receipt form and a sell cart that checks stock before completing a sale.
+- Server-side Vercel API routes in `api/`; database credentials are read only from server environment variables.
 
-Revenue uses the saved original sale price. Gross profit subtracts the weighted average purchase cost from inbound receipts. Net profit subtracts recorded expenses. The first receipt sets the barcode's original sale price; later receipts preserve it and add stock.
+Revenue uses the saved sale price. Gross profit subtracts the recorded weighted-average unit cost. Net profit subtracts recorded expenses. The first inbound receipt sets a product's sale price; later receipts preserve it and add stock.
 
-## SQL and Vercel setup
+## Database and deployment
 
-1. Create a PostgreSQL database (Neon PostgreSQL works with Vercel).
-2. Run `schema.sql` in its SQL editor. It creates the required tables and adds cost/expense columns to the earlier scanner schema.
-3. Add the database's pooled connection string to Vercel as the server-side environment variable `DATABASE_URL`, then redeploy. Do not put the connection string in either HTML page or commit it to GitHub.
-4. Keep `index.html`, `scanner.html`, `package.json`, `api/`, and `lib/` at the Vercel project root. Open the hub at `/` and launch the separate scanner at `/scanner.html`.
+The schema is TiDB/MySQL, not PostgreSQL. The tables are `inventory`, `inventory_receipts`, `sales`, `sale_items`, and `operating_expenses`.
 
-The prototype does not yet include staff sign-in or roles. Add authentication before exposing its write API for a public shop.
+1. Import this repository into Vercel from GitHub. Keep `index.html`, `scanner.html`, `hub.js`, `scanner-app.js`, `api/`, `lib/`, and `package.json` at the project root.
+2. Connect the TiDB Starter instance to the Vercel project using the TiDB Cloud Vercel integration. Choose **Cluster**, database `retailflow`, and **General**. TiDB should add `TIDB_HOST`, `TIDB_PORT`, `TIDB_USER`, `TIDB_PASSWORD`, and `TIDB_DATABASE` to the Vercel project.
+3. Redeploy after the environment variables are added. Open `/` for the hub and `/scanner.html` on the phone for scanning.
+4. Keep the database password out of the browser files and GitHub. If you set the values manually, add them under Vercel **Settings → Environment Variables** and redeploy.
+
+## Important before real customer use
+
+This version has no staff sign-in or user roles. Do not expose the write API to a public shop until authentication and authorization are added. Verify the TiDB public-endpoint network rules for Vercel before deployment; do not open database access broadly without a deliberate security review.
