@@ -29,7 +29,7 @@
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="./" aria-label="RetailFlow home"><span class="brand-mark">R</span><span><b>RetailFlow</b><small>STORE OPERATIONS</small></span></a>
-<div style="display:flex;align-items:center;gap:8px"><span id="connectionStatus" class="local-chip"><i></i> DATABASE CHECKING</span><button id="logoutButton" type="button" class="local-chip" style="cursor:pointer">Sign out</button></div>
+<div style="display:flex;align-items:center;gap:8px"><span id="connectionStatus" class="local-chip"><i></i> FIREBASE CHECKING</span></div>
     </header>
 
     
@@ -73,7 +73,7 @@
       <section id="inventoryScreen" class="inventory-screen hidden">
         <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STOCK CONTROL</div><h1>Inventory</h1><p>Products received into the store and their current stock.</p></div><button id="refreshInventoryButton" class="secondary-button" type="button">Refresh</button></header>
         <section class="inventory-table-card">
-          <div class="inventory-toolbar"><div><strong id="inventorySummary">Loading inventory…</strong><span id="inventoryStatus">Synced from SQL</span></div><input id="inventorySearch" type="search" placeholder="Search product or barcode" aria-label="Search inventory"></div>
+          <div class="inventory-toolbar"><div><strong id="inventorySummary">Loading inventory…</strong><span id="inventoryStatus">Loading from Firebase</span></div><input id="inventorySearch" type="search" placeholder="Search product or barcode" aria-label="Search inventory"></div>
           <div class="table-scroll"><table><thead><tr><th>Product</th><th>Barcode</th><th>In stock</th><th>Original price</th><th>Last arrival</th><th>Supplier</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
           <div id="inventoryEmpty" class="inventory-empty hidden">No inventory products found.</div>
         </section>
@@ -90,6 +90,6 @@
   
   
   
-  <script src="./hub.js" defer></script>
+  <script type="module" src="./hub.js"></script>
 </body>
 </html>

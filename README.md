@@ -1,9 +1,17 @@
-# RetailFlow dashboard (separate app)
+# RetailFlow dashboard — Firebase prototype
 
-This ZIP contains only the dashboard and its protected Vercel backend. Every file is in the ZIP root. Upload its extracted files to the root of `Ciamox-retail-dashbord` on GitHub and commit. If the previous scanner files remain in that repository, delete `scanner.html` and `scanner-app.js` there; uploading a ZIP cannot remove existing GitHub files. The `vercel.json` here does not serve scanner pages.
+This is the **main dashboard only**. The phone scanner is a separate website. Both websites use the same Firebase project, `ciamox-retail`, and its default Cloud Firestore database. All files in this ZIP are at its root; there are no subfolders or server routes.
 
-Set these Vercel **Production** environment variables in the `ciamox-retail-main` project: `TIDB_HOST` (host only), `TIDB_PORT` (`4000`), `TIDB_USER`, `TIDB_PASSWORD`, `TIDB_DATABASE` (`retailflow`), `RETAILFLOW_ADMIN_PASSWORD` (at least 20 characters), and `RETAILFLOW_SESSION_SECRET` (different random value, at least 32 characters). Use Secret type for passwords and the session secret. After saving variables, redeploy the latest `main` deployment.
+## Connect Firebase
 
-Open `https://ciamox-retail-main.vercel.app/login.html` and sign in. `/api/auth/status` should return 401 before sign-in. `/api/dashboard` should then return dashboard JSON after sign-in. A 503 means the two sign-in variables are missing or too short; a 500 after sign-in points to TiDB variables, connectivity, or the schema. The existing TiDB `retailflow` tables should match `schema.sql`; do not rerun it unnecessarily.
+1. In Firebase Console → **Databases and storage → Firestore Database**, create the default **Standard** database. Choose **Test mode** for this short prototype; it permits public reads and writes. Use sample data only.
+2. The registered Firebase web app configuration from the supplied screenshot is already in `firebase-config.js` in both packages. Do not add a second Firebase project. Firebase Hosting setup is optional because these pages can stay on Vercel.
+3. Extract this ZIP and upload its **root files**, not the ZIP itself, to the root of `Ciamox-retail-dashbord`. Overwrite files with matching names and commit to `main`. This package overwrites the old SQL routing, backend, and old scanner page with inactive placeholders. Use the stable Vercel domain for the dashboard.
 
-The TiDB password previously pasted into chat should be rotated in TiDB Cloud and updated in Vercel. Do not upload a real `.env` file. The data API uses an HttpOnly, Secure, signed cookie and checks the origin of writes. This is one shared store login; it does not provide per-employee accounts or distributed rate limiting.
+Do not carry over TiDB environment variables to Firebase. There is no Firebase login or role control in this prototype. Firestore Test mode is open to anyone, and its initial rules may expire; do not store real shop transactions until access rules are designed and applied.
+
+## Check the connection
+
+Open the dashboard; its status should say `FIREBASE CONNECTED`. In the separate phone scanner, use **Inbound** to add a sample product (or type its barcode manually), then refresh the dashboard inventory. Use **Sell** for one unit; the dashboard's revenue and stock should update. Record an expense to check net profit. If a permission error appears, inspect Firestore's database and rules.
+
+Data previously stored in TiDB is not moved automatically. This prototype reads `products`, `receipts`, `sales`, and `expenses` collections in the new Firestore database.

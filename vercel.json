@@ -1,16 +1,1 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "builds": [
-    { "src": "backend.js", "use": "@vercel/node" },
-    { "src": "index.html", "use": "@vercel/static" },
-    { "src": "login.html", "use": "@vercel/static" },
-    { "src": "hub.js", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "^/api/(.*)$", "dest": "/backend.js?route=$1" },
-    { "src": "^/$", "dest": "/index.html" },
-    { "src": "^/index\\.html$", "dest": "/index.html" },
-    { "src": "^/login\\.html$", "dest": "/login.html" },
-    { "src": "^/hub\\.js$", "dest": "/hub.js" }
-  ]
-}
+{"$schema":"https://openapi.vercel.sh/vercel.json","framework":null}

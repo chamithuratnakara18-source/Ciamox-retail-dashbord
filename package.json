@@ -1,10 +1,1 @@
-{
-  "name": "retailflow-phone-inventory-scanner",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "engines": { "node": ">=20" },
-  "dependencies": {
-    "mysql2": "^3.14.4"
-  }
-}
+{"name":"retailflow-firebase-dashboard","private":true,"version":"1.0.0"}

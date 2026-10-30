@@ -1,3 +1,5 @@
+import { api, watchRetailFlow } from './firebase-store.js';
+
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
   const inventoryScreen = document.getElementById('inventoryScreen');
@@ -20,31 +22,7 @@
   document.getElementById('closeExpenseButton').addEventListener('click', () => document.getElementById('expensePanel').classList.add('hidden'));
   document.getElementById('expenseForm').addEventListener('submit', saveExpense);
   document.getElementById('refreshInventoryButton').addEventListener('click', () => { void refreshInventory(); });
-  document.getElementById('logoutButton').addEventListener('click', async () => {
-    try { await api('/api/auth/logout', { method: 'POST' }); } finally { location.replace('/login.html'); }
-  });
   inventorySearch.addEventListener('input', renderInventoryTable);
-  window.setInterval(() => {
-    if (document.visibilityState === 'hidden') return;
-    if (currentView === 'dashboard') void refreshDashboard();
-    if (currentView === 'inventory') void refreshInventory();
-  }, 20000);
-
-  async function api(path, options = {}) {
-    const response = await fetch(path, {
-      cache: 'no-store',
-      ...options,
-      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    });
-    const body = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      location.replace('/login.html?next=%2F');
-      throw new Error('Sign in required.');
-    }
-    if (!response.ok) throw new Error(body.error || `Server error (${response.status})`);
-    return body;
-  }
-
   function todayLocal() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -74,7 +52,7 @@
     document.getElementById('dashboardUpdated').textContent = 'Updating…';
     try {
       const data = await api('/api/dashboard');
-      setDatabaseStatus(true, 'SQL CONNECTED');
+      setDatabaseStatus(true, 'FIREBASE CONNECTED');
       document.getElementById('revenueTotal').textContent = formatAmount(data.totals.revenue);
       document.getElementById('grossProfitTotal').textContent = formatAmount(data.totals.grossProfit);
       document.getElementById('netProfitTotal').textContent = formatAmount(data.totals.netProfit);
@@ -89,9 +67,9 @@
       drawMetricsChart(data.points || []);
       document.getElementById('dashboardUpdated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     } catch (error) {
-      setDatabaseStatus(false, 'SQL DISCONNECTED');
+      setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
       document.getElementById('dashboardUpdated').textContent = 'Waiting for database';
-      dashboardError.textContent = `Dashboard data is not available: ${error.message}. Check the TiDB variables in Vercel and confirm the tables exist.`;
+      dashboardError.textContent = `Dashboard data is not available: ${error.message}. Check firebase-config.js and Firestore test mode.`;
       dashboardError.classList.remove('hidden');
       drawMetricsChart([]);
     }
@@ -108,7 +86,7 @@
     svg.replaceChildren();
     if (!points.length) {
       const empty = make('text', { x: 460, y: 150, 'text-anchor': 'middle', class: 'chart-axis-label' });
-      empty.textContent = 'Connect the database to show your sales and inventory trend.';
+      empty.textContent = 'Firestore data will show your sales and inventory trend.';
       svg.append(empty);
       return;
     }
@@ -195,20 +173,20 @@
   async function refreshInventory() {
     const summary = document.getElementById('inventorySummary');
     const status = document.getElementById('inventoryStatus');
-    status.textContent = 'Loading from SQL…';
+    status.textContent = 'Loading from Firebase…';
     try {
       const data = await api('/api/inventory');
       inventoryProducts = data.products || [];
       const units = inventoryProducts.reduce((sum, product) => sum + Number(product.quantity || 0), 0);
       summary.textContent = `${inventoryProducts.length} products · ${units.toLocaleString()} units`;
-      status.textContent = 'Synced from SQL';
-      setDatabaseStatus(true, 'SQL CONNECTED');
+      status.textContent = 'Synced from Firebase';
+      setDatabaseStatus(true, 'FIREBASE CONNECTED');
       renderInventoryTable();
     } catch (error) {
       inventoryProducts = [];
       summary.textContent = 'Inventory unavailable';
       status.textContent = error.message;
-      setDatabaseStatus(false, 'SQL DISCONNECTED');
+      setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
       renderInventoryTable();
     }
   }
@@ -232,5 +210,13 @@
     });
   }
 
+  watchRetailFlow(() => {
+    if (currentView === 'dashboard') void refreshDashboard();
+    if (currentView === 'inventory') void refreshInventory();
+  }, error => {
+    setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
+    dashboardError.textContent = `Firestore is unavailable: ${error.message}`;
+    dashboardError.classList.remove('hidden');
+  });
   void setMainView('dashboard');
 })();
