@@ -1,0 +1,31 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "builds": [
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "scanner.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "hub.js",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "scanner-app.js",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "backend.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/backend.js?route=$1"
+    }
+  ]
+}

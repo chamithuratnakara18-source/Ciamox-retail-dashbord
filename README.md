@@ -23,3 +23,8 @@ The schema is TiDB/MySQL, not PostgreSQL. The tables are `inventory`, `inventory
 ## Important before real customer use
 
 This version has no staff sign-in or user roles. Do not expose the write API to a public shop until authentication and authorization are added. Verify the TiDB public-endpoint network rules for Vercel before deployment; do not open database access broadly without a deliberate security review.
+
+
+## Flat upload layout
+
+All files are at the repository root. `backend.js` contains the database connection helpers and all API endpoints. `vercel.json` builds that root-level file as a Vercel Node function and routes `/api/*` requests to it. Keep both `backend.js` and `vercel.json` at the repository root.
