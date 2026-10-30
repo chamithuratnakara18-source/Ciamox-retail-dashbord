@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: retailflow-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TIDB_HOST
+        sync: false
+      - key: TIDB_PORT
+        value: "4000"
+      - key: TIDB_USER
+        sync: false
+      - key: TIDB_PASSWORD
+        sync: false
+      - key: TIDB_DATABASE
+        value: retailflow
+      - key: FRONTEND_ORIGINS
+        value: https://ciamox-retail-main-jvefr9nqz.vercel.app

@@ -1,10 +1,17 @@
 {
-  "name": "retailflow-phone-inventory-scanner",
+  "name": "retailflow-store-operations",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "mysql2": "^3.14.4"
   }
 }
