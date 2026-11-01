@@ -81,12 +81,9 @@ const monthlyFields = ['water', 'electricity', 'gas', 'sewage', 'salaries', 'mor
 function shapeMonthlyPlan(data) {
   if (!data || data.type !== 'monthly_plan') return null;
   const plan = Object.fromEntries(monthlyFields.map(field => [field, Number(data[field]) || 0]));
-  plan.mortgageInterest = data.mortgageInterest == null ? null : Number(data.mortgageInterest);
-  plan.expectedMonthlyUnits = data.expectedMonthlyUnits == null ? null : Number(data.expectedMonthlyUnits);
   plan.cashCommitments = monthlyFields.reduce((sum, field) => sum + plan[field], 0);
-  plan.interestKnown = plan.mortgagePayment === 0 || plan.mortgageInterest !== null;
   plan.profitExpenses = plan.water + plan.electricity + plan.gas + plan.sewage +
-    plan.salaries + (plan.mortgageInterest || 0);
+    plan.salaries;
   return plan;
 }
 
@@ -111,11 +108,12 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
   const monthlyMissingCost = monthlySales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)));
   const missingCostData = sales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)));
   const netUnavailableReason = !plan ? 'Enter monthly costs in Finance to estimate net profit.'
-    : !plan.interestKnown ? 'Enter the interest portion of the mortgage payment in Finance to estimate net profit.'
-      : monthlyMissingCost ? 'Purchase cost is missing from a sale this month.' : null;
+    : monthlyMissingCost ? 'Purchase cost is missing from a sale this month.'
+      : plan.mortgagePayment > 0
+        ? 'A combined mortgage payment includes principal. Net profit is unavailable; Finance shows cash after bills instead.' : null;
   const points = Array.from({ length: dayCount }, (_, index) => ({
     date: new Date(Date.parse(`${from}T00:00:00Z`) + index * 86400000).toISOString().slice(0, 10),
-    revenue: 0, grossProfit: 0, netProfit: 0,
+    revenue: 0, grossProfit: 0, netProfit: 0, cashAfterBills: 0,
     inventoryUnits: 0, missingCostData: false, unitsSold: 0, received: 0, expenses: 0,
   }));
   const byDate = new Map(points.map(point => [point.date, point]));
@@ -147,6 +145,8 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
     point.grossProfit = point.missingCostData ? null : point.grossProfit;
     point.netProfit = netUnavailableReason || !point.date.startsWith(currentMonth) || point.grossProfit == null
       ? null : point.grossProfit - point.expenses - (point.date === `${currentMonth}-01` ? plan.profitExpenses : 0);
+    point.cashAfterBills = !plan || !point.date.startsWith(currentMonth) || point.grossProfit == null
+      ? null : point.grossProfit - point.expenses - (point.date === `${currentMonth}-01` ? plan.cashCommitments : 0);
     stock += point.unitsSold - point.received;
   }
   return {
@@ -156,6 +156,7 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
       netCashAfterCommitments: plan && !monthlyMissingCost ? monthlyGross - plan.cashCommitments - monthlyExpenses : null,
       monthlyGrossProfit: monthlyMissingCost ? null : monthlyGross,
       monthlyOneTimeExpenses: monthlyExpenses,
+      monthlyMortgagePayment: plan?.mortgagePayment || 0,
       inventoryUnits, missingCostData, netUnavailableReason,
     },
     points,
@@ -208,18 +209,11 @@ async function saveMonthlyPlan(body) {
   if (!monthlyFields.some(field => plan[field] > 0)) {
     throw new Error('Enter at least one monthly cost. Leave the plan unsaved if you have not entered costs yet.');
   }
-  const interest = body.mortgageInterest === '' || body.mortgageInterest == null ? null
-    : positiveNumber(body.mortgageInterest, 'mortgage interest', { zero: true });
-  if (interest !== null && interest > plan.mortgagePayment) {
-    throw new Error('Mortgage interest cannot be more than the total mortgage payment.');
-  }
-  const expectedMonthlyUnits = body.expectedMonthlyUnits === '' || body.expectedMonthlyUnits == null ? null
-    : positiveNumber(body.expectedMonthlyUnits, 'expected monthly units', { whole: true });
   await setDoc(doc(db(), 'expenses', 'monthly-plan'), {
-    type: 'monthly_plan', ...plan, mortgageInterest: interest, expectedMonthlyUnits,
+    type: 'monthly_plan', ...plan,
     updatedAt: serverTimestamp(),
   });
-  return { plan: shapeMonthlyPlan({ type: 'monthly_plan', ...plan, mortgageInterest: interest, expectedMonthlyUnits }) };
+  return { plan: shapeMonthlyPlan({ type: 'monthly_plan', ...plan }) };
 }
 
 async function getFinance() {

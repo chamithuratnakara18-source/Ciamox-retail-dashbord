@@ -52,6 +52,10 @@
 .finance-section{margin-bottom:18px}.finance-section-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px}
 .finance-section-heading h2{font:800 19px Manrope,sans-serif;letter-spacing:-.04em;margin:0;color:#1e303a}
 .finance-section-heading p,.finance-help{color:#819098;font-size:11px;line-height:1.55;margin:5px 0 0}
+.finance-costs-summary{display:flex;align-items:center;justify-content:space-between;gap:15px;cursor:pointer;list-style:none}.finance-costs-summary::-webkit-details-marker{display:none}
+.finance-costs-summary:focus-visible{outline:2px solid #25a77c;outline-offset:6px;border-radius:7px}.finance-summary-copy{display:grid;gap:5px}.finance-summary-copy strong{font:800 19px Manrope,sans-serif;letter-spacing:-.04em;color:#1e303a}.finance-summary-copy small{font-size:11px;line-height:1.5;color:#819098}
+.finance-chevron{display:grid;place-items:center;flex:none;width:36px;height:36px;border:1px solid #dce7e5;border-radius:9px;color:#268968;background:#f3faf6;font-size:24px;line-height:1;transition:transform .16s}.finance-costs[open] .finance-chevron{transform:rotate(180deg)}
+.finance-cost-content{border-top:1px solid #e9eeef;margin-top:17px;padding-top:1px}
 .finance-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:10px 0}
 .finance-form-grid label{display:grid;gap:5px;font-size:11px;font-weight:700;color:#53616a}
 .finance-form-grid input{width:100%;min-height:40px;padding:9px;border:1px solid #dfe6e9;border-radius:8px;font-size:12px}
@@ -59,7 +63,7 @@
 .finance-form-footer{display:flex;align-items:center;gap:15px;flex-wrap:wrap}.finance-form-footer .workflow-primary{width:auto;min-width:180px}
 .finance-form-footer p{margin:10px 0 0;font-size:11px;color:#697b83}.finance-message{margin:11px 0 0;color:#247951;font-size:11px}.finance-message.error{color:#b04538}
 .finance-search{width:min(320px,100%);min-height:38px;padding:9px 12px;border:1px solid #dfe6e9;border-radius:8px;font-size:11px}
-.finance-table{min-width:920px}.finance-product{display:flex;align-items:center;gap:8px;min-width:130px}.finance-product img{width:32px;height:32px;object-fit:cover;border-radius:6px}
+.finance-table{min-width:720px}.finance-product{display:flex;align-items:center;gap:8px;min-width:130px}.finance-product img{width:32px;height:32px;object-fit:cover;border-radius:6px}
 .finance-price-input{width:108px;min-height:34px;border:1px solid #cfdadc;border-radius:7px;padding:6px 8px;font-size:11px}.finance-save-price{border:0;border-radius:7px;background:#1f9e73;color:#fff;padding:9px 12px;font-size:10px;font-weight:800}.finance-save-price:disabled{opacity:.5}
 .finance-profit{font-weight:800;color:#197c59}.finance-negative{color:#b54835}.finance-unavailable{color:#9ba6ab}.net-card strong.unavailable{font-size:clamp(15px,1.6vw,21px)}
 @media(max-width:900px){.finance-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -108,8 +112,8 @@
             <p id="trendRangeError" class="trend-range-error hidden" role="alert"></p>
           </div>
           <p id="trendRangeSummary" class="trend-range-summary"></p>
-          <div class="chart-legend"><span><i class="legend-revenue"></i>Revenue</span><span><i class="legend-gross"></i>Gross profit</span><span><i class="legend-net"></i>Net estimate <small>(current month)</small></span><span><i class="legend-stock"></i>Units in stock <small>(right axis)</small></span></div>
-          <div class="chart-wrap"><svg id="metricsChart" viewBox="0 0 920 320" role="img" aria-label="Line chart showing daily revenue, gross profit, net profit, and inventory units for the selected dates"></svg></div>
+          <div class="chart-legend"><span><i class="legend-revenue"></i>Revenue</span><span><i class="legend-gross"></i>Gross profit</span><span><i class="legend-net"></i>Cash after bills <small>(current month)</small></span><span><i class="legend-stock"></i>Units in stock <small>(right axis)</small></span></div>
+          <div class="chart-wrap"><svg id="metricsChart" viewBox="0 0 920 320" role="img" aria-label="Line chart showing daily revenue, gross profit, cash after bills, and inventory units for the selected dates"></svg></div>
           <p id="chartDayDetails" class="chart-day-details" aria-live="polite">Point to or touch the chart for a day's exact values.</p>
           <p id="profitDataNotice" class="profit-notice hidden"></p>
           <p id="dashboardError" class="workflow-notice error hidden" role="status"></p>
@@ -140,13 +144,14 @@
         <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE FINANCE</div><h1>Finance</h1><p>Set selling prices and plan the cash needed for monthly bills.</p></div></header>
         <div class="finance-summary-grid">
           <article><span>Monthly cash commitments</span><strong id="financeMonthlyTotal">Not entered</strong></article>
-          <article><span>Set aside per sold unit</span><strong id="financeReservePerUnit">Unavailable</strong></article>
           <article><span>Gross profit this month</span><strong id="financeMonthlyGross">—</strong></article>
           <article><span>Net profit estimate this month</span><strong id="financeMonthlyNet">Unavailable</strong></article>
+          <article><span>Cash after bills this month</span><strong id="financeMonthlyCash">Unavailable</strong></article>
         </div>
-        <p id="financeCashResult" class="finance-help">Cash after monthly commitments: unavailable until costs and purchase prices are entered.</p>
-        <section class="workflow-card finance-section">
-          <div class="finance-section-heading"><div><h2>Monthly costs</h2><p>Enter your usual monthly amounts. Leave a field blank if it does not apply.</p></div></div>
+        <p id="financeCashResult" class="finance-help">Gross profit is available; enter monthly costs to see cash after bills.</p>
+        <details id="monthlyCostsDetails" class="workflow-card finance-section finance-costs">
+          <summary class="finance-costs-summary"><span class="finance-summary-copy"><strong>Monthly costs</strong><small>Click to expand or collapse. Leave a field blank if it does not apply.</small></span><span class="finance-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="finance-cost-content">
           <form id="monthlyPlanForm">
             <div class="finance-divider">Utilities</div>
             <div class="finance-form-grid">
@@ -158,22 +163,21 @@
             <div class="finance-divider">Staff and mortgage</div>
             <div class="finance-form-grid">
               <label>Employee salaries (monthly total)<input id="planSalaries" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-              <label>Mortgage payment (monthly total)<input id="planMortgagePayment" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-              <label>Interest part of mortgage payment<input id="planMortgageInterest" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-              <label>Expected units sold per month<input id="planExpectedUnits" type="number" min="1" step="1" inputmode="numeric" placeholder="For example: 200"></label>
+              <label>Mortgage payment including interest (monthly total)<input id="planMortgagePayment" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
             </div>
-            <p class="finance-help">The set-aside estimate is monthly cash commitments ÷ expected units sold. Mortgage principal is included in cash to keep, but only its interest portion counts toward the net profit estimate. One-time expenses are recorded separately.</p>
+            <p class="finance-help">Monthly cash commitments are the total amount to keep for these bills. A combined mortgage payment includes principal, so it is counted in cash after bills, not in the net profit estimate. Record one-time expenses separately.</p>
             <div class="finance-form-footer"><button id="saveMonthlyPlanButton" class="workflow-primary" type="submit">Save monthly costs</button><p id="financePlanStatus">Monthly costs have not been entered. Gross profit is available; net profit is unavailable.</p></div>
             <p id="financePlanMessage" class="finance-message hidden" role="status"></p>
           </form>
-        </section>
+          </div>
+        </details>
         <section class="inventory-table-card finance-section">
           <div class="inventory-toolbar finance-section-heading"><div><h2>Inventory pricing</h2><p>Purchase cost is from Inbound. Set or change a selling price; past sales keep their recorded prices.</p></div><input id="financeSearch" class="finance-search" type="search" aria-label="Search finance inventory" placeholder="Search product or barcode"></div>
           <p id="financePriceMessage" class="finance-message hidden" role="status"></p>
-          <div class="table-scroll"><table class="finance-table"><thead><tr><th>Product</th><th>In stock</th><th>Purchase cost/unit</th><th>Selling price/unit</th><th>Gross profit/unit</th><th>Set aside/unit</th><th>After reserve/unit</th><th>Action</th></tr></thead><tbody id="financeTableBody"></tbody></table></div>
+          <div class="table-scroll"><table class="finance-table"><thead><tr><th>Product</th><th>In stock</th><th>Purchase cost/unit</th><th>Selling price/unit</th><th>Gross profit/unit</th><th>Action</th></tr></thead><tbody id="financeTableBody"></tbody></table></div>
           <div id="financeEmpty" class="inventory-empty hidden">No inventory products found. Add a product in the scanner first.</div>
         </section>
-        <p class="finance-help">The amount after reserve is a planning estimate based on expected sales. Actual net profit also depends on one-time expenses and the mortgage interest split.</p>
+        <p class="finance-help">Without a monthly sales forecast, the system cannot divide bills into a reliable amount per product. Use the monthly cash commitments total when planning prices.</p>
       </section>
 
       

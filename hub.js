@@ -209,9 +209,8 @@ import { api, watchRetailFlow } from './firebase-store.js';
       const profitNotice = document.getElementById('profitDataNotice');
       profitNotice.textContent = data.totals.missingCostData
         ? 'Some older sales have no purchase cost, so all-time gross profit is unavailable.'
-        : data.totals.netUnavailableReason
-          ? `${data.totals.netUnavailableReason} The net trend is available for the current month after setup.`
-          : 'The net trend covers this month. Recurring operating costs appear on the first day of the month.';
+        : `${data.totals.netUnavailableReason || 'Net profit is an estimate.'} ` +
+          'The cash after bills trend covers this month when costs are saved; monthly bills appear on the first day.';
       profitNotice.classList.remove('hidden');
       drawMetricsChart(data.points || []);
       document.getElementById('dashboardUpdated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -244,7 +243,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
       return;
     }
     const left = 58, right = 854, top = 22, bottom = 256;
-    const moneyValues = points.flatMap(point => [point.revenue, point.grossProfit, point.netProfit]).filter(Number.isFinite);
+    const moneyValues = points.flatMap(point => [point.revenue, point.grossProfit, point.cashAfterBills]).filter(Number.isFinite);
     let moneyMin = Math.min(0, ...moneyValues), moneyMax = Math.max(0, ...moneyValues);
     if (moneyMax === moneyMin) moneyMax = moneyMin + 1;
     const moneyPad = (moneyMax - moneyMin) * 0.08;
@@ -270,7 +269,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
     [
       { key: 'revenue', color: '#f47a27', scale: moneyY },
       { key: 'grossProfit', color: '#24a97b', scale: moneyY },
-      { key: 'netProfit', color: '#527cdb', scale: moneyY },
+      { key: 'cashAfterBills', color: '#527cdb', scale: moneyY },
       { key: 'inventoryUnits', color: '#25343c', scale: stockY },
     ].forEach(({ key, color, scale }) => {
       let path = '', open = false;
@@ -302,7 +301,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
     currentPointIndex = index;
     chartDayDetails.textContent = `${englishDate(point.date, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · ` +
       `Revenue ${formatAmount(point.revenue)} · Gross profit ${formatAmount(point.grossProfit)} · ` +
-      `Net profit ${point.netProfit == null ? 'Unavailable' : formatAmount(point.netProfit)} · Stock ${Number(point.inventoryUnits).toLocaleString('en-US')} units`;
+      `Cash after bills ${point.cashAfterBills == null ? 'Unavailable' : formatAmount(point.cashAfterBills)} · Stock ${Number(point.inventoryUnits).toLocaleString('en-US')} units`;
   }
 
   function showChartPointAtPointer(event) {
@@ -431,7 +430,6 @@ import { api, watchRetailFlow } from './firebase-store.js';
   const monthlyInputIds = {
     water: 'planWater', electricity: 'planElectricity', gas: 'planGas', sewage: 'planSewage',
     salaries: 'planSalaries', mortgagePayment: 'planMortgagePayment',
-    mortgageInterest: 'planMortgageInterest', expectedMonthlyUnits: 'planExpectedUnits',
   };
 
   async function refreshFinance() {
@@ -462,34 +460,26 @@ import { api, watchRetailFlow } from './firebase-store.js';
     element.className = `finance-message${error ? ' error' : ''}`;
   }
 
-  function reservePerUnit() {
-    return financePlan?.expectedMonthlyUnits > 0
-      ? financePlan.cashCommitments / financePlan.expectedMonthlyUnits : null;
-  }
-
   function renderFinanceSummary() {
     document.getElementById('financeMonthlyTotal').textContent = financePlan
       ? formatAmount(financePlan.cashCommitments) : 'Not entered';
-    const reserve = reservePerUnit();
-    document.getElementById('financeReservePerUnit').textContent = reserve === null ? 'Unavailable' : formatAmount(reserve);
     const gross = financeStats?.monthGrossProfit;
     document.getElementById('financeMonthlyGross').textContent = gross == null ? 'Unavailable' : formatAmount(gross);
-    const net = financePlan && financePlan.interestKnown && gross != null
+    const net = financePlan && financePlan.mortgagePayment === 0 && gross != null
       ? gross - financePlan.profitExpenses - (financeStats?.monthOneTimeExpenses || 0) : null;
     document.getElementById('financeMonthlyNet').textContent = net === null ? 'Unavailable' : formatAmount(net);
-    const reasons = [];
-    if (!financePlan) reasons.push('Enter monthly costs to estimate net profit.');
-    else {
-      if (!financePlan.interestKnown) reasons.push('Enter the interest part of the mortgage for the net estimate.');
-      if (!financePlan.expectedMonthlyUnits) reasons.push('Enter expected monthly units for the set-aside per sale.');
-    }
-    if (financePlanDirty) reasons.push('You have unsaved changes.');
-    document.getElementById('financePlanStatus').textContent = reasons.join(' ') || 'Monthly costs and per-sale reserve are ready.';
     const cash = financePlan && gross != null
       ? gross - financePlan.cashCommitments - (financeStats?.monthOneTimeExpenses || 0) : null;
-    document.getElementById('financeCashResult').textContent = cash == null
-      ? 'Cash after monthly commitments: unavailable until costs and purchase prices are entered.'
-      : `Cash after monthly commitments this month: ${formatAmount(cash)} (includes the full mortgage payment).`;
+    document.getElementById('financeMonthlyCash').textContent = cash === null ? 'Unavailable' : formatAmount(cash);
+    document.getElementById('financePlanStatus').textContent = financePlanDirty ? 'Unsaved monthly cost changes.'
+      : !financePlan ? 'Monthly costs have not been entered. Gross profit is available; net profit is unavailable.'
+        : financePlan.mortgagePayment > 0 ? 'Monthly costs saved. Net profit is unavailable with a combined mortgage payment; cash after bills is shown.'
+          : 'Monthly costs saved. Net profit estimate and cash after bills are ready.';
+    document.getElementById('financeCashResult').textContent = !financePlan
+      ? 'Gross profit is available; enter monthly costs to see cash after bills.'
+      : financePlan.mortgagePayment > 0
+        ? 'Cash after bills includes the full mortgage payment. The net profit estimate is unavailable because this payment includes principal.'
+        : 'Cash after bills includes monthly costs and one-time expenses recorded this month.';
   }
 
   async function saveFinancePlan(event) {
@@ -505,7 +495,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
       financePlanDirty = false;
       renderFinanceSummary();
       renderFinanceTable();
-      showFinanceMessage('financePlanMessage', 'Monthly costs saved. The reserve and net estimate have been updated.');
+      showFinanceMessage('financePlanMessage', 'Monthly costs saved. The cash after bills estimate has been updated.');
     } catch (error) {
       showFinanceMessage('financePlanMessage', `Could not save monthly costs: ${error.message}`, true);
     } finally {
@@ -520,7 +510,6 @@ import { api, watchRetailFlow } from './firebase-store.js';
     const products = financeProducts.filter(product => `${product.name} ${product.barcode}`.toLowerCase().includes(query));
     body.replaceChildren();
     document.getElementById('financeEmpty').classList.toggle('hidden', products.length > 0);
-    const reserve = reservePerUnit();
     for (const product of products) {
       const row = document.createElement('tr');
       const productCell = document.createElement('td');
@@ -540,8 +529,6 @@ import { api, watchRetailFlow } from './firebase-store.js';
       price.setAttribute('aria-label', `Selling price for ${product.name}`);
       priceCell.append(price);
       const gross = document.createElement('td');
-      const setAside = document.createElement('td');
-      const after = document.createElement('td');
       const action = document.createElement('td');
       const save = document.createElement('button'); save.type = 'button'; save.className = 'finance-save-price';
       save.textContent = 'Save price'; action.append(save);
@@ -551,9 +538,6 @@ import { api, watchRetailFlow } from './firebase-store.js';
         const margin = valid && product.unitCost != null ? amount - Number(product.unitCost) : null;
         gross.textContent = margin == null ? '—' : formatAmount(margin);
         gross.className = margin != null && margin < 0 ? 'finance-negative' : 'finance-profit';
-        setAside.textContent = reserve == null ? '—' : formatAmount(reserve);
-        after.textContent = margin == null || reserve == null ? '—' : formatAmount(margin - reserve);
-        after.className = margin != null && reserve != null && margin - reserve < 0 ? 'finance-negative' : 'finance-profit';
         save.disabled = !valid || amount === product.originalPrice;
       }
       price.addEventListener('input', updatePreview);
@@ -575,7 +559,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
         }
       });
       updatePreview();
-      row.append(productCell, units, cost, priceCell, gross, setAside, after, action);
+      row.append(productCell, units, cost, priceCell, gross, action);
       body.append(row);
     }
   }
