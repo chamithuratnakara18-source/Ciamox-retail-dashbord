@@ -24,6 +24,29 @@
 <style>
 .app-shell{max-width:1440px;padding:0 30px}.topbar{height:78px}.hub-layout{display:grid;grid-template-columns:205px minmax(0,1fr);gap:28px;align-items:stretch;min-height:calc(100vh - 78px)}.hub-sidebar{padding:34px 14px 24px 0;border-right:1px solid #e7ecee;display:flex;flex-direction:column;align-items:stretch;gap:5px}.sidebar-label{padding:0 13px 11px;color:#9aa4aa;font-size:8px;font-weight:800;letter-spacing:.15em}.hub-sidebar .nav-tab{display:flex;align-items:center;gap:11px;width:100%;border:0;border-radius:10px;background:transparent;color:#6f7c84;text-align:left;padding:12px 13px;font-size:11px;font-weight:700;box-shadow:none}.hub-sidebar .nav-tab:hover,.hub-sidebar .nav-tab.active{background:#fff;color:#1b2732;box-shadow:0 5px 18px #1b27320c}.nav-icon{width:24px;height:24px;display:grid;place-items:center;border-radius:7px;background:#eef2f1;color:#4f7a68;font-size:13px}.hub-sidebar .nav-tab.active .nav-icon{background:#e8f7ef;color:#249b70}.sidebar-caption{margin:auto 12px 0;color:#a1abb1;font-size:9px;line-height:1.6}.hub-content{min-width:0}.dashboard-screen,.inventory-screen{max-width:none;padding-top:34px}.metric-grid{grid-template-columns:repeat(4,minmax(0,1fr))}@media(max-width:800px){.app-shell{padding:0 20px}.hub-layout{grid-template-columns:165px minmax(0,1fr);gap:18px}.hub-sidebar{padding-right:9px}.hub-sidebar .nav-tab{font-size:10px;padding:10px 9px}}@media(max-width:600px){.app-shell{padding:0 13px}.hub-layout{grid-template-columns:1fr;gap:0}.hub-sidebar{position:static;min-height:auto;border-right:0;border-bottom:1px solid #e8ecee;padding:9px 0;display:flex;flex-direction:row;gap:6px}.sidebar-label,.sidebar-caption{display:none}.hub-sidebar .nav-tab{flex:1;justify-content:center;width:auto;padding:9px 7px}.dashboard-screen,.inventory-screen{padding-top:22px}.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
+<style>
+.product-summary{display:flex;align-items:center;gap:9px;min-width:160px}
+.product-summary img{width:36px;height:36px;object-fit:cover;border-radius:7px;background:#eef3f0;flex:none}
+.inventory-delete{border:1px solid #e9b9b4;border-radius:7px;background:#fff;color:#a93e34;padding:7px 10px;font-size:10px;font-weight:700}
+.inventory-delete:hover{background:#fff1ef}.inventory-delete:disabled{opacity:.5;cursor:wait}
+.inventory-action-message{margin:0;padding:10px 18px;color:#335d4b;font-size:11px}.inventory-action-message.error{color:#a93e34}
+.trend-controls{position:relative;display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}
+.trend-date-field{display:grid;gap:5px;color:#78858d;font-size:10px;font-weight:700}
+.trend-date-button{min-width:145px;padding:9px 12px;border:1px solid #dce5e8;border-radius:8px;background:#fff;color:#27343c;text-align:left;font-size:11px;font-weight:700}
+.trend-date-button:hover,.trend-date-button[aria-expanded=true]{border-color:#62bea0;background:#f6fcf9}
+.trend-reset{padding:9px 12px;border:1px solid #e1e8e7;border-radius:8px;background:#f5f8f7;color:#53656a;font-size:10px;font-weight:700}
+.trend-range-summary,.chart-day-details{margin:10px 0 0;color:#60717a;font-size:10px;line-height:1.5}
+.chart-day-details{min-height:16px}.trend-range-error{width:100%;color:#a93e34;font-size:11px;margin:0}
+.trend-calendar{position:absolute;top:100%;left:0;z-index:10;width:min(326px,100%);padding:14px;margin-top:6px;border:1px solid #d9e3e1;border-radius:13px;background:#fff;box-shadow:0 18px 45px #22334424}
+.calendar-header{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:12px}
+.calendar-header strong{color:#27343c;font-size:13px}.calendar-header button{width:30px;height:30px;border:1px solid #e2e9e7;border-radius:7px;background:#fff;color:#35444a}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}
+.calendar-weekday{padding:5px 0;color:#7c8991;font-size:10px;font-weight:800}
+.calendar-day{height:35px;border:0;border-radius:7px;background:#fff;color:#36454c;font-size:11px}
+.calendar-day:hover:not(:disabled){background:#e4f6ed}.calendar-day.selected{background:#218c66;color:#fff;font-weight:800}.calendar-day.between:not(.selected){background:#eef8f2}
+.calendar-day:disabled{color:#c4cdd0;cursor:default}.calendar-close{border:0;background:none;color:#5f6d72;font-size:12px;text-decoration:underline}
+@media(max-width:560px){.trend-date-field{flex:1}.trend-date-button{width:100%;min-width:0}.trend-calendar{width:100%}}
+</style>
 </head>
 <body>
   <div class="app-shell">
@@ -53,9 +76,22 @@
           <article class="metric-card stock-card"><span class="metric-label">Inventory on hand <small>UNITS</small></span><strong id="inventoryUnitsTotal">—</strong><span class="metric-foot">Current sellable quantity</span></article>
         </div>
         <section class="chart-card">
-          <div class="chart-heading"><div><span class="eyebrow">LAST 30 DAYS</span><h2>Performance trend</h2><p>Daily sales, profit and inventory levels</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ Add expense</button></div>
+          <div class="chart-heading"><div><span class="eyebrow">SELECTED DATES</span><h2>Performance trend</h2><p>Daily sales, profit and inventory levels</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ Add expense</button></div>
+          <div id="trendControls" class="trend-controls">
+            <div class="trend-date-field"><span>From</span><button id="trendFromButton" class="trend-date-button" type="button" aria-haspopup="dialog" aria-expanded="false">Choose start date</button></div>
+            <div class="trend-date-field"><span>To</span><button id="trendToButton" class="trend-date-button" type="button" aria-haspopup="dialog" aria-expanded="false">Choose end date</button></div>
+            <button id="trendResetButton" class="trend-reset" type="button">Last 30 days</button>
+            <div id="trendCalendar" class="trend-calendar hidden" role="dialog" aria-label="Choose chart date">
+              <div class="calendar-header"><button id="calendarPrevious" type="button" aria-label="Previous month">‹</button><strong id="calendarMonth"></strong><button id="calendarNext" type="button" aria-label="Next month">›</button></div>
+              <div id="calendarDays" class="calendar-grid"></div>
+              <button id="calendarClose" class="calendar-close" type="button">Close calendar</button>
+            </div>
+            <p id="trendRangeError" class="trend-range-error hidden" role="alert"></p>
+          </div>
+          <p id="trendRangeSummary" class="trend-range-summary"></p>
           <div class="chart-legend"><span><i class="legend-revenue"></i>Revenue</span><span><i class="legend-gross"></i>Gross profit</span><span><i class="legend-net"></i>Net profit</span><span><i class="legend-stock"></i>Units in stock <small>(right axis)</small></span></div>
-          <div class="chart-wrap"><svg id="metricsChart" viewBox="0 0 920 320" role="img" aria-label="Line chart showing revenue, gross profit, net profit, and inventory units over the last 30 days"></svg></div>
+          <div class="chart-wrap"><svg id="metricsChart" viewBox="0 0 920 320" role="img" aria-label="Line chart showing daily revenue, gross profit, net profit, and inventory units for the selected dates"></svg></div>
+          <p id="chartDayDetails" class="chart-day-details" aria-live="polite">Point to or touch the chart for a day's exact values.</p>
           <p id="profitDataNotice" class="profit-notice hidden"></p>
           <p id="dashboardError" class="workflow-notice error hidden" role="status"></p>
         </section>
@@ -74,7 +110,8 @@
         <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STOCK CONTROL</div><h1>Inventory</h1><p>Products received into the store and their current stock.</p></div><button id="refreshInventoryButton" class="secondary-button" type="button">Refresh</button></header>
         <section class="inventory-table-card">
           <div class="inventory-toolbar"><div><strong id="inventorySummary">Loading inventory…</strong><span id="inventoryStatus">Loading from Firebase</span></div><input id="inventorySearch" type="search" placeholder="Search product or barcode" aria-label="Search inventory"></div>
-          <div class="table-scroll"><table><thead><tr><th>Product</th><th>Barcode</th><th>In stock</th><th>Original price</th><th>Last arrival</th><th>Supplier</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
+          <p id="inventoryActionMessage" class="inventory-action-message hidden" role="status"></p>
+          <div class="table-scroll"><table><thead><tr><th>Product</th><th>Barcode</th><th>In stock</th><th>Original price</th><th>Last arrival</th><th>Supplier</th><th>Action</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
           <div id="inventoryEmpty" class="inventory-empty hidden">No inventory products found.</div>
         </section>
       </section>

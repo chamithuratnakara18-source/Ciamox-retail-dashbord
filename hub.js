@@ -8,6 +8,19 @@ import { api, watchRetailFlow } from './firebase-store.js';
   const inventoryTableBody = document.getElementById('inventoryTableBody');
   const inventoryEmpty = document.getElementById('inventoryEmpty');
   const inventorySearch = document.getElementById('inventorySearch');
+  const trendFromButton = document.getElementById('trendFromButton');
+  const trendToButton = document.getElementById('trendToButton');
+  const trendCalendar = document.getElementById('trendCalendar');
+  const trendRangeError = document.getElementById('trendRangeError');
+  const chartDayDetails = document.getElementById('chartDayDetails');
+  const metricsChart = document.getElementById('metricsChart');
+  let trendFrom = todayLocal(-29);
+  let trendTo = todayLocal();
+  let calendarTarget = null;
+  let calendarMonthDate = null;
+  let chartPoints = [];
+  let currentPointIndex = -1;
+  let dashboardRequestId = 0;
   let currentView = 'dashboard';
   let inventoryProducts = [];
 
@@ -23,12 +36,127 @@ import { api, watchRetailFlow } from './firebase-store.js';
   document.getElementById('expenseForm').addEventListener('submit', saveExpense);
   document.getElementById('refreshInventoryButton').addEventListener('click', () => { void refreshInventory(); });
   inventorySearch.addEventListener('input', renderInventoryTable);
+  trendFromButton.addEventListener('click', () => openCalendar('from'));
+  trendToButton.addEventListener('click', () => openCalendar('to'));
+  document.getElementById('calendarPrevious').addEventListener('click', () => moveCalendarMonth(-1));
+  document.getElementById('calendarNext').addEventListener('click', () => moveCalendarMonth(1));
+  document.getElementById('calendarClose').addEventListener('click', closeCalendar);
+  document.getElementById('trendResetButton').addEventListener('click', () => {
+    trendFrom = todayLocal(-29);
+    trendTo = todayLocal();
+    trendRangeError.classList.add('hidden');
+    closeCalendar();
+    showTrendRange();
+    void refreshDashboard();
+  });
+  document.addEventListener('pointerdown', event => {
+    if (!document.getElementById('trendControls').contains(event.target)) closeCalendar();
+  });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeCalendar(); });
+  metricsChart.setAttribute('tabindex', '0');
+  metricsChart.addEventListener('pointermove', showChartPointAtPointer);
+  metricsChart.addEventListener('pointerdown', showChartPointAtPointer);
+  metricsChart.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    showChartPoint(Math.max(0, Math.min(chartPoints.length - 1,
+      currentPointIndex + (event.key === 'ArrowLeft' ? -1 : 1))));
+  });
   function todayLocal() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }
 
+  function dateUTC(value) { return new Date(`${value}T12:00:00Z`); }
+
+  function englishDate(value, options = { month: 'short', day: 'numeric', year: 'numeric' }) {
+    return new Intl.DateTimeFormat('en-US', { ...options, timeZone: 'UTC' }).format(dateUTC(value));
+  }
+
+  function showTrendRange() {
+    trendFromButton.textContent = englishDate(trendFrom);
+    trendToButton.textContent = englishDate(trendTo);
+    const days = Math.round((Date.parse(`${trendTo}T00:00:00Z`) - Date.parse(`${trendFrom}T00:00:00Z`)) / 86400000) + 1;
+    document.getElementById('trendRangeSummary').textContent =
+      `${englishDate(trendFrom)} – ${englishDate(trendTo)} · ${days} ${days === 1 ? 'day' : 'days'}`;
+  }
+
+  function openCalendar(target) {
+    calendarTarget = target;
+    const selected = dateUTC(target === 'from' ? trendFrom : trendTo);
+    calendarMonthDate = new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1, 12));
+    trendCalendar.classList.remove('hidden');
+    trendFromButton.setAttribute('aria-expanded', String(target === 'from'));
+    trendToButton.setAttribute('aria-expanded', String(target === 'to'));
+    renderCalendar();
+  }
+
+  function closeCalendar() {
+    trendCalendar.classList.add('hidden');
+    trendFromButton.setAttribute('aria-expanded', 'false');
+    trendToButton.setAttribute('aria-expanded', 'false');
+    calendarTarget = null;
+  }
+
+  function moveCalendarMonth(delta) {
+    calendarMonthDate = new Date(Date.UTC(
+      calendarMonthDate.getUTCFullYear(), calendarMonthDate.getUTCMonth() + delta, 1, 12));
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    const year = calendarMonthDate.getUTCFullYear();
+    const month = calendarMonthDate.getUTCMonth();
+    document.getElementById('calendarMonth').textContent = new Intl.DateTimeFormat('en-US', {
+      month: 'long', year: 'numeric', timeZone: 'UTC',
+    }).format(calendarMonthDate);
+    document.getElementById('calendarNext').disabled =
+      year * 12 + month >= dateUTC(todayLocal()).getUTCFullYear() * 12 + dateUTC(todayLocal()).getUTCMonth();
+    const grid = document.getElementById('calendarDays');
+    grid.replaceChildren();
+    ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(label => {
+      const day = document.createElement('span'); day.className = 'calendar-weekday'; day.textContent = label;
+      grid.append(day);
+    });
+    for (let offset = 0; offset < new Date(Date.UTC(year, month, 1)).getUTCDay(); offset++) {
+      const blank = document.createElement('span'); blank.setAttribute('aria-hidden', 'true'); grid.append(blank);
+    }
+    const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    for (let day = 1; day <= days; day++) {
+      const value = new Date(Date.UTC(year, month, day, 12)).toISOString().slice(0, 10);
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'calendar-day'; button.textContent = String(day);
+      button.setAttribute('aria-label', englishDate(value, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }));
+      button.disabled = value > todayLocal();
+      if (value === trendFrom || value === trendTo) button.classList.add('selected');
+      else if (value > trendFrom && value < trendTo) button.classList.add('between');
+      button.addEventListener('click', () => selectCalendarDate(value));
+      grid.append(button);
+    }
+  }
+
+  function selectCalendarDate(value) {
+    let from = calendarTarget === 'from' ? value : trendFrom;
+    let to = calendarTarget === 'to' ? value : trendTo;
+    if (from > to) {
+      if (calendarTarget === 'from') to = from;
+      else from = to;
+    }
+    const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
+    if (days > 366) {
+      trendRangeError.textContent = 'Choose a date range of 366 days or less.';
+      trendRangeError.classList.remove('hidden');
+      return;
+    }
+    trendRangeError.classList.add('hidden');
+    trendFrom = from; trendTo = to;
+    closeCalendar();
+    showTrendRange();
+    void refreshDashboard();
+  }
+
   async function setMainView(view) {
+    closeCalendar();
     currentView = view;
     dashboardScreen.classList.toggle('hidden', view !== 'dashboard');
     inventoryScreen.classList.toggle('hidden', view !== 'inventory');
@@ -48,10 +176,13 @@ import { api, watchRetailFlow } from './firebase-store.js';
   }
 
   async function refreshDashboard() {
+    const requestId = ++dashboardRequestId;
     dashboardError.classList.add('hidden');
     document.getElementById('dashboardUpdated').textContent = 'Updating…';
     try {
-      const data = await api('/api/dashboard');
+      const range = new URLSearchParams({ from: trendFrom, to: trendTo });
+      const data = await api(`/api/dashboard?${range}`);
+      if (requestId !== dashboardRequestId) return;
       setDatabaseStatus(true, 'FIREBASE CONNECTED');
       document.getElementById('revenueTotal').textContent = formatAmount(data.totals.revenue);
       document.getElementById('grossProfitTotal').textContent = formatAmount(data.totals.grossProfit);
@@ -67,9 +198,10 @@ import { api, watchRetailFlow } from './firebase-store.js';
       drawMetricsChart(data.points || []);
       document.getElementById('dashboardUpdated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     } catch (error) {
+      if (requestId !== dashboardRequestId) return;
       setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
       document.getElementById('dashboardUpdated').textContent = 'Waiting for database';
-      dashboardError.textContent = `Dashboard data is not available: ${error.message}. Check firebase-config.js and Firestore test mode.`;
+      dashboardError.textContent = `Dashboard data is not available: ${error.message}. Check firebase-config.js and Firestore rules.`;
       dashboardError.classList.remove('hidden');
       drawMetricsChart([]);
     }
@@ -77,6 +209,8 @@ import { api, watchRetailFlow } from './firebase-store.js';
 
   function drawMetricsChart(points) {
     const svg = document.getElementById('metricsChart');
+    chartPoints = points;
+    currentPointIndex = -1;
     const ns = 'http://www.w3.org/2000/svg';
     const make = (tag, attrs = {}) => {
       const element = document.createElementNS(ns, tag);
@@ -85,6 +219,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
     };
     svg.replaceChildren();
     if (!points.length) {
+      chartDayDetails.textContent = 'No trend data for these dates.';
       const empty = make('text', { x: 460, y: 150, 'text-anchor': 'middle', class: 'chart-axis-label' });
       empty.textContent = 'Firestore data will show your sales and inventory trend.';
       svg.append(empty);
@@ -99,7 +234,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
     const stockMin = Math.min(0, ...points.map(point => point.inventoryUnits));
     let stockMax = Math.max(0, ...points.map(point => point.inventoryUnits));
     if (stockMax === stockMin) stockMax = stockMin + 1;
-    const x = index => left + (points.length === 1 ? 0 : (right - left) * index / (points.length - 1));
+    const x = index => points.length === 1 ? (left + right) / 2 : left + (right - left) * index / (points.length - 1);
     const moneyY = value => bottom - (value - moneyMin) / (moneyMax - moneyMin) * (bottom - top);
     const stockY = value => bottom - (value - stockMin) / (stockMax - stockMin) * (bottom - top);
     for (let tick = 0; tick <= 4; tick++) {
@@ -128,13 +263,36 @@ import { api, watchRetailFlow } from './firebase-store.js';
         open = true;
       });
       if (path) svg.append(make('path', { d: path, class: 'chart-line', stroke: color }));
+      if (points.length <= 14) points.forEach((point, index) => {
+        const value = point[key];
+        if (value != null && Number.isFinite(Number(value))) {
+          svg.append(make('circle', { cx: x(index), cy: scale(Number(value)), r: 4, fill: color }));
+        }
+      });
     });
-    [0, Math.floor((points.length - 1) / 2), points.length - 1].forEach(index => {
-      const date = new Date(`${points[index].date}T00:00:00`);
+    [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])].forEach(index => {
       const label = make('text', { x: x(index), y: 285, 'text-anchor': 'middle', class: 'chart-axis-label' });
-      label.textContent = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      label.textContent = englishDate(points[index].date, { month: 'short', day: 'numeric', year: '2-digit' });
       svg.append(label);
     });
+    showChartPoint(points.length - 1);
+  }
+
+  function showChartPoint(index) {
+    const point = chartPoints[index];
+    if (!point || index === currentPointIndex) return;
+    currentPointIndex = index;
+    chartDayDetails.textContent = `${englishDate(point.date, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · ` +
+      `Revenue ${formatAmount(point.revenue)} · Gross profit ${formatAmount(point.grossProfit)} · ` +
+      `Net profit ${formatAmount(point.netProfit)} · Stock ${Number(point.inventoryUnits).toLocaleString('en-US')} units`;
+  }
+
+  function showChartPointAtPointer(event) {
+    if (!chartPoints.length) return;
+    const rect = metricsChart.getBoundingClientRect();
+    const chartX = (event.clientX - rect.left) * 920 / rect.width;
+    const index = chartPoints.length === 1 ? 0 : Math.round((chartX - 58) / (854 - 58) * (chartPoints.length - 1));
+    showChartPoint(Math.max(0, Math.min(chartPoints.length - 1, index)));
   }
 
   function compactNumber(value) {
@@ -191,6 +349,35 @@ import { api, watchRetailFlow } from './firebase-store.js';
     }
   }
 
+  function showInventoryAction(message, error = false) {
+    const notice = document.getElementById('inventoryActionMessage');
+    notice.textContent = message;
+    notice.className = `inventory-action-message${error ? ' error' : ''}`;
+  }
+
+  async function deleteInventoryProduct(product, button) {
+    const quantity = Number(product.quantity);
+    const warning = `Remove ${product.name} (${product.barcode}) from inventory?\n\n` +
+      `${quantity} units currently in stock will be removed. Past sales and revenue remain in the dashboard.`;
+    if (!window.confirm(warning)) return;
+    button.disabled = true;
+    button.textContent = 'Removing…';
+    try {
+      const result = await api('/api/inventory', {
+        method: 'DELETE',
+        body: JSON.stringify({ barcode: product.barcode, expectedName: product.name, expectedQuantity: quantity }),
+      });
+      await refreshInventory();
+      showInventoryAction(`${result.removed.name} removed from inventory. Past sales were kept.`);
+    } catch (error) {
+      await refreshInventory();
+      showInventoryAction(`Could not remove product: ${error.message}`, true);
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Delete';
+    }
+  }
+
   function renderInventoryTable() {
     const query = inventorySearch.value.trim().toLowerCase();
     const products = inventoryProducts.filter(product => `${product.name} ${product.barcode} ${product.supplierName}`.toLowerCase().includes(query));
@@ -199,13 +386,26 @@ import { api, watchRetailFlow } from './firebase-store.js';
     if (!products.length) return;
     products.forEach(product => {
       const row = document.createElement('tr');
-      const name = document.createElement('td'); const nameText = document.createElement('strong'); nameText.textContent = product.name; name.append(nameText);
+      const name = document.createElement('td');
+      const summary = document.createElement('div'); summary.className = 'product-summary';
+      if (product.photoDataUrl?.startsWith('data:image/jpeg;base64,')) {
+        const photo = document.createElement('img'); photo.src = product.photoDataUrl; photo.alt = '';
+        photo.width = 36; photo.height = 36; summary.append(photo);
+      }
+      const nameText = document.createElement('strong'); nameText.textContent = product.name;
+      summary.append(nameText); name.append(summary);
       const barcode = document.createElement('td'); barcode.textContent = product.barcode;
       const quantity = document.createElement('td'); quantity.textContent = Number(product.quantity).toLocaleString();
-      const price = document.createElement('td'); price.textContent = formatAmount(product.originalPrice);
+      const price = document.createElement('td'); price.textContent = product.originalPrice == null ? 'Set at first sale' : formatAmount(product.originalPrice);
       const arrival = document.createElement('td'); arrival.textContent = product.arrivalDate || '—';
       const supplier = document.createElement('td'); supplier.textContent = product.supplierName || '—';
-      row.append(name, barcode, quantity, price, arrival, supplier);
+      const action = document.createElement('td');
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'inventory-delete'; remove.textContent = 'Delete';
+      remove.setAttribute('aria-label', `Delete ${product.name} from inventory`);
+      remove.addEventListener('click', () => { void deleteInventoryProduct(product, remove); });
+      action.append(remove);
+      row.append(name, barcode, quantity, price, arrival, supplier, action);
       inventoryTableBody.append(row);
     });
   }
@@ -218,5 +418,6 @@ import { api, watchRetailFlow } from './firebase-store.js';
     dashboardError.textContent = `Firestore is unavailable: ${error.message}`;
     dashboardError.classList.remove('hidden');
   });
+  showTrendRange();
   void setMainView('dashboard');
 })();

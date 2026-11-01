@@ -58,9 +58,10 @@ function shapeProduct(data) {
   if (!data) return null;
   return {
     barcode: data.barcode, name: data.name, quantity: Number(data.quantity) || 0,
-    originalPrice: Number(data.originalPrice) || 0,
+    originalPrice: data.originalPrice == null ? null : Number(data.originalPrice),
     unitCost: data.unitCost == null ? null : Number(data.unitCost),
     arrivalDate: data.arrivalDate || '', supplierName: data.supplierName || '',
+    photoDataUrl: data.photoDataUrl || '',
     updatedAt: data.updatedAt,
   };
 }
@@ -75,26 +76,40 @@ function sortedProducts(products) {
     a.name.localeCompare(b.name));
 }
 
-function summarize({ products, sales, receipts, expenses }) {
+function summarize({ products, sales, receipts, expenses }, from = todayLocal(-29), to = todayLocal()) {
+  validDate(from, 'start date');
+  validDate(to, 'end date');
+  const today = todayLocal();
+  const dayCount = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
+  if (dayCount < 1 || dayCount > 366 || to > today) {
+    throw new Error('Choose dates up to today, within a 366-day range.');
+  }
   const inventoryUnits = products.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const revenue = sales.reduce((sum, item) => sum + (Number(item.totalOriginalPrice) || 0), 0);
   const grossProfit = sales.reduce((sum, item) => sum + (Number(item.grossProfit) || 0), 0);
   const expenseTotal = expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const missingCostData = sales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)));
-  const points = Array.from({ length: 30 }, (_, index) => ({
-    date: todayLocal(index - 29), revenue: 0, grossProfit: 0, netProfit: 0,
+  const points = Array.from({ length: dayCount }, (_, index) => ({
+    date: new Date(Date.parse(`${from}T00:00:00Z`) + index * 86400000).toISOString().slice(0, 10),
+    revenue: 0, grossProfit: 0, netProfit: 0,
     inventoryUnits: 0, missingCostData: false, unitsSold: 0, received: 0, expenses: 0,
   }));
   const byDate = new Map(points.map(point => [point.date, point]));
+  // Walk back from today's inventory to the selected end date. A negative
+  // receipt records stock removed when an inventory product was deleted.
+  let stock = inventoryUnits;
   for (const item of sales) {
     const point = byDate.get(item.day);
+    const unitsSold = (item.items || []).reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
+    if (item.day > to && item.day <= today) stock += unitsSold;
     if (!point) continue;
     point.revenue += Number(item.totalOriginalPrice) || 0;
     if (item.grossProfit == null || !Number.isFinite(Number(item.grossProfit))) point.missingCostData = true;
     else point.grossProfit += Number(item.grossProfit);
-    point.unitsSold += (item.items || []).reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
+    point.unitsSold += unitsSold;
   }
   for (const item of receipts) {
+    if (item.arrivalDate > to && item.arrivalDate <= today) stock -= Number(item.quantity) || 0;
     const point = byDate.get(item.arrivalDate);
     if (point) point.received += Number(item.quantity) || 0;
   }
@@ -102,7 +117,6 @@ function summarize({ products, sales, receipts, expenses }) {
     const point = byDate.get(item.expenseDate);
     if (point) point.expenses += Number(item.amount) || 0;
   }
-  let stock = inventoryUnits;
   for (let index = points.length - 1; index >= 0; index--) {
     const point = points[index];
     point.inventoryUnits = stock;
@@ -118,6 +132,30 @@ function summarize({ products, sales, receipts, expenses }) {
     },
     points,
   };
+}
+
+async function removeInventory(body) {
+  const barcode = validText(body.barcode, 'Barcode', 128);
+  const expectedName = validText(body.expectedName, 'Product name');
+  const expectedQuantity = positiveNumber(body.expectedQuantity, 'expected quantity', { whole: true, zero: true });
+  const ref = productRef(barcode);
+  const adjustmentRef = doc(collection(db(), 'receipts'));
+  return runTransaction(db(), async transaction => {
+    const product = (await transaction.get(ref)).data();
+    if (!product) throw new Error('This product has already been removed. Refresh inventory.');
+    const quantity = Number(product.quantity);
+    if (product.name !== expectedName || quantity !== expectedQuantity) {
+      throw new Error('This product changed since it was displayed. Refresh inventory before removing it.');
+    }
+    transaction.delete(ref);
+    transaction.set(adjustmentRef, {
+      type: 'inventory_removal', barcode, productName: product.name,
+      quantity: -quantity, unitCost: product.unitCost ?? null,
+      arrivalDate: todayLocal(), supplierName: product.supplierName || '',
+      createdAt: serverTimestamp(),
+    });
+    return { removed: { barcode, name: product.name, quantity } };
+  });
 }
 
 async function loadCollections() {
@@ -163,10 +201,14 @@ async function receive(body) {
   const barcode = validText(body.barcode, 'Barcode', 128);
   const name = validText(body.name, 'Product name');
   const quantity = positiveNumber(body.quantity, 'quantity', { whole: true });
-  const originalPrice = positiveNumber(body.originalPrice, 'sale price', { zero: true });
   const unitCost = positiveNumber(body.unitCost, 'purchase cost', { zero: true });
-  const arrivalDate = validDate(body.arrivalDate, 'arrival date');
+  const arrivalDate = todayLocal();
   const supplierName = validText(body.supplierName, 'supplier name');
+  const photoDataUrl = body.photoDataUrl || '';
+  if (typeof photoDataUrl !== 'string' || photoDataUrl.length > 100000 ||
+      (photoDataUrl && !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photoDataUrl))) {
+    throw new Error('Choose a smaller JPEG product photo.');
+  }
   const ref = productRef(barcode);
   const receiptRef = doc(collection(db(), 'receipts'));
   return runTransaction(db(), async transaction => {
@@ -177,8 +219,9 @@ async function receive(body) {
     const averageCost = existing?.unitCost == null || oldQuantity === 0
       ? unitCost : ((Number(existing.unitCost) * oldQuantity) + unitCost * quantity) / nextQuantity;
     const product = {
-      barcode, name, quantity: nextQuantity, originalPrice: existing?.originalPrice ?? originalPrice,
-      unitCost: averageCost, arrivalDate, supplierName, updatedAt: serverTimestamp(),
+      barcode, name, quantity: nextQuantity, originalPrice: existing?.originalPrice ?? null,
+      unitCost: averageCost, arrivalDate, supplierName,
+      photoDataUrl: photoDataUrl || existing?.photoDataUrl || '', updatedAt: serverTimestamp(),
     };
     transaction.set(ref, product);
     transaction.set(receiptRef, {
@@ -194,10 +237,18 @@ async function sell(body) {
     throw new Error('Add between 1 and 100 products to the cart.');
   }
   const quantities = new Map();
+  const proposedPrices = new Map();
   for (const item of body.items) {
     const barcode = validText(item?.barcode, 'Barcode', 128);
     const quantity = positiveNumber(item?.quantity, 'quantity', { whole: true });
     quantities.set(barcode, (quantities.get(barcode) || 0) + quantity);
+    if (item?.originalPrice != null && item.originalPrice !== '') {
+      const price = positiveNumber(item.originalPrice, 'sale price', { zero: true });
+      if (proposedPrices.has(barcode) && proposedPrices.get(barcode) !== price) {
+        throw new Error(`Conflicting sale prices for ${barcode}.`);
+      }
+      proposedPrices.set(barcode, price);
+    }
   }
   const barcodes = [...quantities.keys()].sort();
   const refs = barcodes.map(productRef);
@@ -216,14 +267,22 @@ async function sell(body) {
       if (product.unitCost == null || !Number.isFinite(Number(product.unitCost))) {
         throw new Error(`Purchase cost is missing for ${product.name}.`);
       }
-      totalCents += Math.round(Number(product.originalPrice) * 100) * quantity;
+      const price = product.originalPrice == null ? proposedPrices.get(barcode) : Number(product.originalPrice);
+      if (price == null || !Number.isFinite(price)) {
+        throw new Error(`Enter a sale price for ${product.name} before selling.`);
+      }
+      if (product.originalPrice != null && proposedPrices.has(barcode) && price !== proposedPrices.get(barcode)) {
+        throw new Error(`The sale price for ${product.name} was set on another device. Scan it again.`);
+      }
+      totalCents += Math.round(price * 100) * quantity;
       costCents += Math.round(Number(product.unitCost) * 100) * quantity;
       return { barcode, name: product.name, quantity,
-        originalPrice: Number(product.originalPrice), unitCost: Number(product.unitCost) };
+        originalPrice: price, unitCost: Number(product.unitCost) };
     });
     snapshots.forEach((snapshot, index) => {
       transaction.update(snapshot.ref, {
-        quantity: Number(snapshot.data().quantity) - items[index].quantity, updatedAt: serverTimestamp(),
+        quantity: Number(snapshot.data().quantity) - items[index].quantity,
+        originalPrice: items[index].originalPrice, updatedAt: serverTimestamp(),
       });
     });
     const totalOriginalPrice = totalCents / 100;
@@ -253,7 +312,9 @@ export async function api(path, options = {}) {
     await getDocFromServer(doc(db(), 'meta', 'connection'));
     return { ok: true };
   }
-  if (url.pathname === '/api/dashboard' && method === 'GET') return summarize(await loadCollections());
+  if (url.pathname === '/api/dashboard' && method === 'GET') {
+    return summarize(await loadCollections(), url.searchParams.get('from') || todayLocal(-29), url.searchParams.get('to') || todayLocal());
+  }
   if (url.pathname === '/api/inventory' && method === 'GET') {
     const barcode = url.searchParams.get('barcode')?.trim();
     if (barcode) return { product: shapeProduct((await getDoc(productRef(barcode))).data()) };
@@ -261,6 +322,7 @@ export async function api(path, options = {}) {
     return { products: sortedProducts(data.products) };
   }
   const body = JSON.parse(options.body || '{}');
+  if (url.pathname === '/api/inventory' && method === 'DELETE') return removeInventory(body);
   if (url.pathname === '/api/inventory' && method === 'POST') return receive(body);
   if (url.pathname === '/api/sales' && method === 'POST') return sell(body);
   if (url.pathname === '/api/expenses' && method === 'POST') return addExpense(body);
