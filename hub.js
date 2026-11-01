@@ -10,6 +10,20 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   const inventoryTableBody = document.getElementById('inventoryTableBody');
   const inventoryEmpty = document.getElementById('inventoryEmpty');
   const inventorySearch = document.getElementById('inventorySearch');
+  const trendFromButton = document.getElementById('trendFromButton');
+  const trendToButton = document.getElementById('trendToButton');
+  const trendCalendar = document.getElementById('trendCalendar');
+  const trendRangeError = document.getElementById('trendRangeError');
+  const chartDayDetails = document.getElementById('chartDayDetails');
+  const metricsChart = document.getElementById('metricsChart');
+  const trendMetric = document.getElementById('trendMetric');
+  let { from: trendFrom, to: trendTo } = lastMonthRange();
+  let calendarTarget = null;
+  let calendarMonthDate = null;
+  let chartPoints = [];
+  let comparisonPoints = [];
+  let comparisonRange = null;
+  let currentPointIndex = -1;
   let dashboardRequestId = 0;
   let currentView = 'dashboard';
   let inventoryProducts = [];
@@ -25,66 +39,6 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   let posBusy = false;
   let posProductsReady = false;
   let posProductRequestId = 0;
-  let overviewPeriod = 'month';
-  let overviewAnchor = lastMonthRange().to;
-  let bestPeriod = 'day';
-  let bestAnchor = todayLocal();
-  let bestView = 'pie';
-  let alertFilter = 'all';
-  let overviewData = null;
-  let bestData = null;
-  const overviewAnchorInput = document.getElementById('overviewAnchor');
-  const bestAnchorInput = document.getElementById('bestSellingAnchor');
-
-  function syncOverviewControls() {
-    const today = todayLocal();
-    overviewAnchorInput.max = today;
-    bestAnchorInput.max = today;
-    overviewAnchorInput.value = overviewAnchor;
-    bestAnchorInput.value = bestAnchor;
-    document.querySelectorAll('[data-overview-period]').forEach(button => {
-      const active = button.dataset.overviewPeriod === overviewPeriod;
-      button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
-    });
-    document.querySelectorAll('[data-best-period]').forEach(button => {
-      const active = button.dataset.bestPeriod === bestPeriod;
-      button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
-    });
-    document.querySelectorAll('[data-best-view]').forEach(button => {
-      const active = button.dataset.bestView === bestView;
-      button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
-    });
-  }
-
-  document.querySelectorAll('[data-overview-period]').forEach(button => button.addEventListener('click', () => {
-    overviewPeriod = button.dataset.overviewPeriod;
-    syncOverviewControls(); void refreshDashboard();
-  }));
-  document.querySelectorAll('[data-best-period]').forEach(button => button.addEventListener('click', () => {
-    bestPeriod = button.dataset.bestPeriod;
-    syncOverviewControls(); void refreshDashboard();
-  }));
-  document.querySelectorAll('[data-best-view]').forEach(button => button.addEventListener('click', () => {
-    bestView = button.dataset.bestView;
-    syncOverviewControls(); renderBestSelling(bestData);
-  }));
-  document.querySelectorAll('[data-alert-filter]').forEach(button => button.addEventListener('click', () => {
-    alertFilter = button.dataset.alertFilter;
-    document.querySelectorAll('[data-alert-filter]').forEach(option => {
-      const active = option === button;
-      option.classList.toggle('active', active); option.setAttribute('aria-pressed', String(active));
-    });
-    renderAlerts(overviewData);
-  }));
-  overviewAnchorInput.addEventListener('change', () => {
-    if (!overviewAnchorInput.value || overviewAnchorInput.value > todayLocal()) return;
-    overviewAnchor = overviewAnchorInput.value; void refreshDashboard();
-  });
-  bestAnchorInput.addEventListener('change', () => {
-    if (!bestAnchorInput.value || bestAnchorInput.value > todayLocal()) return;
-    bestAnchor = bestAnchorInput.value; void refreshDashboard();
-  });
-  document.getElementById('overviewRefresh').addEventListener('click', () => void refreshDashboard());
 
   document.querySelectorAll('[data-view]').forEach(button => {
     button.addEventListener('click', () => { void setMainView(button.dataset.view); });
@@ -135,6 +89,32 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     financePlanDirty = true;
     document.getElementById('financePlanStatus').textContent = 'Unsaved monthly cost changes.';
   });
+  trendFromButton.addEventListener('click', () => openCalendar('from'));
+  trendToButton.addEventListener('click', () => openCalendar('to'));
+  document.getElementById('calendarPrevious').addEventListener('click', () => moveCalendarMonth(-1));
+  document.getElementById('calendarNext').addEventListener('click', () => moveCalendarMonth(1));
+  document.getElementById('calendarClose').addEventListener('click', closeCalendar);
+  document.getElementById('trendResetButton').addEventListener('click', () => {
+    ({ from: trendFrom, to: trendTo } = lastMonthRange());
+    trendRangeError.classList.add('hidden');
+    closeCalendar();
+    showTrendRange();
+    void refreshDashboard();
+  });
+  trendMetric.addEventListener('change', () => drawMetricsChart(chartPoints, comparisonRange));
+  document.addEventListener('pointerdown', event => {
+    if (!document.getElementById('trendControls').contains(event.target)) closeCalendar();
+  });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeCalendar(); });
+  metricsChart.setAttribute('tabindex', '0');
+  metricsChart.addEventListener('pointermove', showChartPointAtPointer);
+  metricsChart.addEventListener('pointerdown', showChartPointAtPointer);
+  metricsChart.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    showChartPoint(Math.max(0, Math.min(chartPoints.length - 1,
+      currentPointIndex + (event.key === 'ArrowLeft' ? -1 : 1))));
+  });
   function todayLocal() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -154,7 +134,90 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     return new Intl.DateTimeFormat('en-US', { ...options, timeZone: 'UTC' }).format(dateUTC(value));
   }
 
+  function showTrendRange() {
+    trendFromButton.textContent = englishDate(trendFrom);
+    trendToButton.textContent = englishDate(trendTo);
+    const days = Math.round((Date.parse(`${trendTo}T00:00:00Z`) - Date.parse(`${trendFrom}T00:00:00Z`)) / 86400000) + 1;
+    document.getElementById('trendRangeSummary').textContent =
+      `${englishDate(trendFrom)} – ${englishDate(trendTo)} · ${days} ${days === 1 ? 'day' : 'days'}`;
+  }
+
+  function openCalendar(target) {
+    calendarTarget = target;
+    const selected = dateUTC(target === 'from' ? trendFrom : trendTo);
+    calendarMonthDate = new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1, 12));
+    trendCalendar.classList.remove('hidden');
+    trendFromButton.setAttribute('aria-expanded', String(target === 'from'));
+    trendToButton.setAttribute('aria-expanded', String(target === 'to'));
+    renderCalendar();
+  }
+
+  function closeCalendar() {
+    trendCalendar.classList.add('hidden');
+    trendFromButton.setAttribute('aria-expanded', 'false');
+    trendToButton.setAttribute('aria-expanded', 'false');
+    calendarTarget = null;
+  }
+
+  function moveCalendarMonth(delta) {
+    calendarMonthDate = new Date(Date.UTC(
+      calendarMonthDate.getUTCFullYear(), calendarMonthDate.getUTCMonth() + delta, 1, 12));
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    const year = calendarMonthDate.getUTCFullYear();
+    const month = calendarMonthDate.getUTCMonth();
+    document.getElementById('calendarMonth').textContent = new Intl.DateTimeFormat('en-US', {
+      month: 'long', year: 'numeric', timeZone: 'UTC',
+    }).format(calendarMonthDate);
+    document.getElementById('calendarNext').disabled =
+      year * 12 + month >= dateUTC(todayLocal()).getUTCFullYear() * 12 + dateUTC(todayLocal()).getUTCMonth();
+    const grid = document.getElementById('calendarDays');
+    grid.replaceChildren();
+    ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(label => {
+      const day = document.createElement('span'); day.className = 'calendar-weekday'; day.textContent = label;
+      grid.append(day);
+    });
+    for (let offset = 0; offset < new Date(Date.UTC(year, month, 1)).getUTCDay(); offset++) {
+      const blank = document.createElement('span'); blank.setAttribute('aria-hidden', 'true'); grid.append(blank);
+    }
+    const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    for (let day = 1; day <= days; day++) {
+      const value = new Date(Date.UTC(year, month, day, 12)).toISOString().slice(0, 10);
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'calendar-day'; button.textContent = String(day);
+      button.setAttribute('aria-label', englishDate(value, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }));
+      button.disabled = value > todayLocal();
+      if (value === trendFrom || value === trendTo) button.classList.add('selected');
+      else if (value > trendFrom && value < trendTo) button.classList.add('between');
+      button.addEventListener('click', () => selectCalendarDate(value));
+      grid.append(button);
+    }
+  }
+
+  function selectCalendarDate(value) {
+    let from = calendarTarget === 'from' ? value : trendFrom;
+    let to = calendarTarget === 'to' ? value : trendTo;
+    if (from > to) {
+      if (calendarTarget === 'from') to = from;
+      else from = to;
+    }
+    const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
+    if (days > 366) {
+      trendRangeError.textContent = 'Choose a date range of 366 days or less.';
+      trendRangeError.classList.remove('hidden');
+      return;
+    }
+    trendRangeError.classList.add('hidden');
+    trendFrom = from; trendTo = to;
+    closeCalendar();
+    showTrendRange();
+    void refreshDashboard();
+  }
+
   async function setMainView(view) {
+    closeCalendar();
     currentView = view;
     dashboardScreen.classList.toggle('hidden', view !== 'dashboard');
     inventoryScreen.classList.toggle('hidden', view !== 'inventory');
@@ -177,381 +240,29 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     connectionStatus.innerHTML = `<i></i> ${message}`;
   }
 
-  function svgNode(tag, attributes = {}) {
-    const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
-    Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, String(value)));
-    return node;
-  }
-
-  function periodName(period, anchor) {
-    if (period === 'day') return englishDate(anchor, { day: 'numeric', month: 'long', year: 'numeric' });
-    if (period === 'year') return anchor.slice(0, 4);
-    return englishDate(`${anchor.slice(0, 7)}-01`, { month: 'long', year: 'numeric' });
-  }
-
-  function applyDelta(id, selected, previous) {
-    const element = document.getElementById(id);
-    element.className = '';
-    if (!previous) {
-      element.textContent = selected ? 'New activity' : '—';
-      element.classList.add('neutral');
-      return;
-    }
-    const change = (selected - previous) / previous * 100;
-    element.textContent = `${change > 0 ? '↑ +' : change < 0 ? '↓ −' : '— '}${Math.abs(change).toFixed(1)}%`;
-    element.classList.toggle('down', change < 0);
-    element.classList.toggle('neutral', change === 0);
-  }
-
-  function renderOverview(data) {
-    if (!data) return;
-    document.getElementById('overviewPeriodText').textContent = periodName(data.period, data.anchor);
-    const suffix = data.period[0].toUpperCase() + data.period.slice(1);
-    document.getElementById('overviewRevenueLabel').textContent = `Revenue · ${suffix}`;
-    document.getElementById('overviewOrdersLabel').textContent = `Orders · ${suffix}`;
-    document.getElementById('overviewRevenue').textContent = formatAmount(data.totals.revenue);
-    document.getElementById('overviewOrders').textContent = Number(data.totals.orders).toLocaleString('en-US');
-    document.getElementById('overviewAlertCount').textContent = Number(data.totals.stockAlerts).toLocaleString('en-US');
-    document.getElementById('overviewProductCount').textContent = Number(data.totals.productCount).toLocaleString('en-US');
-    document.getElementById('overviewAlertBreakdown').textContent = `${data.totals.critical} critical · ${data.totals.low} low`;
-    document.getElementById('overviewStockBreakdown').textContent = 'In inventory now';
-    applyDelta('overviewRevenueDelta', data.totals.revenue, data.totals.previousRevenue);
-    applyDelta('overviewOrdersDelta', data.totals.orders, data.totals.previousOrders);
-    document.getElementById('overviewChartSubtitle').textContent =
-      `${periodName(data.period, data.anchor)} · historical completed sales`;
-    renderRevenueChart(data);
-    renderAlerts(data);
-  }
-
-  function renderAlerts(data) {
-    if (!data) return;
-    const headline = document.getElementById('overviewAlertHeadline');
-    headline.textContent = !data.totals.productCount ? 'No products in inventory'
-      : data.alerts.length ? `${data.alerts.length} ${data.alerts.length === 1 ? 'product needs' : 'products need'} attention`
-        : 'All products are healthy';
-    headline.title = 'Critical: out of stock. Low: 1–5 units left.';
-    const list = document.getElementById('overviewAlertList');
-    list.replaceChildren();
-    const alerts = data.alerts.filter(item => alertFilter === 'all' || item.status === alertFilter);
-    if (!alerts.length) {
-      const empty = document.createElement('p');
-      empty.className = 'overview-empty';
-      empty.textContent = !data.totals.productCount ? 'No products in inventory yet.'
-        : alertFilter === 'all' ? 'No stock alerts right now.'
-        : `No ${alertFilter} stock alerts right now.`;
-      list.append(empty); return;
-    }
-    alerts.forEach(item => {
-      const row = document.createElement('div'); row.className = 'overview-alert-row';
-      const name = document.createElement('span'); name.textContent = item.name;
-      const code = document.createElement('small'); code.textContent = item.barcode;
-      name.append(code);
-      const badge = document.createElement('b'); badge.className = item.status;
-      badge.textContent = item.status === 'critical' ? 'Out of stock' : `${item.quantity} left`;
-      row.append(name, badge); list.append(row);
-    });
-  }
-
-  function smoothOverviewPath(points) {
-    if (!points.length) return '';
-    const rounded = number => Number(number.toFixed(1));
-    let path = `M ${rounded(points[0].x)} ${rounded(points[0].y)}`;
-    if (points.length === 1) return path;
-    const slopes = points.slice(1).map((point, index) =>
-      (point.y - points[index].y) / (point.x - points[index].x));
-    const tangents = points.map((_, index) => {
-      if (index === 0) return slopes[0];
-      if (index === points.length - 1) return slopes.at(-1);
-      const a = slopes[index - 1], b = slopes[index];
-      if (a * b <= 0) return 0;
-      const leftWidth = points[index].x - points[index - 1].x;
-      const rightWidth = points[index + 1].x - points[index].x;
-      const w1 = 2 * rightWidth + leftWidth, w2 = rightWidth + 2 * leftWidth;
-      return (w1 + w2) / (w1 / a + w2 / b);
-    });
-    for (let index = 1; index < points.length; index++) {
-      const a = points[index - 1], b = points[index];
-      const third = (b.x - a.x) / 3;
-      path += ` C ${rounded(a.x + third)} ${rounded(a.y + tangents[index - 1] * third)}` +
-        ` ${rounded(b.x - third)} ${rounded(b.y - tangents[index] * third)}` +
-        ` ${rounded(b.x)} ${rounded(b.y)}`;
-    }
-    return path;
-  }
-
-  function renderRevenueChart(data) {
-    const svg = document.getElementById('overviewRevenueChart');
-    svg.replaceChildren();
-    const empty = document.getElementById('overviewChartEmpty');
-    const chart = data.chart;
-    const values = chart.flatMap(point => [point.revenue, point.grossProfit]).filter(Number.isFinite);
-    const hasSales = data.totals.orders > 0;
-    empty.classList.toggle('hidden', hasSales);
-    svg.setAttribute('aria-label', `Revenue ${formatAmount(data.totals.revenue)}, gross profit ${formatAmount(data.totals.grossProfit)} for ${periodName(data.period, data.anchor)}`);
-    if (!chart.length) return;
-    const left = 55, right = 850, top = 29, bottom = 260;
-    let minimum = Math.min(0, ...values), maximum = Math.max(0, ...values);
-    if (minimum === maximum) maximum = minimum + 1;
-    const pad = (maximum - minimum) * .1;
-    if (minimum < 0) minimum -= pad;
-    maximum += pad;
-    const y = value => bottom - (value - minimum) / (maximum - minimum) * (bottom - top);
-    const x = index => chart.length === 1 ? (left + right) / 2 : left + index * (right - left) / (chart.length - 1);
-    const baseline = y(0);
-    for (let tick = 0; tick < 5; tick++) {
-      const gridY = top + tick * (bottom - top) / 4;
-      svg.append(svgNode('line', { x1: left, y1: gridY, x2: right, y2: gridY, stroke: '#e8edf0', 'stroke-width': 1 }));
-      const label = svgNode('text', { x: left - 10, y: gridY + 4, 'text-anchor': 'end', fill: '#95a1ad', 'font-size': 12 });
-      label.textContent = compactNumber(maximum - tick * (maximum - minimum) / 4);
-      svg.append(label);
-    }
-    const defs = svgNode('defs');
-    const fill = svgNode('linearGradient', { id: 'overview-revenue-fill', x1: 0, x2: 0, y1: 0, y2: 1 });
-    fill.append(svgNode('stop', { offset: '0%', 'stop-color': '#f6a16a', 'stop-opacity': .42 }));
-    fill.append(svgNode('stop', { offset: '100%', 'stop-color': '#f6a16a', 'stop-opacity': .02 }));
-    defs.append(fill); svg.prepend(defs);
-    const runs = key => {
-      const result = []; let run = [];
-      chart.forEach((point, index) => {
-        if (point[key] == null || !Number.isFinite(Number(point[key]))) {
-          if (run.length) result.push(run); run = [];
-        } else run.push({ x: x(index), y: y(Number(point[key])) });
-      });
-      if (run.length) result.push(run);
-      return result;
-    };
-    const revenueRuns = runs('revenue');
-    revenueRuns.forEach(run => {
-      if (run.length < 2) return;
-      const start = run[0], end = run.at(-1);
-      svg.append(svgNode('path', { d: `${smoothOverviewPath(run)} L ${end.x} ${baseline} L ${start.x} ${baseline} Z`,
-        fill: 'url(#overview-revenue-fill)', stroke: 'none' }));
-    });
-    [['revenue', '#e87518', revenueRuns], ['grossProfit', '#17a552', runs('grossProfit')]].forEach(([key, color, chunks]) => {
-      chunks.forEach(run => svg.append(svgNode('path', { d: smoothOverviewPath(run), fill: 'none', stroke: color,
-        'stroke-width': 4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })));
-      chart.forEach((point, index) => {
-        if (point[key] == null) return;
-        const dot = svgNode('circle', { cx: x(index), cy: y(point[key]), r: index === chart.length - 1 ? 5 : 3,
-          fill: color, tabindex: 0 });
-        const title = svgNode('title'); title.textContent = `${point.label}: ${key === 'revenue' ? 'Revenue' : 'Gross profit'} ${formatAmount(point[key])}`;
-        dot.append(title); svg.append(dot);
-      });
-    });
-    chart.forEach((point, index) => {
-      const label = svgNode('text', { x: x(index), y: 292, 'text-anchor': 'middle', fill: '#a7b5c3',
-        'font-size': chart.length > 9 ? 10 : 12 });
-      label.textContent = point.label; svg.append(label);
-    });
-    if (data.totals.grossProfit == null) {
-      const note = svgNode('text', { x: right, y: 17, 'text-anchor': 'end', fill: '#b35b3a', 'font-size': 11 });
-      note.textContent = 'Gross profit unavailable: missing product cost'; svg.append(note);
-    }
-  }
-
-  function sellingColors(data) {
-    const palette = [
-      [92, 38, 67], [218, 43, 54], [42, 90, 62], [211, 11, 57],
-      [15, 69, 61], [181, 45, 52], [293, 31, 59], [352, 61, 59],
-      [120, 39, 49], [25, 61, 50], [246, 39, 61], [197, 52, 50],
-    ];
-    const barcodes = [...new Set([...data.bestSelling, ...data.previousSelling].map(item => item.barcode))].sort();
-    return new Map(barcodes.map((barcode, index) => {
-      const [hue, saturation, lightness] = palette[index] ||
-        [Math.round(11 + (index - palette.length) * 137.508) % 360, 55, 55];
-      return [barcode, {
-        fill: `hsl(${hue} ${saturation}% ${lightness}%)`,
-        shadow: `hsl(${hue} ${saturation}% ${Math.max(28, lightness - 22)}%)`,
-        pale: `hsl(${hue} ${Math.max(30, saturation - 18)}% ${Math.min(88, lightness + 26)}%)`,
-      }];
-    }));
-  }
-
-  function renderBestSelling(data) {
-    if (!data) return;
-    document.getElementById('bestSellingSubtitle').textContent =
-      `Quantity share · ${periodName(data.period, data.anchor)}`;
-    const pie = document.getElementById('bestSellingPie');
-    const bar = document.getElementById('bestSellingBar');
-    document.getElementById('bestSellingStage').classList.toggle('is-bar', bestView === 'bar');
-    pie.classList.toggle('hidden', bestView !== 'pie');
-    bar.classList.toggle('hidden', bestView !== 'bar');
-    const empty = document.getElementById('bestSellingEmpty');
-    const hasCurrent = data.bestSelling.some(item => item.quantity > 0);
-    const hasPrevious = data.previousSelling.some(item => item.quantity > 0);
-    empty.classList.toggle('hidden', bestView === 'pie' ? hasCurrent : hasCurrent || hasPrevious);
-    empty.textContent = bestView === 'pie' ? 'No item sales recorded for this period.'
-      : 'No item sales recorded for either period.';
-    if (bestView === 'pie') renderSellingPie(data);
-    else renderSellingBars(data);
-  }
-
-  function renderSellingPie(data) {
-    const svg = document.getElementById('bestSellingPie');
-    const legend = document.getElementById('bestSellingLegend');
-    svg.replaceChildren(); legend.replaceChildren();
-    const items = data.bestSelling.filter(item => item.quantity > 0);
-    if (!items.length) {
-      svg.append(svgNode('ellipse', { cx: 310, cy: 160, rx: 190, ry: 113, fill: '#fff', stroke: '#f2f3f3' }));
-      legend.append(Object.assign(document.createElement('p'), { textContent: 'Item shares appear after a completed sale.' }));
-      return;
-    }
-    const colors = sellingColors(data);
-    const total = items.reduce((sum, item) => sum + item.quantity, 0);
-    const segments = items.map(item => ({ ...item, ...colors.get(item.barcode) }));
-    const cx = 310, cy = 155, outerX = 191, outerY = 107, innerX = 91, innerY = 51, depth = 24;
-    const fmt = number => Number(number.toFixed(2));
-    const polar = (angle, radiusX, radiusY, offset = 0) =>
-      `${fmt(cx + radiusX * Math.cos(angle))} ${fmt(cy + offset + radiusY * Math.sin(angle))}`;
-    const topPath = (start, end) => {
-      const whole = end - start > Math.PI * 2 - .00001;
-      if (whole) return `M ${polar(start, outerX, outerY)} A ${outerX} ${outerY} 0 1 1 ${polar(start + Math.PI, outerX, outerY)}` +
-        ` A ${outerX} ${outerY} 0 1 1 ${polar(end, outerX, outerY)} L ${polar(end, innerX, innerY)}` +
-        ` A ${innerX} ${innerY} 0 1 0 ${polar(start + Math.PI, innerX, innerY)}` +
-        ` A ${innerX} ${innerY} 0 1 0 ${polar(start, innerX, innerY)} Z`;
-      const large = end - start > Math.PI ? 1 : 0;
-      return `M ${polar(start, outerX, outerY)} A ${outerX} ${outerY} 0 ${large} 1 ${polar(end, outerX, outerY)}` +
-        ` L ${polar(end, innerX, innerY)} A ${innerX} ${innerY} 0 ${large} 0 ${polar(start, innerX, innerY)} Z`;
-    };
-    svg.append(svgNode('ellipse', { cx, cy: cy + depth + 10, rx: outerX + 4, ry: outerY + 3,
-      fill: '#b8c4d0', opacity: .2 }));
-    let angle = -Math.PI / 2;
-    const shapes = segments.map(item => {
-      const end = angle + item.quantity / total * Math.PI * 2;
-      const shape = { ...item, start: angle, end };
-      angle = end; return shape;
-    });
-    // Only the front half has an exposed outer wall. Each sector uses its own
-    // darker shade to create depth while the top remains a true quantity share.
-    shapes.forEach(item => {
-      const a = Math.max(0, item.start), b = Math.min(Math.PI, item.end);
-      if (b <= a) return;
-      svg.append(svgNode('path', { d: `M ${polar(a, outerX, outerY)} A ${outerX} ${outerY} 0 ${b - a > Math.PI ? 1 : 0} 1 ${polar(b, outerX, outerY)}` +
-        ` L ${polar(b, outerX, outerY, depth)} A ${outerX} ${outerY} 0 ${b - a > Math.PI ? 1 : 0} 0 ${polar(a, outerX, outerY, depth)} Z`,
-      fill: item.shadow }));
-    });
-    svg.append(svgNode('ellipse', { cx, cy: cy + 12, rx: innerX, ry: innerY, fill: '#d8e1e9' }));
-    svg.append(svgNode('ellipse', { cx, cy: cy + 19, rx: innerX - 3, ry: innerY - 5, fill: '#f8f8f8' }));
-    const centerMain = svgNode('text', { x: cx, y: cy + 7, 'text-anchor': 'middle', fill: '#182735',
-      'font-size': 17, 'font-weight': 750 });
-    const centerSub = svgNode('text', { x: cx, y: cy + 28, 'text-anchor': 'middle', fill: '#82909b', 'font-size': 12 });
-    centerMain.textContent = `${total} sold`;
-    centerSub.textContent = 'Selected period';
-    shapes.forEach(item => {
-      const percent = item.quantity / total * 100;
-      const slice = svgNode('path', { d: topPath(item.start, item.end), fill: item.fill,
-        stroke: shapes.length === 1 ? 'none' : '#ffffff', 'stroke-width': .7, tabindex: 0, role: 'img',
-        'aria-label': `${item.name}: ${item.quantity} sold, ${percent.toFixed(1)} percent` });
-      const tooltip = svgNode('title'); tooltip.textContent = `${item.name}: ${item.quantity} sold · ${percent.toFixed(1)}%`;
-      slice.append(tooltip);
-      const show = () => { centerMain.textContent = `${percent.toFixed(1)}%`; centerSub.textContent = item.name.length > 20 ? `${item.name.slice(0, 17)}…` : item.name; };
-      const reset = () => { centerMain.textContent = `${total} sold`; centerSub.textContent = 'Selected period'; };
-      slice.addEventListener('pointerenter', show); slice.addEventListener('focus', show);
-      slice.addEventListener('pointerleave', reset); slice.addEventListener('blur', reset);
-      svg.append(slice);
-    });
-    svg.append(centerMain, centerSub);
-    shapes.forEach(item => {
-      const row = document.createElement('div'); row.className = 'overview-legend-row';
-      const label = document.createElement('span');
-      const swatch = document.createElement('i'); swatch.style.background = item.fill;
-      const name = document.createElement('span'); name.className = 'name'; name.textContent = item.name; name.title = item.name;
-      label.append(swatch, name);
-      const count = document.createElement('strong'); count.textContent = `${item.quantity} · ${(item.quantity / total * 100).toFixed(1)}%`;
-      row.append(label, count); legend.append(row);
-    });
-  }
-
-  function renderSellingBars(data) {
-    const svg = document.getElementById('bestSellingBar');
-    const legend = document.getElementById('bestSellingLegend');
-    svg.replaceChildren(); legend.replaceChildren();
-    const colors = sellingColors(data);
-    const current = new Map(data.bestSelling.map(item => [item.barcode, item]));
-    const previous = new Map(data.previousSelling.map(item => [item.barcode, item]));
-    const items = [...new Set([...current.keys(), ...previous.keys()])]
-      .map(barcode => ({ barcode, name: current.get(barcode)?.name || previous.get(barcode)?.name || barcode,
-        selected: current.get(barcode)?.quantity || 0, prior: previous.get(barcode)?.quantity || 0 }))
-      .sort((a, b) => b.selected - a.selected || b.prior - a.prior || a.name.localeCompare(b.name));
-    if (!items.length) {
-      legend.append(Object.assign(document.createElement('p'), { textContent: 'Compare sold quantities after a completed sale.' }));
-      return;
-    }
-    const left = 63, right = Math.max(785, left + items.length * 104), top = 25, bottom = 268;
-    const chartWidth = right + 35;
-    svg.setAttribute('viewBox', `0 0 ${chartWidth} 350`);
-    svg.style.width = items.length <= 6 ? '100%' : `${chartWidth}px`;
-    const maximum = Math.max(1, ...items.flatMap(item => [item.selected, item.prior]));
-    for (let tick = 0; tick <= 4; tick++) {
-      const y = bottom - tick * (bottom - top) / 4;
-      svg.append(svgNode('line', { x1: left, y1: y, x2: right, y2: y,
-        stroke: '#d9dee3', 'stroke-width': 1, 'stroke-dasharray': '4 5' }));
-      const label = svgNode('text', { x: left - 12, y: y + 4, 'text-anchor': 'end', fill: '#8b949e', 'font-size': 12 });
-      label.textContent = String(Number((tick * maximum / 4).toFixed(1))); svg.append(label);
-    }
-    const groupWidth = (right - left) / items.length;
-    const barWidth = Math.min(33, groupWidth * .27);
-    const guide = svgNode('g', { visibility: 'hidden', 'pointer-events': 'none' });
-    const guideLine = svgNode('line', { x1: left, x2: right, stroke: '#202630', 'stroke-width': 1.2 });
-    const guideBox = svgNode('rect', { x: 4, width: 49, height: 22, rx: 4, fill: '#202630' });
-    const guideText = svgNode('text', { x: 28, 'text-anchor': 'middle', fill: '#fff', 'font-size': 12,
-      'font-weight': 700 });
-    guide.append(guideLine, guideBox, guideText);
-    items.forEach((item, index) => {
-      const cx = left + groupWidth * (index + .5);
-      const color = colors.get(item.barcode);
-      [[item.selected, color.fill, -barWidth - 2, 'Selected'], [item.prior, color.pale, 2, 'Previous']]
-        .forEach(([value, color, dx, label]) => {
-          const height = value / maximum * (bottom - top);
-          const rect = svgNode('rect', { x: cx + dx, y: bottom - height, width: barWidth,
-            height, fill: color, tabindex: 0, role: 'img', 'aria-label': `${item.name}: ${label} ${value} sold` });
-          const title = svgNode('title'); title.textContent = `${item.name}: ${label} ${value} sold`;
-          rect.append(title); svg.append(rect);
-          rect.addEventListener('pointerenter', () => {
-            const guideY = Math.max(top + 8, bottom - height);
-            guideLine.setAttribute('y1', guideY); guideLine.setAttribute('y2', guideY);
-            guideBox.setAttribute('y', guideY - 11);
-            guideText.setAttribute('y', guideY + 4); guideText.textContent = String(value);
-            guide.setAttribute('visibility', 'visible');
-          });
-          rect.addEventListener('pointerleave', () => guide.setAttribute('visibility', 'hidden'));
-        });
-      const name = svgNode('text', { x: cx, y: 296, 'text-anchor': 'middle', fill: '#82909c', 'font-size': 11 });
-      name.textContent = item.name.length > 14 ? `${item.name.slice(0, 12)}…` : item.name;
-      svg.append(name);
-    });
-    svg.append(guide);
-    items.forEach(item => {
-      const row = document.createElement('div'); row.className = 'overview-legend-row';
-      const label = document.createElement('span');
-      const swatch = document.createElement('i'); swatch.style.background = colors.get(item.barcode).fill;
-      const title = document.createElement('span'); title.className = 'name';
-      title.textContent = item.name; title.title = item.name;
-      label.append(swatch, title);
-      const count = document.createElement('strong');
-      count.textContent = `${item.selected} / ${item.prior}`;
-      count.title = 'Selected period / previous period';
-      row.append(label, count); legend.append(row);
-    });
-    const note = document.createElement('p');
-    note.textContent = 'Solid = selected period · light = previous period. Counts show selected / previous.';
-    legend.append(note);
-  }
-
   async function refreshDashboard() {
     const requestId = ++dashboardRequestId;
     dashboardError.classList.add('hidden');
     document.getElementById('dashboardUpdated').textContent = 'Updating…';
     try {
-      const [overview, best] = await Promise.all([
-        api(`/api/overview?${new URLSearchParams({ period: overviewPeriod, anchor: overviewAnchor })}`),
-        api(`/api/overview?${new URLSearchParams({ period: bestPeriod, anchor: bestAnchor })}`),
-      ]);
+      const range = new URLSearchParams({ from: trendFrom, to: trendTo });
+      const data = await api(`/api/dashboard?${range}`);
       if (requestId !== dashboardRequestId) return;
-      overviewData = overview; bestData = best;
-      renderOverview(overview);
-      renderBestSelling(best);
       setDatabaseStatus(true, 'FIREBASE CONNECTED');
+      document.getElementById('revenueTotal').textContent = formatAmount(data.totals.revenue);
+      document.getElementById('grossProfitTotal').textContent = formatAmount(data.totals.grossProfit);
+      const netTotal = document.getElementById('netProfitTotal');
+      netTotal.textContent = data.totals.netUnavailableReason ? 'Unavailable' : formatAmount(data.totals.netProfit);
+      netTotal.classList.toggle('unavailable', Boolean(data.totals.netUnavailableReason));
+      document.getElementById('netProfitFoot').textContent = data.totals.netUnavailableReason ||
+        'Cash basis: gross less monthly bills and one-time expenses';
+      document.getElementById('inventoryUnitsTotal').textContent = Number(data.totals.inventoryUnits || 0).toLocaleString();
+      const profitNotice = document.getElementById('profitDataNotice');
+      profitNotice.textContent = data.totals.missingCostData
+        ? 'Some older sales have no purchase cost, so all-time gross profit is unavailable.'
+        : 'Net profit uses cash after bills, including the full mortgage payment. Monthly bills appear on the first day; past periods need a saved monthly plan.';
+      profitNotice.classList.remove('hidden');
+      drawMetricsChart(data.points || [], data.comparison);
       document.getElementById('dashboardUpdated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     } catch (error) {
       if (requestId !== dashboardRequestId) return;
@@ -559,7 +270,186 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       document.getElementById('dashboardUpdated').textContent = 'Waiting for database';
       dashboardError.textContent = `Dashboard data is not available: ${error.message}. Check firebase-config.js and Firestore rules.`;
       dashboardError.classList.remove('hidden');
+      drawMetricsChart([], null);
     }
+  }
+
+  function drawMetricsChart(points, comparison) {
+    chartPoints = points;
+    comparisonPoints = comparison?.points || [];
+    comparisonRange = comparison;
+    currentPointIndex = -1;
+    const metric = trendMetric.value;
+    const stockMetric = metric === 'inventoryUnits';
+    const metricLabel = trendMetric.selectedOptions[0].textContent;
+    document.getElementById('profitDataNotice').classList.toggle('hidden',
+      metric !== 'netProfit' && !(metric === 'grossProfit' && points.some(point => point.missingCostData)));
+    const isLastMonth = trendFrom === lastMonthRange().from && trendTo === lastMonthRange().to;
+    const selectedLabel = isLastMonth ? 'Last month' : comparison?.wholeMonth ? 'Selected month' : 'Selected dates';
+    const previousLabel = comparison?.wholeMonth ? 'Previous month' : 'Previous dates';
+    document.getElementById('selectedPeriodLabel').textContent = selectedLabel;
+    document.getElementById('previousPeriodLabel').textContent = previousLabel;
+    document.getElementById('selectedPeriodDates').textContent = `${englishDate(trendFrom)} – ${englishDate(trendTo)}`;
+    document.getElementById('previousPeriodDates').textContent = comparison
+      ? `${englishDate(comparison.from)} – ${englishDate(comparison.to)}` : '';
+    const total = entries => {
+      if (!entries.length || entries.some(entry => entry[metric] == null || !Number.isFinite(Number(entry[metric])))) return null;
+      return stockMetric ? Number(entries.at(-1)[metric])
+        : entries.reduce((sum, entry) => sum + Number(entry[metric]), 0);
+    };
+    const displayTotal = value => value == null ? 'Unavailable'
+      : stockMetric ? `${Number(value).toLocaleString('en-US')} units` : formatAmount(value);
+    document.getElementById('selectedPeriodValue').textContent = displayTotal(total(points));
+    document.getElementById('previousPeriodValue').textContent = displayTotal(total(comparisonPoints));
+    metricsChart.setAttribute('aria-label', `${metricLabel}: ${selectedLabel} versus ${previousLabel} area chart`);
+    const ns = 'http://www.w3.org/2000/svg';
+    const make = (tag, attrs = {}) => {
+      const element = document.createElementNS(ns, tag);
+      Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, value));
+      return element;
+    };
+    metricsChart.replaceChildren();
+    if (!points.length) {
+      chartDayDetails.textContent = 'No trend data for these dates.';
+      const empty = make('text', { x: 460, y: 150, 'text-anchor': 'middle', class: 'chart-axis-label' });
+      empty.textContent = 'Firestore data will show your period comparison.';
+      metricsChart.append(empty);
+      return;
+    }
+    const left = 58, right = 874, top = 22, bottom = 256;
+    const values = [...points, ...comparisonPoints].map(point => point[metric])
+      .filter(value => value != null && Number.isFinite(Number(value))).map(Number);
+    if (!values.length) {
+      const empty = make('text', { x: 460, y: 150, 'text-anchor': 'middle', class: 'chart-axis-label' });
+      empty.textContent = metric === 'netProfit'
+        ? 'Save monthly costs for these months to see net profit.'
+        : 'No values are available for this comparison.';
+      metricsChart.append(empty);
+      chartDayDetails.textContent = 'Data is unavailable for these dates.';
+      return;
+    }
+    let min = Math.min(0, ...values), max = Math.max(0, ...values);
+    if (min === max) max = min + 1;
+    const pad = (max - min) * 0.08;
+    if (min < 0) min -= pad;
+    if (max > 0) max += pad;
+    const x = index => points.length === 1 ? (left + right) / 2 : left + (right - left) * index / (points.length - 1);
+    const seriesX = (index, count) => count === 1 ? (left + right) / 2 : left + (right - left) * index / (count - 1);
+    const yFor = value => bottom - (value - min) / (max - min) * (bottom - top);
+    const zeroY = yFor(0);
+    const format = value => Number(value.toFixed(1));
+    // Monotone cubic curves pass through recorded points without overshooting
+    // peaks, dips, or a flat run of zero sales.
+    const smoothPath = coordinates => {
+      if (!coordinates.length) return '';
+      let path = `M ${format(coordinates[0].x)} ${format(coordinates[0].y)}`;
+      if (coordinates.length === 1) return path;
+      const slopes = coordinates.slice(1).map((point, index) =>
+        (point.y - coordinates[index].y) / (point.x - coordinates[index].x));
+      const tangents = coordinates.map((_, index) => {
+        if (index === 0) return slopes[0];
+        if (index === coordinates.length - 1) return slopes.at(-1);
+        const before = slopes[index - 1], after = slopes[index];
+        if (before * after <= 0) return 0;
+        const previousWidth = coordinates[index].x - coordinates[index - 1].x;
+        const nextWidth = coordinates[index + 1].x - coordinates[index].x;
+        const w1 = 2 * nextWidth + previousWidth, w2 = nextWidth + 2 * previousWidth;
+        return (w1 + w2) / (w1 / before + w2 / after);
+      });
+      for (let index = 1; index < coordinates.length; index++) {
+        const start = coordinates[index - 1], end = coordinates[index];
+        const third = (end.x - start.x) / 3;
+        path += ` C ${format(start.x + third)} ${format(start.y + tangents[index - 1] * third)}` +
+          ` ${format(end.x - third)} ${format(end.y - tangents[index] * third)}` +
+          ` ${format(end.x)} ${format(end.y)}`;
+      }
+      return path;
+    };
+    for (let tick = 0; tick <= 4; tick++) {
+      const ratio = tick / 4;
+      const y = top + ratio * (bottom - top);
+      metricsChart.append(make('line', { x1: left, y1: y, x2: right, y2: y, class: 'chart-grid' }));
+      const value = max - ratio * (max - min);
+      const leftLabel = make('text', { x: left - 9, y: y + 3, 'text-anchor': 'end', class: 'chart-axis-label' });
+      leftLabel.textContent = compactNumber(value);
+      metricsChart.append(leftLabel);
+    }
+    metricsChart.append(make('line', { x1: left, y1: bottom + 8, x2: right, y2: bottom + 8, class: 'comparison-baseline' }));
+    if (points.length <= 62) points.forEach((_, index) => {
+      metricsChart.append(make('line', { x1: x(index), y1: bottom + 8, x2: x(index), y2: bottom + 12,
+        class: 'comparison-tick' }));
+    });
+    const defs = make('defs');
+    [['selected', '#f5873c', '0.3'], ['previous', '#f6cbb3', '0.15']].forEach(([name, color, opacity]) => {
+      const gradient = make('linearGradient', { id: `${name}-comparison-fill`, x1: '0', x2: '0', y1: '0', y2: '1' });
+      gradient.append(make('stop', { offset: '0%', 'stop-color': color, 'stop-opacity': opacity }));
+      gradient.append(make('stop', { offset: '100%', 'stop-color': color, 'stop-opacity': '0.01' }));
+      defs.append(gradient);
+    });
+    metricsChart.prepend(defs);
+    const series = [
+      { entries: points, color: '#e87518', css: 'comparison-selected', gradient: 'selected-comparison-fill' },
+      { entries: comparisonPoints, color: '#f6cbb3', css: 'comparison-previous', gradient: 'previous-comparison-fill' },
+    ].map(item => {
+      const runs = [];
+      let run = [];
+      item.entries.forEach((point, index) => {
+        const value = point[metric];
+        if (value == null || !Number.isFinite(Number(value))) {
+          if (run.length) runs.push(run);
+          run = [];
+        } else run.push({ x: seriesX(index, item.entries.length), y: yFor(Number(value)) });
+      });
+      if (run.length) runs.push(run);
+      return { ...item, runs };
+    });
+    // Areas sit behind both traces. Missing days break the area as well as the line.
+    [...series].reverse().forEach(({ runs, gradient }) => runs.forEach(run => {
+      if (run.length < 2) return;
+      const start = run[0], end = run.at(-1);
+      metricsChart.append(make('path', {
+        d: `${smoothPath(run)} L ${format(end.x)} ${format(zeroY)} L ${format(start.x)} ${format(zeroY)} Z`,
+        class: 'comparison-area', fill: `url(#${gradient})`,
+      }));
+    }));
+    // The narrow previous trace is drawn last, so a zero period is still visible
+    // when it lies exactly on top of the selected period.
+    series.forEach(({ entries, color, css, runs }) => {
+      runs.forEach(run => metricsChart.append(make('path', { d: smoothPath(run), class: `chart-line ${css}` })));
+      const lastIndex = entries.findLastIndex(entry => entry[metric] != null && Number.isFinite(Number(entry[metric])));
+      if (lastIndex !== -1) metricsChart.append(make('circle', {
+        cx: seriesX(lastIndex, entries.length), cy: yFor(Number(entries[lastIndex][metric])), r: 5, fill: color,
+      }));
+    });
+    [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])].forEach(index => {
+      const label = make('text', { x: x(index), y: 285, 'text-anchor': 'middle', class: 'chart-axis-label' });
+      label.textContent = englishDate(points[index].date, { month: 'short', day: 'numeric', year: '2-digit' });
+      metricsChart.append(label);
+    });
+    showChartPoint(points.length - 1);
+  }
+
+  function showChartPoint(index) {
+    const point = chartPoints[index];
+    if (!point || index === currentPointIndex) return;
+    currentPointIndex = index;
+    const metric = trendMetric.value;
+    const metricLabel = trendMetric.selectedOptions[0].textContent;
+    const previousIndex = comparisonPoints.length === 1 ? 0
+      : Math.round(index / Math.max(chartPoints.length - 1, 1) * (comparisonPoints.length - 1));
+    const previous = comparisonPoints[previousIndex];
+    const displayValue = entry => !entry || entry[metric] == null ? 'Unavailable'
+      : metric === 'inventoryUnits' ? `${Number(entry[metric]).toLocaleString('en-US')} units` : formatAmount(entry[metric]);
+    chartDayDetails.textContent = `${metricLabel} · ${englishDate(point.date)}: ${displayValue(point)}` +
+      (previous ? ` · ${englishDate(previous.date)}: ${displayValue(previous)}` : '');
+  }
+
+  function showChartPointAtPointer(event) {
+    if (!chartPoints.length) return;
+    const rect = metricsChart.getBoundingClientRect();
+    const chartX = (event.clientX - rect.left) * 920 / rect.width;
+    const index = chartPoints.length === 1 ? 0 : Math.round((chartX - 58) / (874 - 58) * (chartPoints.length - 1));
+    showChartPoint(Math.max(0, Math.min(chartPoints.length - 1, index)));
   }
 
   function compactNumber(value) {
@@ -734,7 +624,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       });
       document.getElementById('expenseForm').reset();
       document.getElementById('expensePanel').classList.add('hidden');
-      await refreshFinance();
+      await refreshDashboard();
     } catch (error) {
       message.textContent = `Could not save expense: ${error.message}`;
       message.className = 'workflow-notice error';
@@ -1005,6 +895,6 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     document.getElementById('posConnectionLabel').textContent = 'POS disconnected';
     showPosMessage(`Live order is unavailable: ${error.message}`, true);
   }
-  syncOverviewControls();
+  showTrendRange();
   void setMainView('dashboard');
 })();
