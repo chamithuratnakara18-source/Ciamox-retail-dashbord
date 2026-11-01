@@ -282,6 +282,8 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     const metric = trendMetric.value;
     const stockMetric = metric === 'inventoryUnits';
     const metricLabel = trendMetric.selectedOptions[0].textContent;
+    document.getElementById('profitDataNotice').classList.toggle('hidden',
+      metric !== 'netProfit' && !(metric === 'grossProfit' && points.some(point => point.missingCostData)));
     const isLastMonth = trendFrom === lastMonthRange().from && trendTo === lastMonthRange().to;
     const selectedLabel = isLastMonth ? 'Last month' : comparison?.wholeMonth ? 'Selected month' : 'Selected dates';
     const previousLabel = comparison?.wholeMonth ? 'Previous month' : 'Previous dates';
@@ -343,9 +345,16 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       leftLabel.textContent = compactNumber(value);
       metricsChart.append(leftLabel);
     }
+    metricsChart.append(make('line', { x1: left, y1: bottom + 8, x2: right, y2: bottom + 8, class: 'comparison-baseline' }));
+    if (points.length <= 62) points.forEach((_, index) => {
+      metricsChart.append(make('line', { x1: x(index), y1: bottom + 8, x2: x(index), y2: bottom + 12,
+        class: 'comparison-tick' }));
+    });
     [
-      { entries: comparisonPoints, color: '#f6d4bf', css: 'comparison-previous' },
       { entries: points, color: '#ef5125', css: 'comparison-selected' },
+      // Draw the slimmer peach trace last so it remains visible where both
+      // periods share an exact value, especially along a zero baseline.
+      { entries: comparisonPoints, color: '#f6d4bf', css: 'comparison-previous' },
     ].forEach(({ entries, color, css }) => {
       let path = '', open = false;
       entries.forEach((point, index) => {
