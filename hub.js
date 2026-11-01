@@ -3,6 +3,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
   const inventoryScreen = document.getElementById('inventoryScreen');
+  const financeScreen = document.getElementById('financeScreen');
   const connectionStatus = document.getElementById('connectionStatus');
   const dashboardError = document.getElementById('dashboardError');
   const inventoryTableBody = document.getElementById('inventoryTableBody');
@@ -23,6 +24,11 @@ import { api, watchRetailFlow } from './firebase-store.js';
   let dashboardRequestId = 0;
   let currentView = 'dashboard';
   let inventoryProducts = [];
+  let financeProducts = [];
+  let financePlan = null;
+  let financeStats = null;
+  let financePlanDirty = false;
+  let financeRequestId = 0;
 
   document.querySelectorAll('[data-view]').forEach(button => {
     button.addEventListener('click', () => { void setMainView(button.dataset.view); });
@@ -36,6 +42,12 @@ import { api, watchRetailFlow } from './firebase-store.js';
   document.getElementById('expenseForm').addEventListener('submit', saveExpense);
   document.getElementById('refreshInventoryButton').addEventListener('click', () => { void refreshInventory(); });
   inventorySearch.addEventListener('input', renderInventoryTable);
+  document.getElementById('financeSearch').addEventListener('input', renderFinanceTable);
+  document.getElementById('monthlyPlanForm').addEventListener('submit', saveFinancePlan);
+  document.getElementById('monthlyPlanForm').addEventListener('input', () => {
+    financePlanDirty = true;
+    document.getElementById('financePlanStatus').textContent = 'Unsaved monthly cost changes.';
+  });
   trendFromButton.addEventListener('click', () => openCalendar('from'));
   trendToButton.addEventListener('click', () => openCalendar('to'));
   document.getElementById('calendarPrevious').addEventListener('click', () => moveCalendarMonth(-1));
@@ -160,9 +172,11 @@ import { api, watchRetailFlow } from './firebase-store.js';
     currentView = view;
     dashboardScreen.classList.toggle('hidden', view !== 'dashboard');
     inventoryScreen.classList.toggle('hidden', view !== 'inventory');
+    financeScreen.classList.toggle('hidden', view !== 'finance');
     document.querySelectorAll('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
     if (view === 'dashboard') await refreshDashboard();
     if (view === 'inventory') await refreshInventory();
+    if (view === 'finance') await refreshFinance();
   }
 
   function formatAmount(value) {
@@ -186,15 +200,19 @@ import { api, watchRetailFlow } from './firebase-store.js';
       setDatabaseStatus(true, 'FIREBASE CONNECTED');
       document.getElementById('revenueTotal').textContent = formatAmount(data.totals.revenue);
       document.getElementById('grossProfitTotal').textContent = formatAmount(data.totals.grossProfit);
-      document.getElementById('netProfitTotal').textContent = formatAmount(data.totals.netProfit);
+      const netTotal = document.getElementById('netProfitTotal');
+      netTotal.textContent = data.totals.netUnavailableReason ? 'Unavailable' : formatAmount(data.totals.netProfit);
+      netTotal.classList.toggle('unavailable', Boolean(data.totals.netUnavailableReason));
+      document.getElementById('netProfitFoot').textContent = data.totals.netUnavailableReason ||
+        'Monthly gross less recurring operating costs and one-time expenses';
       document.getElementById('inventoryUnitsTotal').textContent = Number(data.totals.inventoryUnits || 0).toLocaleString();
       const profitNotice = document.getElementById('profitDataNotice');
-      if (data.totals.missingCostData) {
-        profitNotice.textContent = 'Profit totals are unavailable because earlier sales have no recorded purchase cost. New receipts and sales will calculate profit.';
-        profitNotice.classList.remove('hidden');
-      } else {
-        profitNotice.classList.add('hidden');
-      }
+      profitNotice.textContent = data.totals.missingCostData
+        ? 'Some older sales have no purchase cost, so all-time gross profit is unavailable.'
+        : data.totals.netUnavailableReason
+          ? `${data.totals.netUnavailableReason} The net trend is available for the current month after setup.`
+          : 'The net trend covers this month. Recurring operating costs appear on the first day of the month.';
+      profitNotice.classList.remove('hidden');
       drawMetricsChart(data.points || []);
       document.getElementById('dashboardUpdated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     } catch (error) {
@@ -284,7 +302,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
     currentPointIndex = index;
     chartDayDetails.textContent = `${englishDate(point.date, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · ` +
       `Revenue ${formatAmount(point.revenue)} · Gross profit ${formatAmount(point.grossProfit)} · ` +
-      `Net profit ${formatAmount(point.netProfit)} · Stock ${Number(point.inventoryUnits).toLocaleString('en-US')} units`;
+      `Net profit ${point.netProfit == null ? 'Unavailable' : formatAmount(point.netProfit)} · Stock ${Number(point.inventoryUnits).toLocaleString('en-US')} units`;
   }
 
   function showChartPointAtPointer(event) {
@@ -410,9 +428,162 @@ import { api, watchRetailFlow } from './firebase-store.js';
     });
   }
 
+  const monthlyInputIds = {
+    water: 'planWater', electricity: 'planElectricity', gas: 'planGas', sewage: 'planSewage',
+    salaries: 'planSalaries', mortgagePayment: 'planMortgagePayment',
+    mortgageInterest: 'planMortgageInterest', expectedMonthlyUnits: 'planExpectedUnits',
+  };
+
+  async function refreshFinance() {
+    const requestId = ++financeRequestId;
+    try {
+      const data = await api('/api/finance');
+      if (requestId !== financeRequestId) return;
+      financeProducts = data.products;
+      financeStats = data;
+      if (!financePlanDirty) {
+        financePlan = data.plan;
+        for (const [field, id] of Object.entries(monthlyInputIds)) {
+          document.getElementById(id).value = data.plan?.[field] ?? '';
+        }
+      }
+      setDatabaseStatus(true, 'FIREBASE CONNECTED');
+      renderFinanceSummary();
+      renderFinanceTable();
+    } catch (error) {
+      showFinanceMessage('financePriceMessage', `Finance data is unavailable: ${error.message}`, true);
+      setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
+    }
+  }
+
+  function showFinanceMessage(id, message, error = false) {
+    const element = document.getElementById(id);
+    element.textContent = message;
+    element.className = `finance-message${error ? ' error' : ''}`;
+  }
+
+  function reservePerUnit() {
+    return financePlan?.expectedMonthlyUnits > 0
+      ? financePlan.cashCommitments / financePlan.expectedMonthlyUnits : null;
+  }
+
+  function renderFinanceSummary() {
+    document.getElementById('financeMonthlyTotal').textContent = financePlan
+      ? formatAmount(financePlan.cashCommitments) : 'Not entered';
+    const reserve = reservePerUnit();
+    document.getElementById('financeReservePerUnit').textContent = reserve === null ? 'Unavailable' : formatAmount(reserve);
+    const gross = financeStats?.monthGrossProfit;
+    document.getElementById('financeMonthlyGross').textContent = gross == null ? 'Unavailable' : formatAmount(gross);
+    const net = financePlan && financePlan.interestKnown && gross != null
+      ? gross - financePlan.profitExpenses - (financeStats?.monthOneTimeExpenses || 0) : null;
+    document.getElementById('financeMonthlyNet').textContent = net === null ? 'Unavailable' : formatAmount(net);
+    const reasons = [];
+    if (!financePlan) reasons.push('Enter monthly costs to estimate net profit.');
+    else {
+      if (!financePlan.interestKnown) reasons.push('Enter the interest part of the mortgage for the net estimate.');
+      if (!financePlan.expectedMonthlyUnits) reasons.push('Enter expected monthly units for the set-aside per sale.');
+    }
+    if (financePlanDirty) reasons.push('You have unsaved changes.');
+    document.getElementById('financePlanStatus').textContent = reasons.join(' ') || 'Monthly costs and per-sale reserve are ready.';
+    const cash = financePlan && gross != null
+      ? gross - financePlan.cashCommitments - (financeStats?.monthOneTimeExpenses || 0) : null;
+    document.getElementById('financeCashResult').textContent = cash == null
+      ? 'Cash after monthly commitments: unavailable until costs and purchase prices are entered.'
+      : `Cash after monthly commitments this month: ${formatAmount(cash)} (includes the full mortgage payment).`;
+  }
+
+  async function saveFinancePlan(event) {
+    event.preventDefault();
+    const button = document.getElementById('saveMonthlyPlanButton');
+    button.disabled = true;
+    button.textContent = 'Saving…';
+    try {
+      const body = Object.fromEntries(Object.entries(monthlyInputIds)
+        .map(([field, id]) => [field, document.getElementById(id).value]));
+      const result = await api('/api/finance/plan', { method: 'PUT', body: JSON.stringify(body) });
+      financePlan = result.plan;
+      financePlanDirty = false;
+      renderFinanceSummary();
+      renderFinanceTable();
+      showFinanceMessage('financePlanMessage', 'Monthly costs saved. The reserve and net estimate have been updated.');
+    } catch (error) {
+      showFinanceMessage('financePlanMessage', `Could not save monthly costs: ${error.message}`, true);
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Save monthly costs';
+    }
+  }
+
+  function renderFinanceTable() {
+    const body = document.getElementById('financeTableBody');
+    const query = document.getElementById('financeSearch').value.trim().toLowerCase();
+    const products = financeProducts.filter(product => `${product.name} ${product.barcode}`.toLowerCase().includes(query));
+    body.replaceChildren();
+    document.getElementById('financeEmpty').classList.toggle('hidden', products.length > 0);
+    const reserve = reservePerUnit();
+    for (const product of products) {
+      const row = document.createElement('tr');
+      const productCell = document.createElement('td');
+      const productName = document.createElement('div'); productName.className = 'finance-product';
+      if (product.photoDataUrl?.startsWith('data:image/jpeg;base64,')) {
+        const image = document.createElement('img'); image.src = product.photoDataUrl; image.alt = '';
+        productName.append(image);
+      }
+      const label = document.createElement('span'); label.textContent = `${product.name} (${product.barcode})`;
+      productName.append(label); productCell.append(productName);
+      const units = document.createElement('td'); units.textContent = Number(product.quantity).toLocaleString('en-US');
+      const cost = document.createElement('td'); cost.textContent = product.unitCost == null ? 'Unavailable' : formatAmount(product.unitCost);
+      const priceCell = document.createElement('td');
+      const price = document.createElement('input'); price.type = 'number'; price.min = '0'; price.step = '0.01';
+      price.inputMode = 'decimal'; price.className = 'finance-price-input';
+      price.placeholder = 'Selling price'; price.value = product.originalPrice ?? '';
+      price.setAttribute('aria-label', `Selling price for ${product.name}`);
+      priceCell.append(price);
+      const gross = document.createElement('td');
+      const setAside = document.createElement('td');
+      const after = document.createElement('td');
+      const action = document.createElement('td');
+      const save = document.createElement('button'); save.type = 'button'; save.className = 'finance-save-price';
+      save.textContent = 'Save price'; action.append(save);
+      function updatePreview() {
+        const amount = price.value === '' ? NaN : Number(price.value);
+        const valid = Number.isFinite(amount) && amount >= 0 && amount <= 1000000000 && price.validity.valid;
+        const margin = valid && product.unitCost != null ? amount - Number(product.unitCost) : null;
+        gross.textContent = margin == null ? '—' : formatAmount(margin);
+        gross.className = margin != null && margin < 0 ? 'finance-negative' : 'finance-profit';
+        setAside.textContent = reserve == null ? '—' : formatAmount(reserve);
+        after.textContent = margin == null || reserve == null ? '—' : formatAmount(margin - reserve);
+        after.className = margin != null && reserve != null && margin - reserve < 0 ? 'finance-negative' : 'finance-profit';
+        save.disabled = !valid || amount === product.originalPrice;
+      }
+      price.addEventListener('input', updatePreview);
+      save.addEventListener('click', async () => {
+        save.disabled = true;
+        save.textContent = 'Saving…';
+        try {
+          const result = await api('/api/finance/price', { method: 'PATCH', body: JSON.stringify({
+            barcode: product.barcode, sellingPrice: Number(price.value), expectedPrice: product.originalPrice,
+          }) });
+          financeProducts = financeProducts.map(item => item.barcode === product.barcode ? result.product : item);
+          showFinanceMessage('financePriceMessage', `${product.name}: selling price saved. Previous sales keep their original price.`);
+          renderFinanceTable();
+        } catch (error) {
+          showFinanceMessage('financePriceMessage', `Could not save selling price: ${error.message}`, true);
+          updatePreview();
+        } finally {
+          save.textContent = 'Save price';
+        }
+      });
+      updatePreview();
+      row.append(productCell, units, cost, priceCell, gross, setAside, after, action);
+      body.append(row);
+    }
+  }
+
   watchRetailFlow(() => {
     if (currentView === 'dashboard') void refreshDashboard();
     if (currentView === 'inventory') void refreshInventory();
+    if (currentView === 'finance' && !financePlanDirty && !document.activeElement?.classList.contains('finance-price-input')) void refreshFinance();
   }, error => {
     setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
     dashboardError.textContent = `Firestore is unavailable: ${error.message}`;

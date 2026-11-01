@@ -46,6 +46,24 @@
 .calendar-day:hover:not(:disabled){background:#e4f6ed}.calendar-day.selected{background:#218c66;color:#fff;font-weight:800}.calendar-day.between:not(.selected){background:#eef8f2}
 .calendar-day:disabled{color:#c4cdd0;cursor:default}.calendar-close{border:0;background:none;color:#5f6d72;font-size:12px;text-decoration:underline}
 @media(max-width:560px){.trend-date-field{flex:1}.trend-date-button{width:100%;min-width:0}.trend-calendar{width:100%}}
+.finance-screen{padding:34px 0 55px}.finance-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.finance-summary-grid article{display:grid;gap:8px;padding:18px;border:1px solid #e2e9e7;border-radius:13px;background:#fff}
+.finance-summary-grid span{color:#75838b;font-size:10px;font-weight:700}.finance-summary-grid strong{color:#22343d;font-size:20px;overflow-wrap:anywhere}
+.finance-section{margin-bottom:18px}.finance-section-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px}
+.finance-section-heading h2{font:800 19px Manrope,sans-serif;letter-spacing:-.04em;margin:0;color:#1e303a}
+.finance-section-heading p,.finance-help{color:#819098;font-size:11px;line-height:1.55;margin:5px 0 0}
+.finance-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:10px 0}
+.finance-form-grid label{display:grid;gap:5px;font-size:11px;font-weight:700;color:#53616a}
+.finance-form-grid input{width:100%;min-height:40px;padding:9px;border:1px solid #dfe6e9;border-radius:8px;font-size:12px}
+.finance-divider{margin:18px 0 10px;border-top:1px solid #e9eeef;padding-top:15px;color:#30434d;font-size:12px;font-weight:800}
+.finance-form-footer{display:flex;align-items:center;gap:15px;flex-wrap:wrap}.finance-form-footer .workflow-primary{width:auto;min-width:180px}
+.finance-form-footer p{margin:10px 0 0;font-size:11px;color:#697b83}.finance-message{margin:11px 0 0;color:#247951;font-size:11px}.finance-message.error{color:#b04538}
+.finance-search{width:min(320px,100%);min-height:38px;padding:9px 12px;border:1px solid #dfe6e9;border-radius:8px;font-size:11px}
+.finance-table{min-width:920px}.finance-product{display:flex;align-items:center;gap:8px;min-width:130px}.finance-product img{width:32px;height:32px;object-fit:cover;border-radius:6px}
+.finance-price-input{width:108px;min-height:34px;border:1px solid #cfdadc;border-radius:7px;padding:6px 8px;font-size:11px}.finance-save-price{border:0;border-radius:7px;background:#1f9e73;color:#fff;padding:9px 12px;font-size:10px;font-weight:800}.finance-save-price:disabled{opacity:.5}
+.finance-profit{font-weight:800;color:#197c59}.finance-negative{color:#b54835}.finance-unavailable{color:#9ba6ab}.net-card strong.unavailable{font-size:clamp(15px,1.6vw,21px)}
+@media(max-width:900px){.finance-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.finance-screen{padding-top:22px}.finance-form-grid{grid-template-columns:1fr 1fr;gap:8px}.finance-summary-grid article{padding:13px}.finance-summary-grid strong{font-size:16px}.finance-section-heading{align-items:flex-start;flex-direction:column}}
 </style>
 </head>
 <body>
@@ -61,7 +79,8 @@
         <span class="sidebar-label">WORKSPACE</span>
         <button class="nav-tab active" data-view="dashboard" type="button"><span class="nav-icon">▦</span>Dashboard</button>
         <button class="nav-tab" data-view="inventory" type="button"><span class="nav-icon">▤</span>Inventory</button>
-                <p class="sidebar-caption">Store performance<br>and stock control</p>
+        <button class="nav-tab" data-view="finance" type="button"><span class="nav-icon">◈</span>Finance</button>
+        <p class="sidebar-caption">Store performance<br>and stock control</p>
       </aside>
       <main class="hub-content">
       <section id="dashboardScreen" class="dashboard-screen">
@@ -72,11 +91,11 @@
         <div class="metric-grid">
           <article class="metric-card revenue-card"><span class="metric-label">Total revenue <small>ALL TIME</small></span><strong id="revenueTotal">—</strong><span class="metric-foot">Completed sales</span></article>
           <article class="metric-card gross-card"><span class="metric-label">Gross profit <small>ALL TIME</small></span><strong id="grossProfitTotal">—</strong><span class="metric-foot">Revenue minus product cost</span></article>
-          <article class="metric-card net-card"><span class="metric-label">Net profit <small>ALL TIME</small></span><strong id="netProfitTotal">—</strong><span class="metric-foot">After recorded expenses</span></article>
+          <article class="metric-card net-card"><span class="metric-label">Net profit estimate <small>THIS MONTH</small></span><strong id="netProfitTotal">Unavailable</strong><span id="netProfitFoot" class="metric-foot">Enter monthly costs in Finance</span></article>
           <article class="metric-card stock-card"><span class="metric-label">Inventory on hand <small>UNITS</small></span><strong id="inventoryUnitsTotal">—</strong><span class="metric-foot">Current sellable quantity</span></article>
         </div>
         <section class="chart-card">
-          <div class="chart-heading"><div><span class="eyebrow">SELECTED DATES</span><h2>Performance trend</h2><p>Daily sales, profit and inventory levels</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ Add expense</button></div>
+          <div class="chart-heading"><div><span class="eyebrow">SELECTED DATES</span><h2>Performance trend</h2><p>Daily sales, profit and inventory levels</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ One-time expense</button></div>
           <div id="trendControls" class="trend-controls">
             <div class="trend-date-field"><span>From</span><button id="trendFromButton" class="trend-date-button" type="button" aria-haspopup="dialog" aria-expanded="false">Choose start date</button></div>
             <div class="trend-date-field"><span>To</span><button id="trendToButton" class="trend-date-button" type="button" aria-haspopup="dialog" aria-expanded="false">Choose end date</button></div>
@@ -89,16 +108,17 @@
             <p id="trendRangeError" class="trend-range-error hidden" role="alert"></p>
           </div>
           <p id="trendRangeSummary" class="trend-range-summary"></p>
-          <div class="chart-legend"><span><i class="legend-revenue"></i>Revenue</span><span><i class="legend-gross"></i>Gross profit</span><span><i class="legend-net"></i>Net profit</span><span><i class="legend-stock"></i>Units in stock <small>(right axis)</small></span></div>
+          <div class="chart-legend"><span><i class="legend-revenue"></i>Revenue</span><span><i class="legend-gross"></i>Gross profit</span><span><i class="legend-net"></i>Net estimate <small>(current month)</small></span><span><i class="legend-stock"></i>Units in stock <small>(right axis)</small></span></div>
           <div class="chart-wrap"><svg id="metricsChart" viewBox="0 0 920 320" role="img" aria-label="Line chart showing daily revenue, gross profit, net profit, and inventory units for the selected dates"></svg></div>
           <p id="chartDayDetails" class="chart-day-details" aria-live="polite">Point to or touch the chart for a day's exact values.</p>
           <p id="profitDataNotice" class="profit-notice hidden"></p>
           <p id="dashboardError" class="workflow-notice error hidden" role="status"></p>
         </section>
         <section id="expensePanel" class="workflow-card expense-panel hidden">
-          <div class="workflow-card-heading"><div><span class="eyebrow">OPERATING COST</span><h2>Record an expense</h2></div><button id="closeExpenseButton" class="clear-button" type="button">Close</button></div>
+          <div class="workflow-card-heading"><div><span class="eyebrow">OTHER COST</span><h2>Record a one-time expense</h2></div><button id="closeExpenseButton" class="clear-button" type="button">Close</button></div>
           <form id="expenseForm" class="inventory-form">
-            <label>Expense name<input id="expenseTitle" type="text" maxlength="200" placeholder="For example: rent or electricity" required></label>
+            <label>Expense name<input id="expenseTitle" type="text" maxlength="200" placeholder="For example: repairs or supplies" required></label>
+            <p class="finance-help">Enter recurring utility, salary, and mortgage amounts in Finance. Recording them here too would count them twice.</p>
             <div class="form-grid"><label>Amount<input id="expenseAmount" type="number" min="0.01" step="0.01" required></label><label>Date<input id="expenseDate" type="date" required></label></div>
             <p id="expenseMessage" class="workflow-notice hidden" role="status"></p>
             <button id="saveExpenseButton" class="workflow-primary" type="submit">Save expense</button>
@@ -114,6 +134,46 @@
           <div class="table-scroll"><table><thead><tr><th>Product</th><th>Barcode</th><th>In stock</th><th>Original price</th><th>Last arrival</th><th>Supplier</th><th>Action</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
           <div id="inventoryEmpty" class="inventory-empty hidden">No inventory products found.</div>
         </section>
+      </section>
+
+      <section id="financeScreen" class="finance-screen hidden">
+        <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE FINANCE</div><h1>Finance</h1><p>Set selling prices and plan the cash needed for monthly bills.</p></div></header>
+        <div class="finance-summary-grid">
+          <article><span>Monthly cash commitments</span><strong id="financeMonthlyTotal">Not entered</strong></article>
+          <article><span>Set aside per sold unit</span><strong id="financeReservePerUnit">Unavailable</strong></article>
+          <article><span>Gross profit this month</span><strong id="financeMonthlyGross">—</strong></article>
+          <article><span>Net profit estimate this month</span><strong id="financeMonthlyNet">Unavailable</strong></article>
+        </div>
+        <p id="financeCashResult" class="finance-help">Cash after monthly commitments: unavailable until costs and purchase prices are entered.</p>
+        <section class="workflow-card finance-section">
+          <div class="finance-section-heading"><div><h2>Monthly costs</h2><p>Enter your usual monthly amounts. Leave a field blank if it does not apply.</p></div></div>
+          <form id="monthlyPlanForm">
+            <div class="finance-divider">Utilities</div>
+            <div class="finance-form-grid">
+              <label>Water<input id="planWater" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+              <label>Electricity<input id="planElectricity" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+              <label>Gas<input id="planGas" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+              <label>Sewage (if applicable)<input id="planSewage" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+            </div>
+            <div class="finance-divider">Staff and mortgage</div>
+            <div class="finance-form-grid">
+              <label>Employee salaries (monthly total)<input id="planSalaries" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+              <label>Mortgage payment (monthly total)<input id="planMortgagePayment" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+              <label>Interest part of mortgage payment<input id="planMortgageInterest" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+              <label>Expected units sold per month<input id="planExpectedUnits" type="number" min="1" step="1" inputmode="numeric" placeholder="For example: 200"></label>
+            </div>
+            <p class="finance-help">The set-aside estimate is monthly cash commitments ÷ expected units sold. Mortgage principal is included in cash to keep, but only its interest portion counts toward the net profit estimate. One-time expenses are recorded separately.</p>
+            <div class="finance-form-footer"><button id="saveMonthlyPlanButton" class="workflow-primary" type="submit">Save monthly costs</button><p id="financePlanStatus">Monthly costs have not been entered. Gross profit is available; net profit is unavailable.</p></div>
+            <p id="financePlanMessage" class="finance-message hidden" role="status"></p>
+          </form>
+        </section>
+        <section class="inventory-table-card finance-section">
+          <div class="inventory-toolbar finance-section-heading"><div><h2>Inventory pricing</h2><p>Purchase cost is from Inbound. Set or change a selling price; past sales keep their recorded prices.</p></div><input id="financeSearch" class="finance-search" type="search" aria-label="Search finance inventory" placeholder="Search product or barcode"></div>
+          <p id="financePriceMessage" class="finance-message hidden" role="status"></p>
+          <div class="table-scroll"><table class="finance-table"><thead><tr><th>Product</th><th>In stock</th><th>Purchase cost/unit</th><th>Selling price/unit</th><th>Gross profit/unit</th><th>Set aside/unit</th><th>After reserve/unit</th><th>Action</th></tr></thead><tbody id="financeTableBody"></tbody></table></div>
+          <div id="financeEmpty" class="inventory-empty hidden">No inventory products found. Add a product in the scanner first.</div>
+        </section>
+        <p class="finance-help">The amount after reserve is a planning estimate based on expected sales. Actual net profit also depends on one-time expenses and the mortgage interest split.</p>
       </section>
 
       

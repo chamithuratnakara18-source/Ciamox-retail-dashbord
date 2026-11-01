@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js';
 import {
   addDoc, collection, doc, getDoc, getDocFromServer, getDocs, getFirestore,
-  onSnapshot, runTransaction, serverTimestamp,
+  onSnapshot, runTransaction, serverTimestamp, setDoc,
 } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 
@@ -76,6 +76,20 @@ function sortedProducts(products) {
     a.name.localeCompare(b.name));
 }
 
+const monthlyFields = ['water', 'electricity', 'gas', 'sewage', 'salaries', 'mortgagePayment'];
+
+function shapeMonthlyPlan(data) {
+  if (!data || data.type !== 'monthly_plan') return null;
+  const plan = Object.fromEntries(monthlyFields.map(field => [field, Number(data[field]) || 0]));
+  plan.mortgageInterest = data.mortgageInterest == null ? null : Number(data.mortgageInterest);
+  plan.expectedMonthlyUnits = data.expectedMonthlyUnits == null ? null : Number(data.expectedMonthlyUnits);
+  plan.cashCommitments = monthlyFields.reduce((sum, field) => sum + plan[field], 0);
+  plan.interestKnown = plan.mortgagePayment === 0 || plan.mortgageInterest !== null;
+  plan.profitExpenses = plan.water + plan.electricity + plan.gas + plan.sewage +
+    plan.salaries + (plan.mortgageInterest || 0);
+  return plan;
+}
+
 function summarize({ products, sales, receipts, expenses }, from = todayLocal(-29), to = todayLocal()) {
   validDate(from, 'start date');
   validDate(to, 'end date');
@@ -87,8 +101,18 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
   const inventoryUnits = products.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const revenue = sales.reduce((sum, item) => sum + (Number(item.totalOriginalPrice) || 0), 0);
   const grossProfit = sales.reduce((sum, item) => sum + (Number(item.grossProfit) || 0), 0);
-  const expenseTotal = expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const plan = shapeMonthlyPlan(expenses.find(item => item.id === 'monthly-plan'));
+  const currentMonth = today.slice(0, 7);
+  const oneTimeExpenses = expenses.filter(item => item.type !== 'monthly_plan');
+  const monthlyExpenses = oneTimeExpenses.filter(item => item.expenseDate?.startsWith(currentMonth))
+    .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const monthlySales = sales.filter(item => item.day?.startsWith(currentMonth));
+  const monthlyGross = monthlySales.reduce((sum, item) => sum + (Number(item.grossProfit) || 0), 0);
+  const monthlyMissingCost = monthlySales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)));
   const missingCostData = sales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)));
+  const netUnavailableReason = !plan ? 'Enter monthly costs in Finance to estimate net profit.'
+    : !plan.interestKnown ? 'Enter the interest portion of the mortgage payment in Finance to estimate net profit.'
+      : monthlyMissingCost ? 'Purchase cost is missing from a sale this month.' : null;
   const points = Array.from({ length: dayCount }, (_, index) => ({
     date: new Date(Date.parse(`${from}T00:00:00Z`) + index * 86400000).toISOString().slice(0, 10),
     revenue: 0, grossProfit: 0, netProfit: 0,
@@ -113,7 +137,7 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
     const point = byDate.get(item.arrivalDate);
     if (point) point.received += Number(item.quantity) || 0;
   }
-  for (const item of expenses) {
+  for (const item of oneTimeExpenses) {
     const point = byDate.get(item.expenseDate);
     if (point) point.expenses += Number(item.amount) || 0;
   }
@@ -121,14 +145,18 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
     const point = points[index];
     point.inventoryUnits = stock;
     point.grossProfit = point.missingCostData ? null : point.grossProfit;
-    point.netProfit = point.grossProfit == null ? null : point.grossProfit - point.expenses;
+    point.netProfit = netUnavailableReason || !point.date.startsWith(currentMonth) || point.grossProfit == null
+      ? null : point.grossProfit - point.expenses - (point.date === `${currentMonth}-01` ? plan.profitExpenses : 0);
     stock += point.unitsSold - point.received;
   }
   return {
     totals: {
       revenue, grossProfit: missingCostData ? null : grossProfit,
-      netProfit: missingCostData ? null : grossProfit - expenseTotal,
-      inventoryUnits, missingCostData,
+      netProfit: netUnavailableReason ? null : monthlyGross - plan.profitExpenses - monthlyExpenses,
+      netCashAfterCommitments: plan && !monthlyMissingCost ? monthlyGross - plan.cashCommitments - monthlyExpenses : null,
+      monthlyGrossProfit: monthlyMissingCost ? null : monthlyGross,
+      monthlyOneTimeExpenses: monthlyExpenses,
+      inventoryUnits, missingCostData, netUnavailableReason,
     },
     points,
   };
@@ -156,6 +184,56 @@ async function removeInventory(body) {
     });
     return { removed: { barcode, name: product.name, quantity } };
   });
+}
+
+async function setSellingPrice(body) {
+  const barcode = validText(body.barcode, 'Barcode', 128);
+  const sellingPrice = positiveNumber(body.sellingPrice, 'selling price', { zero: true });
+  const expectedPrice = body.expectedPrice == null ? null
+    : positiveNumber(body.expectedPrice, 'previous selling price', { zero: true });
+  const ref = productRef(barcode);
+  return runTransaction(db(), async transaction => {
+    const product = (await transaction.get(ref)).data();
+    if (!product) throw new Error('This product is no longer in inventory. Refresh Finance.');
+    const currentPrice = product.originalPrice == null ? null : Number(product.originalPrice);
+    if (currentPrice !== expectedPrice) throw new Error('The selling price changed on another device. Refresh Finance.');
+    transaction.update(ref, { originalPrice: sellingPrice, updatedAt: serverTimestamp() });
+    return { product: shapeProduct({ ...product, originalPrice: sellingPrice }) };
+  });
+}
+
+async function saveMonthlyPlan(body) {
+  const plan = Object.fromEntries(monthlyFields.map(field => [field,
+    body[field] === '' || body[field] == null ? 0 : positiveNumber(body[field], field, { zero: true })]));
+  if (!monthlyFields.some(field => plan[field] > 0)) {
+    throw new Error('Enter at least one monthly cost. Leave the plan unsaved if you have not entered costs yet.');
+  }
+  const interest = body.mortgageInterest === '' || body.mortgageInterest == null ? null
+    : positiveNumber(body.mortgageInterest, 'mortgage interest', { zero: true });
+  if (interest !== null && interest > plan.mortgagePayment) {
+    throw new Error('Mortgage interest cannot be more than the total mortgage payment.');
+  }
+  const expectedMonthlyUnits = body.expectedMonthlyUnits === '' || body.expectedMonthlyUnits == null ? null
+    : positiveNumber(body.expectedMonthlyUnits, 'expected monthly units', { whole: true });
+  await setDoc(doc(db(), 'expenses', 'monthly-plan'), {
+    type: 'monthly_plan', ...plan, mortgageInterest: interest, expectedMonthlyUnits,
+    updatedAt: serverTimestamp(),
+  });
+  return { plan: shapeMonthlyPlan({ type: 'monthly_plan', ...plan, mortgageInterest: interest, expectedMonthlyUnits }) };
+}
+
+async function getFinance() {
+  const data = await loadCollections();
+  const totals = summarize(data).totals;
+  return {
+    products: sortedProducts(data.products),
+    plan: shapeMonthlyPlan(data.expenses.find(item => item.id === 'monthly-plan')),
+    monthGrossProfit: totals.monthlyGrossProfit,
+    monthOneTimeExpenses: totals.monthlyOneTimeExpenses,
+    netProfit: totals.netProfit,
+    netCashAfterCommitments: totals.netCashAfterCommitments,
+    netUnavailableReason: totals.netUnavailableReason,
+  };
 }
 
 async function loadCollections() {
@@ -321,8 +399,11 @@ export async function api(path, options = {}) {
     const data = await loadCollections();
     return { products: sortedProducts(data.products) };
   }
+  if (url.pathname === '/api/finance' && method === 'GET') return getFinance();
   const body = JSON.parse(options.body || '{}');
   if (url.pathname === '/api/inventory' && method === 'DELETE') return removeInventory(body);
+  if (url.pathname === '/api/finance/price' && method === 'PATCH') return setSellingPrice(body);
+  if (url.pathname === '/api/finance/plan' && method === 'PUT') return saveMonthlyPlan(body);
   if (url.pathname === '/api/inventory' && method === 'POST') return receive(body);
   if (url.pathname === '/api/sales' && method === 'POST') return sell(body);
   if (url.pathname === '/api/expenses' && method === 'POST') return addExpense(body);
