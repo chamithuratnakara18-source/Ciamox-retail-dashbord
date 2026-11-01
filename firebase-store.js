@@ -100,8 +100,6 @@ function shapeMonthlyPlan(data) {
   if (!data || data.type !== 'monthly_plan') return null;
   const plan = Object.fromEntries(monthlyFields.map(field => [field, Number(data[field]) || 0]));
   plan.cashCommitments = monthlyFields.reduce((sum, field) => sum + plan[field], 0);
-  plan.profitExpenses = plan.water + plan.electricity + plan.gas + plan.sewage +
-    plan.salaries;
   return plan;
 }
 
@@ -125,10 +123,8 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
   const monthlyGross = monthlySales.reduce((sum, item) => sum + (Number(item.grossProfit) || 0), 0);
   const monthlyMissingCost = monthlySales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)));
   const missingCostData = sales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)));
-  const netUnavailableReason = !plan ? 'Enter monthly costs in Finance to estimate net profit.'
-    : monthlyMissingCost ? 'Purchase cost is missing from a sale this month.'
-      : plan.mortgagePayment > 0
-        ? 'A combined mortgage payment includes principal. Net profit is unavailable; Finance shows cash after bills instead.' : null;
+  const netUnavailableReason = !plan ? 'Enter monthly costs in Finance to estimate monthly cash after bills.'
+    : monthlyMissingCost ? 'Purchase cost is missing from a sale this month.' : null;
   const points = Array.from({ length: dayCount }, (_, index) => ({
     date: new Date(Date.parse(`${from}T00:00:00Z`) + index * 86400000).toISOString().slice(0, 10),
     revenue: 0, grossProfit: 0, netProfit: 0, cashAfterBills: 0,
@@ -161,17 +157,17 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
     const point = points[index];
     point.inventoryUnits = stock;
     point.grossProfit = point.missingCostData ? null : point.grossProfit;
-    point.netProfit = netUnavailableReason || !point.date.startsWith(currentMonth) || point.grossProfit == null
-      ? null : point.grossProfit - point.expenses - (point.date === `${currentMonth}-01` ? plan.profitExpenses : 0);
     point.cashAfterBills = !plan || !point.date.startsWith(currentMonth) || point.grossProfit == null
       ? null : point.grossProfit - point.expenses - (point.date === `${currentMonth}-01` ? plan.cashCommitments : 0);
+    point.netProfit = point.cashAfterBills;
     stock += point.unitsSold - point.received;
   }
   return {
     totals: {
       revenue, grossProfit: missingCostData ? null : grossProfit,
-      netProfit: netUnavailableReason ? null : monthlyGross - plan.profitExpenses - monthlyExpenses,
+      netProfit: netUnavailableReason ? null : monthlyGross - plan.cashCommitments - monthlyExpenses,
       netCashAfterCommitments: plan && !monthlyMissingCost ? monthlyGross - plan.cashCommitments - monthlyExpenses : null,
+      netProfitBasis: 'cash_after_bills',
       monthlyGrossProfit: monthlyMissingCost ? null : monthlyGross,
       monthlyOneTimeExpenses: monthlyExpenses,
       monthlyMortgagePayment: plan?.mortgagePayment || 0,
@@ -256,6 +252,7 @@ async function getFinance() {
     monthGrossProfit: totals.monthlyGrossProfit,
     monthOneTimeExpenses: totals.monthlyOneTimeExpenses,
     netProfit: totals.netProfit,
+    netProfitBasis: totals.netProfitBasis,
     netCashAfterCommitments: totals.netCashAfterCommitments,
     netUnavailableReason: totals.netUnavailableReason,
     currentPlanSnapshotExists,
@@ -270,8 +267,8 @@ async function getFinance() {
       fixedCosts: previousPlan?.cashCommitments ?? null,
       productPurchases: purchaseCostInMonth(data.receipts, previousMonth),
       grossProfit: previousGrossProfit,
-      netProfit: previousPlan && previousPlan.mortgagePayment === 0 && previousGrossProfit != null
-        ? previousGrossProfit - previousPlan.profitExpenses - previousOneTimeExpenses : null,
+      netProfit: previousPlan && previousGrossProfit != null
+        ? previousGrossProfit - previousPlan.cashCommitments - previousOneTimeExpenses : null,
     },
   };
 }

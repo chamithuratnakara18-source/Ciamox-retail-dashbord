@@ -73,7 +73,7 @@
 .finance-ring strong{max-width:115px;color:#1b2732;font:800 clamp(15px,1.45vw,21px)/1.1 Manrope,sans-serif;letter-spacing:-.04em;overflow-wrap:anywhere}.finance-ring small{max-width:105px;margin-top:5px;color:#89979c;font-size:8px;line-height:1.25}
 .finance-delta{max-width:100%;min-height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:20px;padding:5px 8px;font-size:9px;font-weight:800;line-height:1.3;white-space:normal}
 .finance-delta.good{color:#16885c;background:#e8f7ed}.finance-delta.bad{color:#b94d39;background:#fff0e9}.finance-delta.cost-up{color:#a46327;background:#fff3e8}.finance-delta.cost-down{color:#28788a;background:#eaf5f7}.finance-delta.flat{color:#61767c;background:#f0f3f3}.finance-delta.unknown{color:#7d898e;background:#f3f5f5}
-.finance-cash-strip{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-3px 0 20px;padding:12px 16px;background:#edf8f3;border:1px solid #d8eae0;border-radius:11px;color:#435c53}.finance-cash-strip span{font-size:11px;font-weight:800}.finance-cash-strip strong{font-size:16px;color:#1c6c51}.finance-cash-strip p{margin:0;color:#74857f;font-size:10px;line-height:1.45;flex-basis:100%}
+.finance-cash-strip{margin:-3px 0 20px;padding:12px 16px;background:#edf8f3;border:1px solid #d8eae0;border-radius:11px;color:#435c53}.finance-cash-strip p{margin:0;color:#567a6a;font-size:11px;line-height:1.5}
 .finance-purchase-note{margin:-9px 0 18px}
 @media(max-width:900px){.finance-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.finance-screen{padding-top:22px}.finance-form-grid{grid-template-columns:1fr 1fr;gap:8px}.finance-summary-grid article{padding:13px}.finance-summary-grid strong{font-size:16px}.finance-section-heading{align-items:flex-start;flex-direction:column}}
@@ -104,7 +104,7 @@
         <div class="metric-grid">
           <article class="metric-card revenue-card"><span class="metric-label">Total revenue <small>ALL TIME</small></span><strong id="revenueTotal">—</strong><span class="metric-foot">Completed sales</span></article>
           <article class="metric-card gross-card"><span class="metric-label">Gross profit <small>ALL TIME</small></span><strong id="grossProfitTotal">—</strong><span class="metric-foot">Revenue minus product cost</span></article>
-          <article class="metric-card net-card"><span class="metric-label">Net profit estimate <small>THIS MONTH</small></span><strong id="netProfitTotal">Unavailable</strong><span id="netProfitFoot" class="metric-foot">Enter monthly costs in Finance</span></article>
+          <article class="metric-card net-card"><span class="metric-label">Net profit estimate (cash) <small>THIS MONTH</small></span><strong id="netProfitTotal">Unavailable</strong><span id="netProfitFoot" class="metric-foot">Enter monthly costs in Finance</span></article>
           <article class="metric-card stock-card"><span class="metric-label">Inventory on hand <small>UNITS</small></span><strong id="inventoryUnitsTotal">—</strong><span class="metric-foot">Current sellable quantity</span></article>
         </div>
         <section class="chart-card">
@@ -155,9 +155,9 @@
           <article class="finance-metric-card"><span class="finance-metric-title">Fixed costs / month</span><div class="finance-ring"><strong id="financeMonthlyTotal">Not entered</strong><small>Bills and mortgage</small></div><span id="financeFixedDelta" class="finance-delta unknown">No previous plan</span></article>
           <article class="finance-metric-card"><span class="finance-metric-title">Product purchase cost / month</span><div class="finance-ring"><strong id="financeProductPurchases">—</strong><small>Inbound stock bought</small></div><span id="financePurchaseDelta" class="finance-delta unknown">Previous month unavailable</span></article>
           <article class="finance-metric-card"><span class="finance-metric-title">Gross profit / month</span><div class="finance-ring"><strong id="financeMonthlyGross">—</strong><small>Sales less product cost</small></div><span id="financeGrossDelta" class="finance-delta unknown">Previous month unavailable</span></article>
-          <article class="finance-metric-card"><span class="finance-metric-title">Net profit / month</span><div class="finance-ring"><strong id="financeMonthlyNet">Unavailable</strong><small>Estimated from costs</small></div><span id="financeNetDelta" class="finance-delta unknown">Previous month unavailable</span></article>
+          <article class="finance-metric-card"><span class="finance-metric-title">Net profit estimate (cash) / month</span><div class="finance-ring"><strong id="financeMonthlyNet">Unavailable</strong><small>After monthly bills</small></div><span id="financeNetDelta" class="finance-delta unknown">Previous month unavailable</span></article>
         </div>
-        <div class="finance-cash-strip"><span>Cash after bills this month</span><strong id="financeMonthlyCash">Unavailable</strong><p id="financeCashResult">Gross profit is available; enter monthly costs to see cash after bills.</p></div>
+        <div class="finance-cash-strip"><p id="financeCashResult">Gross profit is available; enter monthly costs to see the monthly cash estimate.</p></div>
         <p class="finance-help finance-purchase-note">Product purchase cost tracks stock bought this month. Gross profit already deducts the cost of products when they are sold.</p>
         <details id="monthlyCostsDetails" class="workflow-card finance-section finance-costs">
           <summary class="finance-costs-summary"><span class="finance-summary-copy"><strong>Monthly costs</strong><small>Click to expand or collapse. Leave a field blank if it does not apply.</small></span><span class="finance-chevron" aria-hidden="true">⌄</span></summary>
@@ -175,7 +175,7 @@
               <label>Employee salaries (monthly total)<input id="planSalaries" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
               <label>Mortgage payment including interest (monthly total)<input id="planMortgagePayment" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
             </div>
-            <p class="finance-help">Monthly cash commitments are the total amount to keep for these bills. A combined mortgage payment includes principal, so it is counted in cash after bills, not in the net profit estimate. Record one-time expenses separately.</p>
+            <p class="finance-help">The monthly net estimate subtracts these bills, including the full mortgage payment, from gross profit. It shows cash after bills; mortgage principal means it is not formal accounting net income. Record one-time expenses separately.</p>
             <div class="finance-form-footer"><button id="saveMonthlyPlanButton" class="workflow-primary" type="submit">Save monthly costs</button><p id="financePlanStatus">Monthly costs have not been entered. Gross profit is available; net profit is unavailable.</p></div>
             <p id="financePlanMessage" class="finance-message hidden" role="status"></p>
           </form>

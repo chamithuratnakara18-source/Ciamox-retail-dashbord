@@ -204,13 +204,13 @@ import { api, watchRetailFlow } from './firebase-store.js';
       netTotal.textContent = data.totals.netUnavailableReason ? 'Unavailable' : formatAmount(data.totals.netProfit);
       netTotal.classList.toggle('unavailable', Boolean(data.totals.netUnavailableReason));
       document.getElementById('netProfitFoot').textContent = data.totals.netUnavailableReason ||
-        'Monthly gross less recurring operating costs and one-time expenses';
+        'Cash estimate: gross less monthly bills and one-time expenses';
       document.getElementById('inventoryUnitsTotal').textContent = Number(data.totals.inventoryUnits || 0).toLocaleString();
       const profitNotice = document.getElementById('profitDataNotice');
       profitNotice.textContent = data.totals.missingCostData
         ? 'Some older sales have no purchase cost, so all-time gross profit is unavailable.'
-        : `${data.totals.netUnavailableReason || 'Net profit is an estimate.'} ` +
-          'The cash after bills trend covers this month when costs are saved; monthly bills appear on the first day.';
+        : `${data.totals.netUnavailableReason || 'Monthly net is a cash estimate that includes the full mortgage payment.'} ` +
+          'The cash after bills trend covers this month; monthly bills appear on the first day.';
       profitNotice.classList.remove('hidden');
       drawMetricsChart(data.points || []);
       document.getElementById('dashboardUpdated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -481,26 +481,20 @@ import { api, watchRetailFlow } from './firebase-store.js';
     document.getElementById('financeProductPurchases').textContent = purchased == null ? 'Unavailable' : formatAmount(purchased);
     const gross = financeStats?.metrics?.grossProfit;
     document.getElementById('financeMonthlyGross').textContent = gross == null ? 'Unavailable' : formatAmount(gross);
-    const net = financePlan && financePlan.mortgagePayment === 0 && gross != null
-      ? gross - financePlan.profitExpenses - (financeStats?.monthOneTimeExpenses || 0) : null;
+    const net = financePlan && gross != null
+      ? gross - financePlan.cashCommitments - (financeStats?.monthOneTimeExpenses || 0) : null;
     document.getElementById('financeMonthlyNet').textContent = net === null ? 'Unavailable' : formatAmount(net);
     const previous = financeStats?.previousMetrics;
     showFinanceDelta('financeFixedDelta', fixed, previous?.fixedCosts, { cost: true });
     showFinanceDelta('financePurchaseDelta', purchased, previous?.productPurchases, { cost: true });
     showFinanceDelta('financeGrossDelta', gross, previous?.grossProfit);
     showFinanceDelta('financeNetDelta', net, previous?.netProfit);
-    const cash = financePlan && gross != null
-      ? gross - financePlan.cashCommitments - (financeStats?.monthOneTimeExpenses || 0) : null;
-    document.getElementById('financeMonthlyCash').textContent = cash === null ? 'Unavailable' : formatAmount(cash);
     document.getElementById('financePlanStatus').textContent = financePlanDirty ? 'Unsaved monthly cost changes.'
       : !financePlan ? 'Monthly costs have not been entered. Gross profit is available; net profit is unavailable.'
-        : financePlan.mortgagePayment > 0 ? 'Monthly costs saved. Net profit is unavailable with a combined mortgage payment; cash after bills is shown.'
-          : 'Monthly costs saved. Net profit estimate and cash after bills are ready.';
+        : 'Monthly costs saved. The monthly cash estimate is ready.';
     document.getElementById('financeCashResult').textContent = !financePlan
-      ? 'Gross profit is available; enter monthly costs to see cash after bills.'
-      : financePlan.mortgagePayment > 0
-        ? 'Cash after bills includes the full mortgage payment. The net profit estimate is unavailable because this payment includes principal.'
-        : 'Cash after bills includes monthly costs and one-time expenses recorded this month.';
+      ? 'Gross profit is available; enter monthly costs to see the monthly cash estimate.'
+      : 'Net estimate = gross profit − utilities − salaries − full mortgage payment − one-time expenses. This is cash after bills, not formal accounting net income.';
     if (financePlan && financeStats && !financeStats.currentPlanSnapshotExists) {
       document.getElementById('financeCashResult').textContent += ' Save monthly costs once to record this month for future comparisons.';
     }
