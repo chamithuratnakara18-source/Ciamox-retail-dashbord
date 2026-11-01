@@ -1,8 +1,9 @@
-import { api, watchRetailFlow } from './firebase-store.js';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
   const inventoryScreen = document.getElementById('inventoryScreen');
+  const posScreen = document.getElementById('posScreen');
   const financeScreen = document.getElementById('financeScreen');
   const connectionStatus = document.getElementById('connectionStatus');
   const dashboardError = document.getElementById('dashboardError');
@@ -15,11 +16,13 @@ import { api, watchRetailFlow } from './firebase-store.js';
   const trendRangeError = document.getElementById('trendRangeError');
   const chartDayDetails = document.getElementById('chartDayDetails');
   const metricsChart = document.getElementById('metricsChart');
-  let trendFrom = todayLocal(-29);
-  let trendTo = todayLocal();
+  const trendMetric = document.getElementById('trendMetric');
+  let { from: trendFrom, to: trendTo } = lastMonthRange();
   let calendarTarget = null;
   let calendarMonthDate = null;
   let chartPoints = [];
+  let comparisonPoints = [];
+  let comparisonRange = null;
   let currentPointIndex = -1;
   let dashboardRequestId = 0;
   let currentView = 'dashboard';
@@ -29,6 +32,13 @@ import { api, watchRetailFlow } from './firebase-store.js';
   let financeStats = null;
   let financePlanDirty = false;
   let financeRequestId = 0;
+  let posProducts = [];
+  let posItems = [];
+  let posFilter = 'all';
+  let posPayment = 'cash';
+  let posBusy = false;
+  let posProductsReady = false;
+  let posProductRequestId = 0;
 
   document.querySelectorAll('[data-view]').forEach(button => {
     button.addEventListener('click', () => { void setMainView(button.dataset.view); });
@@ -43,6 +53,37 @@ import { api, watchRetailFlow } from './firebase-store.js';
   document.getElementById('refreshInventoryButton').addEventListener('click', () => { void refreshInventory(); });
   inventorySearch.addEventListener('input', renderInventoryTable);
   document.getElementById('financeSearch').addEventListener('input', renderFinanceTable);
+  document.getElementById('posSearch').addEventListener('input', renderPosCatalog);
+  document.querySelectorAll('[data-pos-filter]').forEach(button => button.addEventListener('click', () => {
+    posFilter = button.dataset.posFilter;
+    document.querySelectorAll('[data-pos-filter]').forEach(option => {
+      option.classList.toggle('active', option === button);
+      option.setAttribute('aria-pressed', String(option === button));
+    });
+    renderPosCatalog();
+  }));
+  document.querySelectorAll('[data-pos-payment]').forEach(button => button.addEventListener('click', () => {
+    posPayment = button.dataset.posPayment;
+    document.querySelectorAll('[data-pos-payment]').forEach(option => {
+      option.classList.toggle('active', option === button);
+      option.setAttribute('aria-pressed', String(option === button));
+    });
+  }));
+  document.getElementById('posClearButton').addEventListener('click', async () => {
+    if (!posItems.length || !window.confirm('Clear the current shared POS order?')) return;
+    await changePos(async () => {
+      await api('/api/pos', { method: 'DELETE' });
+      return { clear: true, message: 'Order cleared.' };
+    });
+  });
+  document.getElementById('posCheckoutButton').addEventListener('click', async () => {
+    await changePos(async () => {
+      const { sale } = await api('/api/pos/checkout', {
+        method: 'POST', body: JSON.stringify({ paymentMethod: posPayment }),
+      });
+      return { clear: true, message: `Sale #${sale.id} complete · ${formatAmount(sale.totalOriginalPrice)} paid by ${posPayment.toUpperCase()}.` };
+    });
+  });
   document.getElementById('monthlyPlanForm').addEventListener('submit', saveFinancePlan);
   document.getElementById('monthlyPlanForm').addEventListener('input', () => {
     financePlanDirty = true;
@@ -54,13 +95,13 @@ import { api, watchRetailFlow } from './firebase-store.js';
   document.getElementById('calendarNext').addEventListener('click', () => moveCalendarMonth(1));
   document.getElementById('calendarClose').addEventListener('click', closeCalendar);
   document.getElementById('trendResetButton').addEventListener('click', () => {
-    trendFrom = todayLocal(-29);
-    trendTo = todayLocal();
+    ({ from: trendFrom, to: trendTo } = lastMonthRange());
     trendRangeError.classList.add('hidden');
     closeCalendar();
     showTrendRange();
     void refreshDashboard();
   });
+  trendMetric.addEventListener('change', () => drawMetricsChart(chartPoints, comparisonRange));
   document.addEventListener('pointerdown', event => {
     if (!document.getElementById('trendControls').contains(event.target)) closeCalendar();
   });
@@ -77,6 +118,14 @@ import { api, watchRetailFlow } from './firebase-store.js';
   function todayLocal() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
+
+  function lastMonthRange() {
+    const now = new Date();
+    const toDate = new Date(now.getFullYear(), now.getMonth(), 0, 12);
+    const fromDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 12);
+    const local = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return { from: local(fromDate), to: local(toDate) };
   }
 
   function dateUTC(value) { return new Date(`${value}T12:00:00Z`); }
@@ -172,10 +221,12 @@ import { api, watchRetailFlow } from './firebase-store.js';
     currentView = view;
     dashboardScreen.classList.toggle('hidden', view !== 'dashboard');
     inventoryScreen.classList.toggle('hidden', view !== 'inventory');
+    posScreen.classList.toggle('hidden', view !== 'pos');
     financeScreen.classList.toggle('hidden', view !== 'finance');
     document.querySelectorAll('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
     if (view === 'dashboard') await refreshDashboard();
     if (view === 'inventory') await refreshInventory();
+    if (view === 'pos') await refreshPosProducts();
     if (view === 'finance') await refreshFinance();
   }
 
@@ -204,15 +255,14 @@ import { api, watchRetailFlow } from './firebase-store.js';
       netTotal.textContent = data.totals.netUnavailableReason ? 'Unavailable' : formatAmount(data.totals.netProfit);
       netTotal.classList.toggle('unavailable', Boolean(data.totals.netUnavailableReason));
       document.getElementById('netProfitFoot').textContent = data.totals.netUnavailableReason ||
-        'Cash estimate: gross less monthly bills and one-time expenses';
+        'Cash basis: gross less monthly bills and one-time expenses';
       document.getElementById('inventoryUnitsTotal').textContent = Number(data.totals.inventoryUnits || 0).toLocaleString();
       const profitNotice = document.getElementById('profitDataNotice');
       profitNotice.textContent = data.totals.missingCostData
         ? 'Some older sales have no purchase cost, so all-time gross profit is unavailable.'
-        : `${data.totals.netUnavailableReason || 'Monthly net is a cash estimate that includes the full mortgage payment.'} ` +
-          'The cash after bills trend covers this month; monthly bills appear on the first day.';
+        : 'Net profit uses cash after bills, including the full mortgage payment. Monthly bills appear on the first day; past periods need a saved monthly plan.';
       profitNotice.classList.remove('hidden');
-      drawMetricsChart(data.points || []);
+      drawMetricsChart(data.points || [], data.comparison);
       document.getElementById('dashboardUpdated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     } catch (error) {
       if (requestId !== dashboardRequestId) return;
@@ -220,77 +270,100 @@ import { api, watchRetailFlow } from './firebase-store.js';
       document.getElementById('dashboardUpdated').textContent = 'Waiting for database';
       dashboardError.textContent = `Dashboard data is not available: ${error.message}. Check firebase-config.js and Firestore rules.`;
       dashboardError.classList.remove('hidden');
-      drawMetricsChart([]);
+      drawMetricsChart([], null);
     }
   }
 
-  function drawMetricsChart(points) {
-    const svg = document.getElementById('metricsChart');
+  function drawMetricsChart(points, comparison) {
     chartPoints = points;
+    comparisonPoints = comparison?.points || [];
+    comparisonRange = comparison;
     currentPointIndex = -1;
+    const metric = trendMetric.value;
+    const stockMetric = metric === 'inventoryUnits';
+    const metricLabel = trendMetric.selectedOptions[0].textContent;
+    const isLastMonth = trendFrom === lastMonthRange().from && trendTo === lastMonthRange().to;
+    const selectedLabel = isLastMonth ? 'Last month' : comparison?.wholeMonth ? 'Selected month' : 'Selected dates';
+    const previousLabel = comparison?.wholeMonth ? 'Previous month' : 'Previous dates';
+    document.getElementById('selectedPeriodLabel').textContent = selectedLabel;
+    document.getElementById('previousPeriodLabel').textContent = previousLabel;
+    document.getElementById('selectedPeriodDates').textContent = `${englishDate(trendFrom)} – ${englishDate(trendTo)}`;
+    document.getElementById('previousPeriodDates').textContent = comparison
+      ? `${englishDate(comparison.from)} – ${englishDate(comparison.to)}` : '';
+    const total = entries => {
+      if (!entries.length || entries.some(entry => entry[metric] == null || !Number.isFinite(Number(entry[metric])))) return null;
+      return stockMetric ? Number(entries.at(-1)[metric])
+        : entries.reduce((sum, entry) => sum + Number(entry[metric]), 0);
+    };
+    const displayTotal = value => value == null ? 'Unavailable'
+      : stockMetric ? `${Number(value).toLocaleString('en-US')} units` : formatAmount(value);
+    document.getElementById('selectedPeriodValue').textContent = displayTotal(total(points));
+    document.getElementById('previousPeriodValue').textContent = displayTotal(total(comparisonPoints));
+    metricsChart.setAttribute('aria-label', `${metricLabel}: ${selectedLabel} versus ${previousLabel} line chart`);
     const ns = 'http://www.w3.org/2000/svg';
     const make = (tag, attrs = {}) => {
       const element = document.createElementNS(ns, tag);
       Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, value));
       return element;
     };
-    svg.replaceChildren();
+    metricsChart.replaceChildren();
     if (!points.length) {
       chartDayDetails.textContent = 'No trend data for these dates.';
       const empty = make('text', { x: 460, y: 150, 'text-anchor': 'middle', class: 'chart-axis-label' });
-      empty.textContent = 'Firestore data will show your sales and inventory trend.';
-      svg.append(empty);
+      empty.textContent = 'Firestore data will show your period comparison.';
+      metricsChart.append(empty);
       return;
     }
-    const left = 58, right = 854, top = 22, bottom = 256;
-    const moneyValues = points.flatMap(point => [point.revenue, point.grossProfit, point.cashAfterBills]).filter(Number.isFinite);
-    let moneyMin = Math.min(0, ...moneyValues), moneyMax = Math.max(0, ...moneyValues);
-    if (moneyMax === moneyMin) moneyMax = moneyMin + 1;
-    const moneyPad = (moneyMax - moneyMin) * 0.08;
-    moneyMin -= moneyPad; moneyMax += moneyPad;
-    const stockMin = Math.min(0, ...points.map(point => point.inventoryUnits));
-    let stockMax = Math.max(0, ...points.map(point => point.inventoryUnits));
-    if (stockMax === stockMin) stockMax = stockMin + 1;
+    const left = 58, right = 874, top = 22, bottom = 256;
+    const values = [...points, ...comparisonPoints].map(point => point[metric])
+      .filter(value => value != null && Number.isFinite(Number(value))).map(Number);
+    if (!values.length) {
+      const empty = make('text', { x: 460, y: 150, 'text-anchor': 'middle', class: 'chart-axis-label' });
+      empty.textContent = metric === 'netProfit'
+        ? 'Save monthly costs for these months to see net profit.'
+        : 'No values are available for this comparison.';
+      metricsChart.append(empty);
+      chartDayDetails.textContent = 'Data is unavailable for these dates.';
+      return;
+    }
+    let min = Math.min(0, ...values), max = Math.max(0, ...values);
+    if (min === max) max = min + 1;
+    const pad = (max - min) * 0.08;
+    if (min < 0) min -= pad;
+    if (max > 0) max += pad;
     const x = index => points.length === 1 ? (left + right) / 2 : left + (right - left) * index / (points.length - 1);
-    const moneyY = value => bottom - (value - moneyMin) / (moneyMax - moneyMin) * (bottom - top);
-    const stockY = value => bottom - (value - stockMin) / (stockMax - stockMin) * (bottom - top);
+    const seriesX = (index, count) => count === 1 ? (left + right) / 2 : left + (right - left) * index / (count - 1);
+    const yFor = value => bottom - (value - min) / (max - min) * (bottom - top);
     for (let tick = 0; tick <= 4; tick++) {
       const ratio = tick / 4;
       const y = top + ratio * (bottom - top);
-      svg.append(make('line', { x1: left, y1: y, x2: right, y2: y, class: 'chart-grid' }));
-      const moneyValue = moneyMax - ratio * (moneyMax - moneyMin);
+      metricsChart.append(make('line', { x1: left, y1: y, x2: right, y2: y, class: 'chart-grid' }));
+      const value = max - ratio * (max - min);
       const leftLabel = make('text', { x: left - 9, y: y + 3, 'text-anchor': 'end', class: 'chart-axis-label' });
-      leftLabel.textContent = compactNumber(moneyValue);
-      svg.append(leftLabel);
-      const rightLabel = make('text', { x: right + 10, y: y + 3, 'text-anchor': 'start', class: 'chart-axis-label' });
-      rightLabel.textContent = String(Math.round(stockMax - ratio * (stockMax - stockMin)));
-      svg.append(rightLabel);
+      leftLabel.textContent = compactNumber(value);
+      metricsChart.append(leftLabel);
     }
     [
-      { key: 'revenue', color: '#f47a27', scale: moneyY },
-      { key: 'grossProfit', color: '#24a97b', scale: moneyY },
-      { key: 'cashAfterBills', color: '#527cdb', scale: moneyY },
-      { key: 'inventoryUnits', color: '#25343c', scale: stockY },
-    ].forEach(({ key, color, scale }) => {
+      { entries: comparisonPoints, color: '#f6d4bf', css: 'comparison-previous' },
+      { entries: points, color: '#ef5125', css: 'comparison-selected' },
+    ].forEach(({ entries, color, css }) => {
       let path = '', open = false;
-      points.forEach((point, index) => {
-        const value = point[key];
+      entries.forEach((point, index) => {
+        const value = point[metric];
         if (value === null || value === undefined || !Number.isFinite(Number(value))) { open = false; return; }
-        path += `${open ? ' L' : ' M'} ${x(index).toFixed(1)} ${scale(Number(value)).toFixed(1)}`;
+        path += `${open ? ' L' : ' M'} ${seriesX(index, entries.length).toFixed(1)} ${yFor(Number(value)).toFixed(1)}`;
         open = true;
       });
-      if (path) svg.append(make('path', { d: path, class: 'chart-line', stroke: color }));
-      if (points.length <= 14) points.forEach((point, index) => {
-        const value = point[key];
-        if (value != null && Number.isFinite(Number(value))) {
-          svg.append(make('circle', { cx: x(index), cy: scale(Number(value)), r: 4, fill: color }));
-        }
-      });
+      if (path) metricsChart.append(make('path', { d: path, class: `chart-line ${css}`, fill: 'none' }));
+      const lastIndex = entries.findLastIndex(entry => entry[metric] != null && Number.isFinite(Number(entry[metric])));
+      if (lastIndex !== -1) metricsChart.append(make('circle', {
+        cx: seriesX(lastIndex, entries.length), cy: yFor(Number(entries[lastIndex][metric])), r: 5, fill: color,
+      }));
     });
     [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])].forEach(index => {
       const label = make('text', { x: x(index), y: 285, 'text-anchor': 'middle', class: 'chart-axis-label' });
       label.textContent = englishDate(points[index].date, { month: 'short', day: 'numeric', year: '2-digit' });
-      svg.append(label);
+      metricsChart.append(label);
     });
     showChartPoint(points.length - 1);
   }
@@ -299,22 +372,177 @@ import { api, watchRetailFlow } from './firebase-store.js';
     const point = chartPoints[index];
     if (!point || index === currentPointIndex) return;
     currentPointIndex = index;
-    chartDayDetails.textContent = `${englishDate(point.date, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · ` +
-      `Revenue ${formatAmount(point.revenue)} · Gross profit ${formatAmount(point.grossProfit)} · ` +
-      `Cash after bills ${point.cashAfterBills == null ? 'Unavailable' : formatAmount(point.cashAfterBills)} · Stock ${Number(point.inventoryUnits).toLocaleString('en-US')} units`;
+    const metric = trendMetric.value;
+    const metricLabel = trendMetric.selectedOptions[0].textContent;
+    const previousIndex = comparisonPoints.length === 1 ? 0
+      : Math.round(index / Math.max(chartPoints.length - 1, 1) * (comparisonPoints.length - 1));
+    const previous = comparisonPoints[previousIndex];
+    const displayValue = entry => !entry || entry[metric] == null ? 'Unavailable'
+      : metric === 'inventoryUnits' ? `${Number(entry[metric]).toLocaleString('en-US')} units` : formatAmount(entry[metric]);
+    chartDayDetails.textContent = `${metricLabel} · ${englishDate(point.date)}: ${displayValue(point)}` +
+      (previous ? ` · ${englishDate(previous.date)}: ${displayValue(previous)}` : '');
   }
 
   function showChartPointAtPointer(event) {
     if (!chartPoints.length) return;
     const rect = metricsChart.getBoundingClientRect();
     const chartX = (event.clientX - rect.left) * 920 / rect.width;
-    const index = chartPoints.length === 1 ? 0 : Math.round((chartX - 58) / (854 - 58) * (chartPoints.length - 1));
+    const index = chartPoints.length === 1 ? 0 : Math.round((chartX - 58) / (874 - 58) * (chartPoints.length - 1));
     showChartPoint(Math.max(0, Math.min(chartPoints.length - 1, index)));
   }
 
   function compactNumber(value) {
-    const rounded = Math.round(value);
-    return Math.abs(rounded) >= 1000 ? `${(rounded / 1000).toFixed(rounded % 1000 === 0 ? 0 : 1)}k` : String(rounded);
+    const absolute = Math.abs(value);
+    if (absolute >= 1000) return `${Number((value / 1000).toFixed(1))}k`;
+    if (absolute >= 10) return String(Math.round(value));
+    if (absolute >= 1) return String(Number(value.toFixed(1)));
+    return String(Number(value.toFixed(2)));
+  }
+
+  function showPosMessage(message, error = false) {
+    const element = document.getElementById('posMessage');
+    element.textContent = message;
+    element.className = `pos-message${error ? ' error' : ''}`;
+  }
+
+  async function changePos(task, success = '') {
+    if (posBusy) return;
+    posBusy = true;
+    renderPosCatalog();
+    renderPosOrder();
+    try {
+      const result = await task();
+      if (result?.clear) posItems = [];
+      if (success || result?.message) showPosMessage(result?.message || success);
+    } catch (error) {
+      showPosMessage(`Order was not changed: ${error.message}`, true);
+    } finally {
+      posBusy = false;
+      renderPosCatalog();
+      renderPosOrder();
+    }
+  }
+
+  async function refreshPosProducts() {
+    const requestId = ++posProductRequestId;
+    document.getElementById('posConnectionLabel').textContent = 'Loading products…';
+    try {
+      const { products } = await api('/api/inventory');
+      if (requestId !== posProductRequestId) return;
+      posProducts = products || [];
+      posProductsReady = true;
+      document.getElementById('posConnectionLabel').textContent = 'Live POS order';
+      renderPosCatalog();
+      renderPosOrder();
+    } catch (error) {
+      if (requestId !== posProductRequestId) return;
+      document.getElementById('posConnectionLabel').textContent = 'Connection unavailable';
+      showPosMessage(`Products are unavailable: ${error.message}`, true);
+    }
+  }
+
+  function productPicture(product, className) {
+    if (product?.photoDataUrl?.startsWith('data:image/jpeg;base64,')) {
+      const image = document.createElement('img');
+      image.className = className; image.src = product.photoDataUrl;
+      image.alt = ''; return image;
+    }
+    const fallback = document.createElement('span');
+    fallback.className = `${className} pos-product-placeholder${className === 'pos-order-thumb' ? ' placeholder' : ''}`;
+    fallback.textContent = product?.name?.charAt(0).toUpperCase() || '▣';
+    return fallback;
+  }
+
+  function renderPosCatalog() {
+    const grid = document.getElementById('posProductGrid');
+    const search = document.getElementById('posSearch').value.trim().toLowerCase();
+    const products = posProducts.filter(product => (posFilter !== 'available' || Number(product.quantity) > 0) &&
+      `${product.name} ${product.barcode}`.toLowerCase().includes(search));
+    grid.replaceChildren();
+    if (!products.length) {
+      const empty = document.createElement('p'); empty.className = 'pos-empty-catalog';
+      empty.textContent = posProductsReady ? 'No products match. Add stock with the phone scanner or change the search.' : 'Loading products…';
+      grid.append(empty); return;
+    }
+    for (const product of products) {
+      const card = document.createElement('button'); card.type = 'button'; card.className = 'pos-product';
+      const available = Number(product.quantity) > 0;
+      const priced = product.originalPrice != null && Number.isFinite(Number(product.originalPrice));
+      const costed = product.unitCost != null && Number.isFinite(Number(product.unitCost));
+      card.disabled = posBusy || !available || !priced || !costed;
+      card.setAttribute('aria-label', `Add ${product.name} to the order${card.disabled ? ' (unavailable)' : ''}`);
+      card.append(productPicture(product, 'pos-product-image'));
+      const details = document.createElement('span'); details.className = 'pos-product-details';
+      const name = document.createElement('span'); name.className = 'pos-product-name'; name.textContent = product.name;
+      const price = document.createElement('span'); price.className = 'pos-product-price';
+      price.textContent = priced ? formatAmount(product.originalPrice) : 'Price needed';
+      const meta = document.createElement('span'); meta.className = 'pos-product-meta';
+      meta.textContent = !available ? 'Out of stock' : !priced ? 'Set selling price in Finance'
+        : !costed ? 'Purchase cost missing' : `${Number(product.quantity).toLocaleString('en-US')} in stock · Tap to add`;
+      details.append(name, price, meta); card.append(details);
+      card.addEventListener('click', () => changePos(() => api('/api/pos/scan', {
+        method: 'POST', body: JSON.stringify({ barcode: product.barcode }),
+      }), `${product.name} added to the current order.`));
+      grid.append(card);
+    }
+  }
+
+  function renderPosOrder() {
+    const container = document.getElementById('posOrderItems');
+    container.replaceChildren();
+    const count = posItems.reduce((sum, item) => sum + Number(item.quantity), 0);
+    document.getElementById('posItemCount').textContent = `${count} ${count === 1 ? 'item' : 'items'}`;
+    document.getElementById('posClearButton').disabled = !count || posBusy;
+    if (!posItems.length) {
+      const empty = document.createElement('div'); empty.className = 'pos-order-empty';
+      empty.innerHTML = 'No items added yet.<br>Scan on your phone or tap a product.';
+      container.append(empty);
+    }
+    let cents = 0, incomplete = false;
+    for (const item of posItems) {
+      const product = posProducts.find(candidate => candidate.barcode === item.barcode);
+      const price = product?.originalPrice;
+      const validPrice = price != null && Number.isFinite(Number(price)) && Number(price) >= 0;
+      const validCost = product?.unitCost != null && Number.isFinite(Number(product.unitCost));
+      const enough = product && Number(product.quantity) >= Number(item.quantity);
+      if (!validPrice || !validCost || !enough) incomplete = true;
+      else cents += Math.round(Number(price) * 100) * Number(item.quantity);
+      const row = document.createElement('div'); row.className = 'pos-order-item';
+      row.append(productPicture(product, 'pos-order-thumb'));
+      const content = document.createElement('div');
+      const name = document.createElement('strong'); name.className = 'pos-order-name'; name.textContent = product?.name || item.barcode;
+      const detail = document.createElement('span'); detail.className = 'pos-order-detail';
+      detail.textContent = !product ? 'Product unavailable' : !validPrice ? 'Set selling price in Finance'
+        : !validCost ? 'Purchase cost missing' : !enough ? 'Not enough stock' : `${formatAmount(price)} each`;
+      content.append(name, detail); row.append(content);
+      const linePrice = document.createElement('strong'); linePrice.className = 'pos-order-price';
+      linePrice.textContent = validPrice ? formatAmount(Math.round(Number(price) * 100) * Number(item.quantity) / 100) : '—';
+      row.append(linePrice);
+      const quantity = document.createElement('div'); quantity.className = 'pos-qty';
+      const minus = document.createElement('button'); minus.type = 'button'; minus.textContent = '−';
+      minus.setAttribute('aria-label', `Remove one ${product?.name || item.barcode}`);
+      minus.disabled = posBusy;
+      minus.addEventListener('click', () => changePos(() => api('/api/pos/adjust', {
+        method: 'POST', body: JSON.stringify({ barcode: item.barcode, delta: -1 }),
+      })));
+      const amount = document.createElement('span'); amount.textContent = item.quantity;
+      const plus = document.createElement('button'); plus.type = 'button'; plus.textContent = '+';
+      plus.setAttribute('aria-label', `Add one ${product?.name || item.barcode}`);
+      plus.disabled = posBusy || !enough || Number(product.quantity) <= Number(item.quantity);
+      plus.addEventListener('click', () => changePos(() => api('/api/pos/scan', {
+        method: 'POST', body: JSON.stringify({ barcode: item.barcode }),
+      })));
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'pos-remove';
+      remove.textContent = 'Remove'; remove.disabled = posBusy;
+      remove.addEventListener('click', () => changePos(() => api('/api/pos/adjust', {
+        method: 'POST', body: JSON.stringify({ barcode: item.barcode, delta: -Number(item.quantity) }),
+      })));
+      quantity.append(minus, amount, plus, remove); row.append(quantity); container.append(row);
+    }
+    const total = incomplete ? '—' : formatAmount(cents / 100);
+    document.getElementById('posSubtotal').textContent = total;
+    document.getElementById('posTotal').textContent = total;
+    document.getElementById('posCheckoutButton').disabled = !count || incomplete || posBusy;
   }
 
   async function saveExpense(event) {
@@ -491,10 +719,10 @@ import { api, watchRetailFlow } from './firebase-store.js';
     showFinanceDelta('financeNetDelta', net, previous?.netProfit);
     document.getElementById('financePlanStatus').textContent = financePlanDirty ? 'Unsaved monthly cost changes.'
       : !financePlan ? 'Monthly costs have not been entered. Gross profit is available; net profit is unavailable.'
-        : 'Monthly costs saved. The monthly cash estimate is ready.';
+        : 'Monthly costs saved. Net profit is ready on a cash basis.';
     document.getElementById('financeCashResult').textContent = !financePlan
-      ? 'Gross profit is available; enter monthly costs to see the monthly cash estimate.'
-      : 'Net estimate = gross profit − utilities − salaries − full mortgage payment − one-time expenses. This is cash after bills, not formal accounting net income.';
+      ? 'Gross profit is available; enter monthly costs to see net profit on a cash basis.'
+      : 'Net profit = gross profit − utilities − salaries − full mortgage payment − one-time expenses. Cash basis includes loan principal and differs from formal accounting net income.';
     if (financePlan && financeStats && !financeStats.currentPlanSnapshotExists) {
       document.getElementById('financeCashResult').textContent += ' Save monthly costs once to record this month for future comparisons.';
     }
@@ -514,7 +742,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
       if (financeStats) financeStats.currentPlanSnapshotExists = true;
       renderFinanceSummary();
       renderFinanceTable();
-      showFinanceMessage('financePlanMessage', 'Monthly costs saved. The cash after bills estimate has been updated.');
+      showFinanceMessage('financePlanMessage', 'Monthly costs saved. Net profit has been updated.');
     } catch (error) {
       showFinanceMessage('financePlanMessage', `Could not save monthly costs: ${error.message}`, true);
     } finally {
@@ -586,12 +814,26 @@ import { api, watchRetailFlow } from './firebase-store.js';
   watchRetailFlow(() => {
     if (currentView === 'dashboard') void refreshDashboard();
     if (currentView === 'inventory') void refreshInventory();
+    if (currentView === 'pos') void refreshPosProducts();
     if (currentView === 'finance' && !financePlanDirty && !document.activeElement?.classList.contains('finance-price-input')) void refreshFinance();
   }, error => {
     setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
     dashboardError.textContent = `Firestore is unavailable: ${error.message}`;
     dashboardError.classList.remove('hidden');
   });
+  try {
+    watchPos(items => {
+      posItems = items;
+      renderPosOrder();
+      if (currentView === 'pos') document.getElementById('posConnectionLabel').textContent = 'Live POS order';
+    }, error => {
+      document.getElementById('posConnectionLabel').textContent = 'POS disconnected';
+      showPosMessage(`Live order is unavailable: ${error.message}`, true);
+    });
+  } catch (error) {
+    document.getElementById('posConnectionLabel').textContent = 'POS disconnected';
+    showPosMessage(`Live order is unavailable: ${error.message}`, true);
+  }
   showTrendRange();
   void setMainView('dashboard');
 })();

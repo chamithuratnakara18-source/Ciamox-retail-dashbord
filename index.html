@@ -75,6 +75,20 @@
 .finance-delta.good{color:#16885c;background:#e8f7ed}.finance-delta.bad{color:#b94d39;background:#fff0e9}.finance-delta.cost-up{color:#a46327;background:#fff3e8}.finance-delta.cost-down{color:#28788a;background:#eaf5f7}.finance-delta.flat{color:#61767c;background:#f0f3f3}.finance-delta.unknown{color:#7d898e;background:#f3f5f5}
 .finance-cash-strip{margin:-3px 0 20px;padding:12px 16px;background:#edf8f3;border:1px solid #d8eae0;border-radius:11px;color:#435c53}.finance-cash-strip p{margin:0;color:#567a6a;font-size:11px;line-height:1.5}
 .finance-purchase-note{margin:-9px 0 18px}
+.finance-costs-summary{display:grid;grid-template-columns:1fr;justify-items:center;text-align:center;gap:12px}.finance-summary-copy{justify-items:center}.finance-chevron{width:40px;height:40px}
+.comparison-toolbar{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-top:15px;flex-wrap:wrap}.comparison-metric{display:grid;gap:5px;color:#79868c;font-size:10px;font-weight:800}.comparison-metric select{min-width:168px;padding:9px 12px;border:1px solid #dce5e8;border-radius:8px;background:#fff;color:#27343c;font-size:11px;font-weight:700}
+.comparison-legend{display:flex;gap:30px;flex-wrap:wrap;margin:19px 0 5px}.comparison-legend-item{display:grid;grid-template-columns:12px auto;column-gap:9px;align-items:center;color:#728087;font-size:12px}.comparison-dot{width:11px;height:11px;border-radius:50%;background:#ef5125}.comparison-dot.previous{background:#f6d4bf}.comparison-legend-item strong{grid-column:2;color:#23343d;font:800 20px Manrope,sans-serif}.comparison-legend-item small{grid-column:2;color:#9aa6aa;font-size:9px}
+.comparison-chart .chart-grid{stroke:#edf1f1;stroke-dasharray:none}.comparison-chart .chart-line{stroke-width:3.5}.comparison-chart .comparison-previous{stroke:#f6d4bf}.comparison-chart .comparison-selected{stroke:#ef5125}.comparison-chart:focus-visible{outline:2px solid #ef5125;outline-offset:2px}
+.app-shell{max-width:1360px}.pos-screen{padding:34px 0 48px}.pos-screen .hub-heading{margin-bottom:21px}.pos-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.76fr);gap:19px;align-items:start}
+.pos-catalog{min-width:0}.pos-search-wrap{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #dce3e5;border-radius:14px;padding:0 15px;min-height:54px}.pos-search-wrap span{color:#61747c;font-size:20px}.pos-search-wrap input{border:0;outline:0;background:transparent;width:100%;font:16px Georgia,serif;color:#22323a}.pos-search-wrap:focus-within{border-color:#28a979;box-shadow:0 0 0 3px #27ad7c19}.pos-filters{display:flex;gap:9px;margin:17px 0 20px}.pos-filter{border:1px solid #cfd6d8;border-radius:25px;padding:10px 19px;background:transparent;color:#53646c;font:15px Georgia,serif}.pos-filter.active{border-color:#17242a;background:#17242a;color:#fff}
+.pos-product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.pos-product{overflow:hidden;border:1px solid #e6ebed;border-radius:17px;background:#fff;box-shadow:0 8px 22px #2632380b;display:flex;flex-direction:column;text-align:left;padding:0;min-width:0;transition:transform .16s,box-shadow .16s}.pos-product:not(:disabled):hover{transform:translateY(-2px);box-shadow:0 14px 28px #26323817}.pos-product:disabled{cursor:default;opacity:.69}.pos-product-image{width:100%;aspect-ratio:1.35;object-fit:cover;background:#eaf3ee}.pos-product-placeholder{display:grid;place-items:center;color:#7eaaa0;font:800 45px Manrope,sans-serif;background:linear-gradient(145deg,#eff7f3,#deeae6)}.pos-product-details{display:grid;gap:7px;padding:14px 16px 17px}.pos-product-name{font:18px Georgia,serif;color:#1c2a2f;overflow-wrap:anywhere}.pos-product-price{font:700 22px Georgia,serif;color:#14242a}.pos-product-meta{font-size:10px;color:#8a979d}
+.pos-order{border:1px solid #e3e9eb;border-radius:18px;background:#fff;box-shadow:0 12px 35px #26323810;overflow:hidden;position:sticky;top:16px}.pos-order-head{display:flex;align-items:start;justify-content:space-between;gap:12px;padding:22px 23px 18px;border-bottom:1px solid #e9edef}.pos-order-head h2{font:700 24px Georgia,serif;margin:0 0 3px;color:#1b292f}.pos-order-head p{margin:0;color:#88959a;font-size:12px}.pos-clear{border:0;background:none;color:#9c6460;font-size:11px;font-weight:700}.pos-order-items{min-height:180px;max-height:360px;overflow:auto;padding:8px 20px}.pos-order-empty{min-height:172px;display:grid;place-content:center;text-align:center;color:#7b8a90;font:15px/1.5 Georgia,serif}.pos-order-item{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid #f0f2f2}.pos-order-item:last-child{border-bottom:0}.pos-order-thumb{width:42px;height:42px;object-fit:cover;border-radius:8px;background:#e9f2ed}.pos-order-thumb.placeholder{display:grid;place-items:center;color:#75a494;font-weight:800}.pos-order-name{display:block;font:600 14px Georgia,serif;color:#243239;overflow-wrap:anywhere}.pos-order-detail{display:block;font-size:10px;color:#829099;margin-top:4px}.pos-order-price{font-size:13px;font-weight:800;color:#1c2a2f;text-align:right}.pos-qty{grid-column:2/4;display:flex;align-items:center;justify-content:flex-end;gap:8px}.pos-qty button{width:28px;height:28px;border:1px solid #dce4e5;border-radius:8px;background:#fff;color:#263a3f}.pos-qty span{min-width:22px;text-align:center;font-size:12px;font-weight:800}.pos-qty .pos-remove{width:auto;border:none;color:#b05a4e;font-size:11px;font-weight:700}
+.pos-order-bottom{border-top:1px solid #e9edef;padding:17px 23px 22px}.pos-total-line{display:flex;justify-content:space-between;align-items:center;font:15px Georgia,serif;color:#6d7b80;margin-bottom:11px}.pos-total-line strong{color:#202d32}.pos-total-line.final{border-top:1px solid #e7ecec;padding-top:15px;margin-top:15px;font:700 22px Georgia,serif;color:#1e2b31}.pos-payment-label{display:block;margin:21px 0 8px;color:#718087;font-size:10px;font-weight:800;letter-spacing:.12em}.pos-payment-methods{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.pos-pay-method{border:1px solid #d4dcde;border-radius:10px;padding:10px 4px;background:#fff;color:#34454d;font-size:12px;font-weight:700}.pos-pay-method.active{background:#18282f;color:#fff;border-color:#18282f}.pos-checkout{width:100%;margin-top:17px;border:0;border-radius:11px;background:#1caa7a;color:#fff;padding:14px;font-size:14px;font-weight:800}.pos-checkout:disabled{opacity:.5;cursor:default}.pos-message{margin:13px 0 0;padding:10px 12px;border-radius:9px;background:#eaf8f0;color:#267854;font-size:11px;line-height:1.45}.pos-message.error{background:#fff0e9;color:#aa4a36}.pos-empty-catalog{grid-column:1/-1;padding:32px;border:1px dashed #d6e2e0;border-radius:14px;color:#74848b;text-align:center;background:#ffffffb0;font-size:12px}
+.pos-payment-help{display:block;margin-top:9px;color:#91a0a4;font-size:10px;line-height:1.35}
+@media(min-width:1220px){.pos-product-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:980px){.pos-layout{grid-template-columns:minmax(0,1fr)}.pos-order{position:static}.pos-product-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:680px){.pos-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pos-screen{padding-top:22px}.pos-order-head,.pos-order-bottom{padding-left:16px;padding-right:16px}.pos-order-items{padding:8px 16px}}
+@media(max-width:410px){.pos-product-grid{gap:9px}.pos-product-details{padding:10px}.pos-product-name{font-size:15px}.pos-product-price{font-size:18px}}
 @media(max-width:900px){.finance-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.finance-screen{padding-top:22px}.finance-form-grid{grid-template-columns:1fr 1fr;gap:8px}.finance-summary-grid article{padding:13px}.finance-summary-grid strong{font-size:16px}.finance-section-heading{align-items:flex-start;flex-direction:column}}
 </style>
@@ -92,6 +106,7 @@
         <span class="sidebar-label">WORKSPACE</span>
         <button class="nav-tab active" data-view="dashboard" type="button"><span class="nav-icon">▦</span>Dashboard</button>
         <button class="nav-tab" data-view="inventory" type="button"><span class="nav-icon">▤</span>Inventory</button>
+        <button class="nav-tab" data-view="pos" type="button"><span class="nav-icon">▣</span>POS Sale</button>
         <button class="nav-tab" data-view="finance" type="button"><span class="nav-icon">◈</span>Finance</button>
         <p class="sidebar-caption">Store performance<br>and stock control</p>
       </aside>
@@ -104,15 +119,15 @@
         <div class="metric-grid">
           <article class="metric-card revenue-card"><span class="metric-label">Total revenue <small>ALL TIME</small></span><strong id="revenueTotal">—</strong><span class="metric-foot">Completed sales</span></article>
           <article class="metric-card gross-card"><span class="metric-label">Gross profit <small>ALL TIME</small></span><strong id="grossProfitTotal">—</strong><span class="metric-foot">Revenue minus product cost</span></article>
-          <article class="metric-card net-card"><span class="metric-label">Net profit estimate (cash) <small>THIS MONTH</small></span><strong id="netProfitTotal">Unavailable</strong><span id="netProfitFoot" class="metric-foot">Enter monthly costs in Finance</span></article>
+          <article class="metric-card net-card"><span class="metric-label">Net profit <small>THIS MONTH</small></span><strong id="netProfitTotal">Unavailable</strong><span id="netProfitFoot" class="metric-foot">Cash basis · enter monthly costs in Finance</span></article>
           <article class="metric-card stock-card"><span class="metric-label">Inventory on hand <small>UNITS</small></span><strong id="inventoryUnitsTotal">—</strong><span class="metric-foot">Current sellable quantity</span></article>
         </div>
         <section class="chart-card">
-          <div class="chart-heading"><div><span class="eyebrow">SELECTED DATES</span><h2>Performance trend</h2><p>Daily sales, profit and inventory levels</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ One-time expense</button></div>
+          <div class="chart-heading"><div><span class="eyebrow">PERIOD COMPARISON</span><h2>Performance trend</h2><p>Compare one measure across two matching periods</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ One-time expense</button></div>
           <div id="trendControls" class="trend-controls">
             <div class="trend-date-field"><span>From</span><button id="trendFromButton" class="trend-date-button" type="button" aria-haspopup="dialog" aria-expanded="false">Choose start date</button></div>
             <div class="trend-date-field"><span>To</span><button id="trendToButton" class="trend-date-button" type="button" aria-haspopup="dialog" aria-expanded="false">Choose end date</button></div>
-            <button id="trendResetButton" class="trend-reset" type="button">Last 30 days</button>
+            <button id="trendResetButton" class="trend-reset" type="button">Last month</button>
             <div id="trendCalendar" class="trend-calendar hidden" role="dialog" aria-label="Choose chart date">
               <div class="calendar-header"><button id="calendarPrevious" type="button" aria-label="Previous month">‹</button><strong id="calendarMonth"></strong><button id="calendarNext" type="button" aria-label="Next month">›</button></div>
               <div id="calendarDays" class="calendar-grid"></div>
@@ -120,9 +135,9 @@
             </div>
             <p id="trendRangeError" class="trend-range-error hidden" role="alert"></p>
           </div>
-          <p id="trendRangeSummary" class="trend-range-summary"></p>
-          <div class="chart-legend"><span><i class="legend-revenue"></i>Revenue</span><span><i class="legend-gross"></i>Gross profit</span><span><i class="legend-net"></i>Cash after bills <small>(current month)</small></span><span><i class="legend-stock"></i>Units in stock <small>(right axis)</small></span></div>
-          <div class="chart-wrap"><svg id="metricsChart" viewBox="0 0 920 320" role="img" aria-label="Line chart showing daily revenue, gross profit, cash after bills, and inventory units for the selected dates"></svg></div>
+          <div class="comparison-toolbar"><p id="trendRangeSummary" class="trend-range-summary"></p><label class="comparison-metric" for="trendMetric">Compare<select id="trendMetric"><option value="revenue">Revenue</option><option value="grossProfit">Gross profit</option><option value="netProfit">Net profit (cash basis)</option><option value="inventoryUnits">Units in stock</option></select></label></div>
+          <div class="comparison-legend"><div class="comparison-legend-item"><i class="comparison-dot"></i><span id="selectedPeriodLabel">Last month</span><strong id="selectedPeriodValue">—</strong><small id="selectedPeriodDates"></small></div><div class="comparison-legend-item"><i class="comparison-dot previous"></i><span id="previousPeriodLabel">Previous month</span><strong id="previousPeriodValue">—</strong><small id="previousPeriodDates"></small></div></div>
+          <div class="chart-wrap"><svg id="metricsChart" class="comparison-chart" viewBox="0 0 920 320" role="img" aria-label="Two line chart comparing the selected metric with the previous matching period"></svg></div>
           <p id="chartDayDetails" class="chart-day-details" aria-live="polite">Point to or touch the chart for a day's exact values.</p>
           <p id="profitDataNotice" class="profit-notice hidden"></p>
           <p id="dashboardError" class="workflow-notice error hidden" role="status"></p>
@@ -149,15 +164,39 @@
         </section>
       </section>
 
+      <section id="posScreen" class="pos-screen hidden">
+        <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE CHECKOUT</div><h1>POS Sale</h1><p>Phone scans arrive in this order live. You can also tap a product to add it.</p></div><span id="posConnectionLabel" class="updated-label">Connecting…</span></header>
+        <div class="pos-layout">
+          <div class="pos-catalog">
+            <label class="pos-search-wrap"><span aria-hidden="true">⌕</span><input id="posSearch" type="search" placeholder="Search products or barcode…" aria-label="Search POS products"></label>
+            <div class="pos-filters" aria-label="Product filters"><button class="pos-filter active" type="button" data-pos-filter="all" aria-pressed="true">All</button><button class="pos-filter" type="button" data-pos-filter="available" aria-pressed="false">In stock</button></div>
+            <div id="posProductGrid" class="pos-product-grid"></div>
+          </div>
+          <section class="pos-order" aria-label="Current order">
+            <div class="pos-order-head"><div><h2>Current Order</h2><p id="posItemCount">0 items</p></div><button id="posClearButton" class="pos-clear" type="button">Clear order</button></div>
+            <div id="posOrderItems" class="pos-order-items"><div class="pos-order-empty">No items added yet.<br>Scan on your phone or tap a product.</div></div>
+            <div class="pos-order-bottom">
+              <div class="pos-total-line"><span>Subtotal</span><strong id="posSubtotal">0.00</strong></div>
+              <div class="pos-total-line final"><span>Total</span><strong id="posTotal">0.00</strong></div>
+              <span class="pos-payment-label">PAYMENT METHOD</span>
+              <div class="pos-payment-methods"><button type="button" class="pos-pay-method active" data-pos-payment="cash" aria-pressed="true">Cash</button><button type="button" class="pos-pay-method" data-pos-payment="card" aria-pressed="false">Card</button><button type="button" class="pos-pay-method" data-pos-payment="qr" aria-pressed="false">QR</button></div>
+              <small class="pos-payment-help">Records how you collected payment. Card and QR are not charged here.</small>
+              <button id="posCheckoutButton" class="pos-checkout" type="button" disabled>Complete sale</button>
+              <p id="posMessage" class="pos-message hidden" role="status"></p>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section id="financeScreen" class="finance-screen hidden">
         <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE FINANCE</div><h1>Finance</h1><p>Set selling prices and plan the cash needed for monthly bills.</p></div></header>
         <div class="finance-summary-grid">
           <article class="finance-metric-card"><span class="finance-metric-title">Fixed costs / month</span><div class="finance-ring"><strong id="financeMonthlyTotal">Not entered</strong><small>Bills and mortgage</small></div><span id="financeFixedDelta" class="finance-delta unknown">No previous plan</span></article>
           <article class="finance-metric-card"><span class="finance-metric-title">Product purchase cost / month</span><div class="finance-ring"><strong id="financeProductPurchases">—</strong><small>Inbound stock bought</small></div><span id="financePurchaseDelta" class="finance-delta unknown">Previous month unavailable</span></article>
           <article class="finance-metric-card"><span class="finance-metric-title">Gross profit / month</span><div class="finance-ring"><strong id="financeMonthlyGross">—</strong><small>Sales less product cost</small></div><span id="financeGrossDelta" class="finance-delta unknown">Previous month unavailable</span></article>
-          <article class="finance-metric-card"><span class="finance-metric-title">Net profit estimate (cash) / month</span><div class="finance-ring"><strong id="financeMonthlyNet">Unavailable</strong><small>After monthly bills</small></div><span id="financeNetDelta" class="finance-delta unknown">Previous month unavailable</span></article>
+          <article class="finance-metric-card"><span class="finance-metric-title">Net profit / month</span><div class="finance-ring"><strong id="financeMonthlyNet">Unavailable</strong><small>Cash basis · after bills</small></div><span id="financeNetDelta" class="finance-delta unknown">Previous month unavailable</span></article>
         </div>
-        <div class="finance-cash-strip"><p id="financeCashResult">Gross profit is available; enter monthly costs to see the monthly cash estimate.</p></div>
+        <div class="finance-cash-strip"><p id="financeCashResult">Gross profit is available; enter monthly costs to see net profit on a cash basis.</p></div>
         <p class="finance-help finance-purchase-note">Product purchase cost tracks stock bought this month. Gross profit already deducts the cost of products when they are sold.</p>
         <details id="monthlyCostsDetails" class="workflow-card finance-section finance-costs">
           <summary class="finance-costs-summary"><span class="finance-summary-copy"><strong>Monthly costs</strong><small>Click to expand or collapse. Leave a field blank if it does not apply.</small></span><span class="finance-chevron" aria-hidden="true">⌄</span></summary>
@@ -175,7 +214,7 @@
               <label>Employee salaries (monthly total)<input id="planSalaries" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
               <label>Mortgage payment including interest (monthly total)<input id="planMortgagePayment" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
             </div>
-            <p class="finance-help">The monthly net estimate subtracts these bills, including the full mortgage payment, from gross profit. It shows cash after bills; mortgage principal means it is not formal accounting net income. Record one-time expenses separately.</p>
+            <p class="finance-help">Monthly net profit subtracts these bills, including the full mortgage payment, from gross profit. This is cash after bills; mortgage principal means it differs from formal accounting net income. Record one-time expenses separately.</p>
             <div class="finance-form-footer"><button id="saveMonthlyPlanButton" class="workflow-primary" type="submit">Save monthly costs</button><p id="financePlanStatus">Monthly costs have not been entered. Gross profit is available; net profit is unavailable.</p></div>
             <p id="financePlanMessage" class="finance-message hidden" role="status"></p>
           </form>

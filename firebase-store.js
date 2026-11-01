@@ -21,6 +21,14 @@ function productRef(barcode) {
   return doc(db(), 'products', encodeURIComponent(barcode));
 }
 
+function posRef() { return doc(db(), 'receipts', 'pos-active'); }
+
+function posItems(data) {
+  return Array.isArray(data?.items) ? data.items.filter(item =>
+    typeof item.barcode === 'string' && Number.isSafeInteger(item.quantity) && item.quantity > 0)
+    .map(item => ({ barcode: item.barcode, quantity: item.quantity })) : [];
+}
+
 function validText(value, label, max = 200) {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > max) {
     throw new Error(`${label} must be between 1 and ${max} characters.`);
@@ -83,6 +91,19 @@ function precedingMonth(month) {
   return new Date(Date.UTC(year, number - 2, 1)).toISOString().slice(0, 7);
 }
 
+function comparisonDates(from, to) {
+  const start = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  const count = Math.round((end - start) / 86400000) + 1;
+  const previousTo = new Date(start - 86400000).toISOString().slice(0, 10);
+  const month = from.slice(0, 7);
+  const nextMonthStart = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 1));
+  const wholeMonth = from === `${month}-01` && to === new Date(nextMonthStart.getTime() - 86400000).toISOString().slice(0, 10);
+  const previousFrom = wholeMonth ? `${precedingMonth(month)}-01`
+    : new Date(start - count * 86400000).toISOString().slice(0, 10);
+  return { from: previousFrom, to: previousTo, wholeMonth };
+}
+
 function purchaseCostInMonth(receipts, month) {
   const inbound = receipts.filter(item => item.type !== 'inventory_removal' &&
     Number(item.quantity) > 0 && item.arrivalDate?.startsWith(month));
@@ -116,6 +137,8 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
   const grossProfit = sales.reduce((sum, item) => sum + (Number(item.grossProfit) || 0), 0);
   const plan = shapeMonthlyPlan(expenses.find(item => item.id === 'monthly-plan'));
   const currentMonth = today.slice(0, 7);
+  const priorPlans = new Map(expenses.filter(item => item.id?.startsWith('monthly-plan-') && item.type === 'monthly_plan')
+    .map(item => [item.id.slice('monthly-plan-'.length), shapeMonthlyPlan(item)]));
   const oneTimeExpenses = expenses.filter(item => item.type !== 'monthly_plan');
   const monthlyExpenses = oneTimeExpenses.filter(item => item.expenseDate?.startsWith(currentMonth))
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -123,7 +146,7 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
   const monthlyGross = monthlySales.reduce((sum, item) => sum + (Number(item.grossProfit) || 0), 0);
   const monthlyMissingCost = monthlySales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)));
   const missingCostData = sales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)));
-  const netUnavailableReason = !plan ? 'Enter monthly costs in Finance to estimate monthly cash after bills.'
+  const netUnavailableReason = !plan ? 'Enter monthly costs in Finance to see net profit on a cash basis.'
     : monthlyMissingCost ? 'Purchase cost is missing from a sale this month.' : null;
   const points = Array.from({ length: dayCount }, (_, index) => ({
     date: new Date(Date.parse(`${from}T00:00:00Z`) + index * 86400000).toISOString().slice(0, 10),
@@ -157,8 +180,10 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
     const point = points[index];
     point.inventoryUnits = stock;
     point.grossProfit = point.missingCostData ? null : point.grossProfit;
-    point.cashAfterBills = !plan || !point.date.startsWith(currentMonth) || point.grossProfit == null
-      ? null : point.grossProfit - point.expenses - (point.date === `${currentMonth}-01` ? plan.cashCommitments : 0);
+    const pointMonth = point.date.slice(0, 7);
+    const pointPlan = pointMonth === currentMonth ? plan : priorPlans.get(pointMonth);
+    point.cashAfterBills = !pointPlan || point.grossProfit == null
+      ? null : point.grossProfit - point.expenses - (point.date.endsWith('-01') ? pointPlan.cashCommitments : 0);
     point.netProfit = point.cashAfterBills;
     stock += point.unitsSold - point.received;
   }
@@ -312,6 +337,110 @@ export function watchRetailFlow(onChange, onError) {
   return () => { unsubs.forEach(stop => stop()); live = null; };
 }
 
+// One shared checkout for the store. A phone scan changes this document; every
+// open dashboard receives the new cart through the document listener.
+export function watchPos(onChange, onError) {
+  return onSnapshot(posRef(), snapshot => onChange(posItems(snapshot.data())), onError);
+}
+
+async function addPosScan(body) {
+  const barcode = validText(body.barcode, 'Barcode', 128);
+  const ref = productRef(barcode), cartRef = posRef();
+  return runTransaction(db(), async transaction => {
+    const product = (await transaction.get(ref)).data();
+    const cart = (await transaction.get(cartRef)).data();
+    if (!product) throw new Error('This barcode is not in inventory. Add it in Inbound first.');
+    const items = posItems(cart);
+    const current = items.find(item => item.barcode === barcode);
+    if (Number(product.quantity) <= (current?.quantity || 0)) {
+      throw new Error(`Only ${Number(product.quantity) || 0} ${product.name} in stock.`);
+    }
+    if (current) current.quantity++;
+    else {
+      if (items.length >= 100) throw new Error('The order has reached 100 different products.');
+      items.push({ barcode, quantity: 1 });
+    }
+    transaction.set(cartRef, { type: 'pos_order', items, updatedAt: serverTimestamp() });
+    return { product: shapeProduct(product), quantity: current?.quantity || 1 };
+  });
+}
+
+async function adjustPos(body) {
+  const barcode = validText(body.barcode, 'Barcode', 128);
+  const delta = Number(body.delta);
+  if (!Number.isSafeInteger(delta) || delta === 0 || delta < -1000000000 || delta > 1) {
+    throw new Error('Choose a valid order quantity change.');
+  }
+  const cartRef = posRef(), ref = productRef(barcode);
+  return runTransaction(db(), async transaction => {
+    const product = (await transaction.get(ref)).data();
+    const items = posItems((await transaction.get(cartRef)).data());
+    const item = items.find(row => row.barcode === barcode);
+    if (!item) throw new Error('This item is no longer in the order.');
+    const next = Math.max(0, item.quantity + delta);
+    if (delta > 0 && (!product || next > Number(product.quantity))) {
+      throw new Error(`Only ${Number(product?.quantity) || 0} ${product?.name || barcode} in stock.`);
+    }
+    if (next) item.quantity = next;
+    else items.splice(items.indexOf(item), 1);
+    transaction.set(cartRef, { type: 'pos_order', items, updatedAt: serverTimestamp() });
+    return { items };
+  });
+}
+
+async function clearPos() {
+  const cartRef = posRef();
+  return runTransaction(db(), async transaction => {
+    await transaction.get(cartRef);
+    transaction.set(cartRef, { type: 'pos_order', items: [], updatedAt: serverTimestamp() });
+    return { items: [] };
+  });
+}
+
+async function checkoutPos(body) {
+  const paymentMethod = validText(body.paymentMethod, 'Payment method', 12);
+  if (!['cash', 'card', 'qr'].includes(paymentMethod)) throw new Error('Choose Cash, Card, or QR.');
+  const cartRef = posRef(), saleRef = doc(collection(db(), 'sales'));
+  return runTransaction(db(), async transaction => {
+    const items = posItems((await transaction.get(cartRef)).data());
+    if (!items.length) throw new Error('The order is empty or was already checked out.');
+    const ordered = [...items].sort((a, b) => a.barcode.localeCompare(b.barcode));
+    const refs = ordered.map(item => productRef(item.barcode));
+    const snapshots = [];
+    for (const ref of refs) snapshots.push(await transaction.get(ref));
+    let totalCents = 0, costCents = 0;
+    const sold = ordered.map((item, index) => {
+      const product = snapshots[index].data();
+      if (!product) throw new Error(`${item.barcode} is no longer in inventory.`);
+      if (Number(product.quantity) < item.quantity) throw new Error(`Only ${product.quantity} ${product.name} in stock.`);
+      if (product.unitCost == null || !Number.isFinite(Number(product.unitCost))) {
+        throw new Error(`Purchase cost is missing for ${product.name}.`);
+      }
+      const price = product.originalPrice == null ? null : Number(product.originalPrice);
+      if (price == null || !Number.isFinite(price) || price < 0) {
+        throw new Error(`Set a selling price for ${product.name} in Finance before checkout.`);
+      }
+      totalCents += Math.round(price * 100) * item.quantity;
+      costCents += Math.round(Number(product.unitCost) * 100) * item.quantity;
+      return { barcode: item.barcode, name: product.name, quantity: item.quantity,
+        originalPrice: price, unitCost: Number(product.unitCost) };
+    });
+    if (!Number.isSafeInteger(totalCents) || !Number.isSafeInteger(costCents)) {
+      throw new Error('The order total is too large. Reduce its quantity.');
+    }
+    snapshots.forEach((snapshot, index) => transaction.update(snapshot.ref, {
+      quantity: Number(snapshot.data().quantity) - sold[index].quantity, updatedAt: serverTimestamp(),
+    }));
+    const totalOriginalPrice = totalCents / 100;
+    transaction.set(saleRef, {
+      items: sold, totalOriginalPrice, grossProfit: (totalCents - costCents) / 100,
+      day: todayLocal(), paymentMethod, source: 'pos', createdAt: serverTimestamp(),
+    });
+    transaction.set(cartRef, { type: 'pos_order', items: [], updatedAt: serverTimestamp() });
+    return { sale: { id: saleRef.id.slice(0, 8), totalOriginalPrice, paymentMethod } };
+  });
+}
+
 async function receive(body) {
   const barcode = validText(body.barcode, 'Barcode', 128);
   const name = validText(body.name, 'Product name');
@@ -428,7 +557,12 @@ export async function api(path, options = {}) {
     return { ok: true };
   }
   if (url.pathname === '/api/dashboard' && method === 'GET') {
-    return summarize(await loadCollections(), url.searchParams.get('from') || todayLocal(-29), url.searchParams.get('to') || todayLocal());
+    const from = url.searchParams.get('from') || todayLocal(-29);
+    const to = url.searchParams.get('to') || todayLocal();
+    const data = await loadCollections();
+    const selected = summarize(data, from, to);
+    const previous = comparisonDates(from, to);
+    return { ...selected, comparison: { ...previous, points: summarize(data, previous.from, previous.to).points } };
   }
   if (url.pathname === '/api/inventory' && method === 'GET') {
     const barcode = url.searchParams.get('barcode')?.trim();
@@ -436,8 +570,16 @@ export async function api(path, options = {}) {
     const data = await loadCollections();
     return { products: sortedProducts(data.products) };
   }
+  if (url.pathname === '/api/pos' && method === 'GET') {
+    const [cart, data] = await Promise.all([getDoc(posRef()), loadCollections()]);
+    return { items: posItems(cart.data()), products: sortedProducts(data.products) };
+  }
   if (url.pathname === '/api/finance' && method === 'GET') return getFinance();
   const body = JSON.parse(options.body || '{}');
+  if (url.pathname === '/api/pos/scan' && method === 'POST') return addPosScan(body);
+  if (url.pathname === '/api/pos/adjust' && method === 'POST') return adjustPos(body);
+  if (url.pathname === '/api/pos/checkout' && method === 'POST') return checkoutPos(body);
+  if (url.pathname === '/api/pos' && method === 'DELETE') return clearPos();
   if (url.pathname === '/api/inventory' && method === 'DELETE') return removeInventory(body);
   if (url.pathname === '/api/finance/price' && method === 'PATCH') return setSellingPrice(body);
   if (url.pathname === '/api/finance/plan' && method === 'PUT') return saveMonthlyPlan(body);
