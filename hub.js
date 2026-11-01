@@ -301,7 +301,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       : stockMetric ? `${Number(value).toLocaleString('en-US')} units` : formatAmount(value);
     document.getElementById('selectedPeriodValue').textContent = displayTotal(total(points));
     document.getElementById('previousPeriodValue').textContent = displayTotal(total(comparisonPoints));
-    metricsChart.setAttribute('aria-label', `${metricLabel}: ${selectedLabel} versus ${previousLabel} line chart`);
+    metricsChart.setAttribute('aria-label', `${metricLabel}: ${selectedLabel} versus ${previousLabel} area chart`);
     const ns = 'http://www.w3.org/2000/svg';
     const make = (tag, attrs = {}) => {
       const element = document.createElementNS(ns, tag);
@@ -336,6 +336,35 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     const x = index => points.length === 1 ? (left + right) / 2 : left + (right - left) * index / (points.length - 1);
     const seriesX = (index, count) => count === 1 ? (left + right) / 2 : left + (right - left) * index / (count - 1);
     const yFor = value => bottom - (value - min) / (max - min) * (bottom - top);
+    const zeroY = yFor(0);
+    const format = value => Number(value.toFixed(1));
+    // Monotone cubic curves pass through recorded points without overshooting
+    // peaks, dips, or a flat run of zero sales.
+    const smoothPath = coordinates => {
+      if (!coordinates.length) return '';
+      let path = `M ${format(coordinates[0].x)} ${format(coordinates[0].y)}`;
+      if (coordinates.length === 1) return path;
+      const slopes = coordinates.slice(1).map((point, index) =>
+        (point.y - coordinates[index].y) / (point.x - coordinates[index].x));
+      const tangents = coordinates.map((_, index) => {
+        if (index === 0) return slopes[0];
+        if (index === coordinates.length - 1) return slopes.at(-1);
+        const before = slopes[index - 1], after = slopes[index];
+        if (before * after <= 0) return 0;
+        const previousWidth = coordinates[index].x - coordinates[index - 1].x;
+        const nextWidth = coordinates[index + 1].x - coordinates[index].x;
+        const w1 = 2 * nextWidth + previousWidth, w2 = nextWidth + 2 * previousWidth;
+        return (w1 + w2) / (w1 / before + w2 / after);
+      });
+      for (let index = 1; index < coordinates.length; index++) {
+        const start = coordinates[index - 1], end = coordinates[index];
+        const third = (end.x - start.x) / 3;
+        path += ` C ${format(start.x + third)} ${format(start.y + tangents[index - 1] * third)}` +
+          ` ${format(end.x - third)} ${format(end.y - tangents[index] * third)}` +
+          ` ${format(end.x)} ${format(end.y)}`;
+      }
+      return path;
+    };
     for (let tick = 0; tick <= 4; tick++) {
       const ratio = tick / 4;
       const y = top + ratio * (bottom - top);
@@ -350,20 +379,43 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       metricsChart.append(make('line', { x1: x(index), y1: bottom + 8, x2: x(index), y2: bottom + 12,
         class: 'comparison-tick' }));
     });
-    [
-      { entries: points, color: '#ef5125', css: 'comparison-selected' },
-      // Draw the slimmer peach trace last so it remains visible where both
-      // periods share an exact value, especially along a zero baseline.
-      { entries: comparisonPoints, color: '#f6d4bf', css: 'comparison-previous' },
-    ].forEach(({ entries, color, css }) => {
-      let path = '', open = false;
-      entries.forEach((point, index) => {
+    const defs = make('defs');
+    [['selected', '#f5873c', '0.3'], ['previous', '#f6cbb3', '0.15']].forEach(([name, color, opacity]) => {
+      const gradient = make('linearGradient', { id: `${name}-comparison-fill`, x1: '0', x2: '0', y1: '0', y2: '1' });
+      gradient.append(make('stop', { offset: '0%', 'stop-color': color, 'stop-opacity': opacity }));
+      gradient.append(make('stop', { offset: '100%', 'stop-color': color, 'stop-opacity': '0.01' }));
+      defs.append(gradient);
+    });
+    metricsChart.prepend(defs);
+    const series = [
+      { entries: points, color: '#e87518', css: 'comparison-selected', gradient: 'selected-comparison-fill' },
+      { entries: comparisonPoints, color: '#f6cbb3', css: 'comparison-previous', gradient: 'previous-comparison-fill' },
+    ].map(item => {
+      const runs = [];
+      let run = [];
+      item.entries.forEach((point, index) => {
         const value = point[metric];
-        if (value === null || value === undefined || !Number.isFinite(Number(value))) { open = false; return; }
-        path += `${open ? ' L' : ' M'} ${seriesX(index, entries.length).toFixed(1)} ${yFor(Number(value)).toFixed(1)}`;
-        open = true;
+        if (value == null || !Number.isFinite(Number(value))) {
+          if (run.length) runs.push(run);
+          run = [];
+        } else run.push({ x: seriesX(index, item.entries.length), y: yFor(Number(value)) });
       });
-      if (path) metricsChart.append(make('path', { d: path, class: `chart-line ${css}`, fill: 'none' }));
+      if (run.length) runs.push(run);
+      return { ...item, runs };
+    });
+    // Areas sit behind both traces. Missing days break the area as well as the line.
+    [...series].reverse().forEach(({ runs, gradient }) => runs.forEach(run => {
+      if (run.length < 2) return;
+      const start = run[0], end = run.at(-1);
+      metricsChart.append(make('path', {
+        d: `${smoothPath(run)} L ${format(end.x)} ${format(zeroY)} L ${format(start.x)} ${format(zeroY)} Z`,
+        class: 'comparison-area', fill: `url(#${gradient})`,
+      }));
+    }));
+    // The narrow previous trace is drawn last, so a zero period is still visible
+    // when it lies exactly on top of the selected period.
+    series.forEach(({ entries, color, css, runs }) => {
+      runs.forEach(run => metricsChart.append(make('path', { d: smoothPath(run), class: `chart-line ${css}` })));
       const lastIndex = entries.findLastIndex(entry => entry[metric] != null && Number.isFinite(Number(entry[metric])));
       if (lastIndex !== -1) metricsChart.append(make('circle', {
         cx: seriesX(lastIndex, entries.length), cy: yFor(Number(entries[lastIndex][metric])), r: 5, fill: color,
