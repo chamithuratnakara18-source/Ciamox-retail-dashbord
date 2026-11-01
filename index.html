@@ -66,6 +66,15 @@
 .finance-table{min-width:720px}.finance-product{display:flex;align-items:center;gap:8px;min-width:130px}.finance-product img{width:32px;height:32px;object-fit:cover;border-radius:6px}
 .finance-price-input{width:108px;min-height:34px;border:1px solid #cfdadc;border-radius:7px;padding:6px 8px;font-size:11px}.finance-save-price{border:0;border-radius:7px;background:#1f9e73;color:#fff;padding:9px 12px;font-size:10px;font-weight:800}.finance-save-price:disabled{opacity:.5}
 .finance-profit{font-weight:800;color:#197c59}.finance-negative{color:#b54835}.finance-unavailable{color:#9ba6ab}.net-card strong.unavailable{font-size:clamp(15px,1.6vw,21px)}
+.finance-summary-grid .finance-metric-card{display:flex;flex-direction:column;align-items:center;text-align:center;gap:9px;min-height:232px;padding:17px 10px;background:#fff;border-radius:16px}
+.finance-metric-title{min-height:30px;display:grid;place-items:center;color:#52636a;font-size:11px;font-weight:800;line-height:1.25}
+.finance-ring{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:none;width:128px;height:128px;border-radius:50%;background:conic-gradient(from 210deg,#a3d855 0deg,#f5bc46 140deg,#fb8437 235deg,#ec5455 302deg,transparent 303deg);isolation:isolate}
+.finance-ring::before{content:"";position:absolute;inset:5px;border-radius:50%;background:#fff;z-index:-1}
+.finance-ring strong{max-width:115px;color:#1b2732;font:800 clamp(15px,1.45vw,21px)/1.1 Manrope,sans-serif;letter-spacing:-.04em;overflow-wrap:anywhere}.finance-ring small{max-width:105px;margin-top:5px;color:#89979c;font-size:8px;line-height:1.25}
+.finance-delta{max-width:100%;min-height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:20px;padding:5px 8px;font-size:9px;font-weight:800;line-height:1.3;white-space:normal}
+.finance-delta.good{color:#16885c;background:#e8f7ed}.finance-delta.bad{color:#b94d39;background:#fff0e9}.finance-delta.cost-up{color:#a46327;background:#fff3e8}.finance-delta.cost-down{color:#28788a;background:#eaf5f7}.finance-delta.flat{color:#61767c;background:#f0f3f3}.finance-delta.unknown{color:#7d898e;background:#f3f5f5}
+.finance-cash-strip{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-3px 0 20px;padding:12px 16px;background:#edf8f3;border:1px solid #d8eae0;border-radius:11px;color:#435c53}.finance-cash-strip span{font-size:11px;font-weight:800}.finance-cash-strip strong{font-size:16px;color:#1c6c51}.finance-cash-strip p{margin:0;color:#74857f;font-size:10px;line-height:1.45;flex-basis:100%}
+.finance-purchase-note{margin:-9px 0 18px}
 @media(max-width:900px){.finance-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.finance-screen{padding-top:22px}.finance-form-grid{grid-template-columns:1fr 1fr;gap:8px}.finance-summary-grid article{padding:13px}.finance-summary-grid strong{font-size:16px}.finance-section-heading{align-items:flex-start;flex-direction:column}}
 </style>
@@ -143,12 +152,13 @@
       <section id="financeScreen" class="finance-screen hidden">
         <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE FINANCE</div><h1>Finance</h1><p>Set selling prices and plan the cash needed for monthly bills.</p></div></header>
         <div class="finance-summary-grid">
-          <article><span>Monthly cash commitments</span><strong id="financeMonthlyTotal">Not entered</strong></article>
-          <article><span>Gross profit this month</span><strong id="financeMonthlyGross">—</strong></article>
-          <article><span>Net profit estimate this month</span><strong id="financeMonthlyNet">Unavailable</strong></article>
-          <article><span>Cash after bills this month</span><strong id="financeMonthlyCash">Unavailable</strong></article>
+          <article class="finance-metric-card"><span class="finance-metric-title">Fixed costs / month</span><div class="finance-ring"><strong id="financeMonthlyTotal">Not entered</strong><small>Bills and mortgage</small></div><span id="financeFixedDelta" class="finance-delta unknown">No previous plan</span></article>
+          <article class="finance-metric-card"><span class="finance-metric-title">Product purchase cost / month</span><div class="finance-ring"><strong id="financeProductPurchases">—</strong><small>Inbound stock bought</small></div><span id="financePurchaseDelta" class="finance-delta unknown">Previous month unavailable</span></article>
+          <article class="finance-metric-card"><span class="finance-metric-title">Gross profit / month</span><div class="finance-ring"><strong id="financeMonthlyGross">—</strong><small>Sales less product cost</small></div><span id="financeGrossDelta" class="finance-delta unknown">Previous month unavailable</span></article>
+          <article class="finance-metric-card"><span class="finance-metric-title">Net profit / month</span><div class="finance-ring"><strong id="financeMonthlyNet">Unavailable</strong><small>Estimated from costs</small></div><span id="financeNetDelta" class="finance-delta unknown">Previous month unavailable</span></article>
         </div>
-        <p id="financeCashResult" class="finance-help">Gross profit is available; enter monthly costs to see cash after bills.</p>
+        <div class="finance-cash-strip"><span>Cash after bills this month</span><strong id="financeMonthlyCash">Unavailable</strong><p id="financeCashResult">Gross profit is available; enter monthly costs to see cash after bills.</p></div>
+        <p class="finance-help finance-purchase-note">Product purchase cost tracks stock bought this month. Gross profit already deducts the cost of products when they are sold.</p>
         <details id="monthlyCostsDetails" class="workflow-card finance-section finance-costs">
           <summary class="finance-costs-summary"><span class="finance-summary-copy"><strong>Monthly costs</strong><small>Click to expand or collapse. Leave a field blank if it does not apply.</small></span><span class="finance-chevron" aria-hidden="true">⌄</span></summary>
           <div class="finance-cost-content">

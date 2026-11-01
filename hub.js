@@ -460,14 +460,35 @@ import { api, watchRetailFlow } from './firebase-store.js';
     element.className = `finance-message${error ? ' error' : ''}`;
   }
 
+  function showFinanceDelta(id, current, previous, { cost = false } = {}) {
+    const element = document.getElementById(id);
+    if (current == null || previous == null || !financeStats?.comparisonMonth) {
+      element.textContent = current == null ? 'Current amount unavailable' : 'Previous month unavailable';
+      element.className = 'finance-delta unknown';
+      return;
+    }
+    const delta = Math.round((current - previous) * 100) / 100;
+    const month = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+      .format(new Date(`${financeStats.comparisonMonth}-01T12:00:00Z`));
+    element.textContent = `${delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '— '}${formatAmount(Math.abs(delta))} vs ${month}`;
+    element.className = `finance-delta ${delta === 0 ? 'flat' : cost ? (delta > 0 ? 'cost-up' : 'cost-down') : delta > 0 ? 'good' : 'bad'}`;
+  }
+
   function renderFinanceSummary() {
-    document.getElementById('financeMonthlyTotal').textContent = financePlan
-      ? formatAmount(financePlan.cashCommitments) : 'Not entered';
-    const gross = financeStats?.monthGrossProfit;
+    const fixed = financePlan?.cashCommitments ?? null;
+    document.getElementById('financeMonthlyTotal').textContent = fixed == null ? 'Not entered' : formatAmount(fixed);
+    const purchased = financeStats?.metrics?.productPurchases;
+    document.getElementById('financeProductPurchases').textContent = purchased == null ? 'Unavailable' : formatAmount(purchased);
+    const gross = financeStats?.metrics?.grossProfit;
     document.getElementById('financeMonthlyGross').textContent = gross == null ? 'Unavailable' : formatAmount(gross);
     const net = financePlan && financePlan.mortgagePayment === 0 && gross != null
       ? gross - financePlan.profitExpenses - (financeStats?.monthOneTimeExpenses || 0) : null;
     document.getElementById('financeMonthlyNet').textContent = net === null ? 'Unavailable' : formatAmount(net);
+    const previous = financeStats?.previousMetrics;
+    showFinanceDelta('financeFixedDelta', fixed, previous?.fixedCosts, { cost: true });
+    showFinanceDelta('financePurchaseDelta', purchased, previous?.productPurchases, { cost: true });
+    showFinanceDelta('financeGrossDelta', gross, previous?.grossProfit);
+    showFinanceDelta('financeNetDelta', net, previous?.netProfit);
     const cash = financePlan && gross != null
       ? gross - financePlan.cashCommitments - (financeStats?.monthOneTimeExpenses || 0) : null;
     document.getElementById('financeMonthlyCash').textContent = cash === null ? 'Unavailable' : formatAmount(cash);
@@ -480,6 +501,9 @@ import { api, watchRetailFlow } from './firebase-store.js';
       : financePlan.mortgagePayment > 0
         ? 'Cash after bills includes the full mortgage payment. The net profit estimate is unavailable because this payment includes principal.'
         : 'Cash after bills includes monthly costs and one-time expenses recorded this month.';
+    if (financePlan && financeStats && !financeStats.currentPlanSnapshotExists) {
+      document.getElementById('financeCashResult').textContent += ' Save monthly costs once to record this month for future comparisons.';
+    }
   }
 
   async function saveFinancePlan(event) {
@@ -493,6 +517,7 @@ import { api, watchRetailFlow } from './firebase-store.js';
       const result = await api('/api/finance/plan', { method: 'PUT', body: JSON.stringify(body) });
       financePlan = result.plan;
       financePlanDirty = false;
+      if (financeStats) financeStats.currentPlanSnapshotExists = true;
       renderFinanceSummary();
       renderFinanceTable();
       showFinanceMessage('financePlanMessage', 'Monthly costs saved. The cash after bills estimate has been updated.');

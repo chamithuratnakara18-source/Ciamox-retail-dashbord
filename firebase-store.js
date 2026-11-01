@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js';
 import {
   addDoc, collection, doc, getDoc, getDocFromServer, getDocs, getFirestore,
-  onSnapshot, runTransaction, serverTimestamp, setDoc,
+  onSnapshot, runTransaction, serverTimestamp, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 
@@ -77,6 +77,24 @@ function sortedProducts(products) {
 }
 
 const monthlyFields = ['water', 'electricity', 'gas', 'sewage', 'salaries', 'mortgagePayment'];
+
+function precedingMonth(month) {
+  const [year, number] = month.split('-').map(Number);
+  return new Date(Date.UTC(year, number - 2, 1)).toISOString().slice(0, 7);
+}
+
+function purchaseCostInMonth(receipts, month) {
+  const inbound = receipts.filter(item => item.type !== 'inventory_removal' &&
+    Number(item.quantity) > 0 && item.arrivalDate?.startsWith(month));
+  if (inbound.some(item => item.unitCost == null || !Number.isFinite(Number(item.unitCost)))) return null;
+  return inbound.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitCost), 0);
+}
+
+function grossProfitInMonth(sales, month) {
+  const monthlySales = sales.filter(item => item.day?.startsWith(month));
+  if (monthlySales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)))) return null;
+  return monthlySales.reduce((sum, item) => sum + Number(item.grossProfit), 0);
+}
 
 function shapeMonthlyPlan(data) {
   if (!data || data.type !== 'monthly_plan') return null;
@@ -209,24 +227,52 @@ async function saveMonthlyPlan(body) {
   if (!monthlyFields.some(field => plan[field] > 0)) {
     throw new Error('Enter at least one monthly cost. Leave the plan unsaved if you have not entered costs yet.');
   }
-  await setDoc(doc(db(), 'expenses', 'monthly-plan'), {
+  const currentMonth = todayLocal().slice(0, 7);
+  const savedPlan = {
     type: 'monthly_plan', ...plan,
     updatedAt: serverTimestamp(),
-  });
+  };
+  const batch = writeBatch(db());
+  batch.set(doc(db(), 'expenses', 'monthly-plan'), savedPlan);
+  batch.set(doc(db(), 'expenses', `monthly-plan-${currentMonth}`), savedPlan);
+  await batch.commit();
   return { plan: shapeMonthlyPlan({ type: 'monthly_plan', ...plan }) };
 }
 
 async function getFinance() {
   const data = await loadCollections();
   const totals = summarize(data).totals;
+  const currentMonth = todayLocal().slice(0, 7);
+  const previousMonth = precedingMonth(currentMonth);
+  const currentPlan = shapeMonthlyPlan(data.expenses.find(item => item.id === 'monthly-plan'));
+  const currentPlanSnapshotExists = Boolean(shapeMonthlyPlan(data.expenses.find(item => item.id === `monthly-plan-${currentMonth}`)));
+  const previousPlan = shapeMonthlyPlan(data.expenses.find(item => item.id === `monthly-plan-${previousMonth}`));
+  const previousGrossProfit = grossProfitInMonth(data.sales, previousMonth);
+  const previousOneTimeExpenses = data.expenses.filter(item => item.type !== 'monthly_plan' &&
+    item.expenseDate?.startsWith(previousMonth)).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   return {
     products: sortedProducts(data.products),
-    plan: shapeMonthlyPlan(data.expenses.find(item => item.id === 'monthly-plan')),
+    plan: currentPlan,
     monthGrossProfit: totals.monthlyGrossProfit,
     monthOneTimeExpenses: totals.monthlyOneTimeExpenses,
     netProfit: totals.netProfit,
     netCashAfterCommitments: totals.netCashAfterCommitments,
     netUnavailableReason: totals.netUnavailableReason,
+    currentPlanSnapshotExists,
+    comparisonMonth: previousMonth,
+    metrics: {
+      fixedCosts: currentPlan?.cashCommitments ?? null,
+      productPurchases: purchaseCostInMonth(data.receipts, currentMonth),
+      grossProfit: totals.monthlyGrossProfit,
+      netProfit: totals.netProfit,
+    },
+    previousMetrics: {
+      fixedCosts: previousPlan?.cashCommitments ?? null,
+      productPurchases: purchaseCostInMonth(data.receipts, previousMonth),
+      grossProfit: previousGrossProfit,
+      netProfit: previousPlan && previousPlan.mortgagePayment === 0 && previousGrossProfit != null
+        ? previousGrossProfit - previousPlan.profitExpenses - previousOneTimeExpenses : null,
+    },
   };
 }
 
