@@ -30,22 +30,6 @@
 .inventory-delete{border:1px solid #e9b9b4;border-radius:7px;background:#fff;color:#a93e34;padding:7px 10px;font-size:10px;font-weight:700}
 .inventory-delete:hover{background:#fff1ef}.inventory-delete:disabled{opacity:.5;cursor:wait}
 .inventory-action-message{margin:0;padding:10px 18px;color:#335d4b;font-size:11px}.inventory-action-message.error{color:#a93e34}
-.trend-controls{position:relative;display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}
-.trend-date-field{display:grid;gap:5px;color:#78858d;font-size:10px;font-weight:700}
-.trend-date-button{min-width:145px;padding:9px 12px;border:1px solid #dce5e8;border-radius:8px;background:#fff;color:#27343c;text-align:left;font-size:11px;font-weight:700}
-.trend-date-button:hover,.trend-date-button[aria-expanded=true]{border-color:#62bea0;background:#f6fcf9}
-.trend-reset{padding:9px 12px;border:1px solid #e1e8e7;border-radius:8px;background:#f5f8f7;color:#53656a;font-size:10px;font-weight:700}
-.trend-range-summary,.chart-day-details{margin:10px 0 0;color:#60717a;font-size:10px;line-height:1.5}
-.chart-day-details{min-height:16px}.trend-range-error{width:100%;color:#a93e34;font-size:11px;margin:0}
-.trend-calendar{position:absolute;top:100%;left:0;z-index:10;width:min(326px,100%);padding:14px;margin-top:6px;border:1px solid #d9e3e1;border-radius:13px;background:#fff;box-shadow:0 18px 45px #22334424}
-.calendar-header{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:12px}
-.calendar-header strong{color:#27343c;font-size:13px}.calendar-header button{width:30px;height:30px;border:1px solid #e2e9e7;border-radius:7px;background:#fff;color:#35444a}
-.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}
-.calendar-weekday{padding:5px 0;color:#7c8991;font-size:10px;font-weight:800}
-.calendar-day{height:35px;border:0;border-radius:7px;background:#fff;color:#36454c;font-size:11px}
-.calendar-day:hover:not(:disabled){background:#e4f6ed}.calendar-day.selected{background:#218c66;color:#fff;font-weight:800}.calendar-day.between:not(.selected){background:#eef8f2}
-.calendar-day:disabled{color:#c4cdd0;cursor:default}.calendar-close{border:0;background:none;color:#5f6d72;font-size:12px;text-decoration:underline}
-@media(max-width:560px){.trend-date-field{flex:1}.trend-date-button{width:100%;min-width:0}.trend-calendar{width:100%}}
 .finance-screen{padding:34px 0 55px}.finance-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
 .finance-summary-grid article{display:grid;gap:8px;padding:18px;border:1px solid #e2e9e7;border-radius:13px;background:#fff}
 .finance-summary-grid span{color:#75838b;font-size:10px;font-weight:700}.finance-summary-grid strong{color:#22343d;font-size:20px;overflow-wrap:anywhere}
@@ -76,9 +60,6 @@
 .finance-cash-strip{margin:-3px 0 20px;padding:12px 16px;background:#edf8f3;border:1px solid #d8eae0;border-radius:11px;color:#435c53}.finance-cash-strip p{margin:0;color:#567a6a;font-size:11px;line-height:1.5}
 .finance-purchase-note{margin:-9px 0 18px}
 .finance-costs-summary{display:grid;grid-template-columns:1fr;justify-items:center;text-align:center;gap:12px}.finance-summary-copy{justify-items:center}.finance-chevron{width:40px;height:40px}
-.comparison-toolbar{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-top:15px;flex-wrap:wrap}.comparison-metric{display:grid;gap:5px;color:#79868c;font-size:12px;font-weight:800}.comparison-metric select{min-width:168px;padding:11px 14px;border:1px solid #dce5e8;border-radius:9px;background:#fff;color:#27343c;font-size:13px;font-weight:700}
-.comparison-legend{display:flex;gap:36px;flex-wrap:wrap;margin:22px 0 8px}.comparison-legend-item{display:grid;grid-template-columns:14px auto;column-gap:9px;align-items:center;color:#728087;font-size:14px}.comparison-dot{width:12px;height:12px;border-radius:50%;background:#e87518}.comparison-dot.previous{background:#f6cbb3}.comparison-legend-item strong{grid-column:2;color:#23343d;font:800 25px Manrope,sans-serif}.comparison-legend-item small{grid-column:2;color:#9aa6aa;font-size:10px}
-.comparison-chart .chart-grid{stroke:#eef1f2;stroke-dasharray:none}.comparison-chart .chart-line{stroke-linejoin:round;stroke-linecap:round}.comparison-chart .comparison-previous{stroke:#f6cbb3;stroke-width:2.8}.comparison-chart .comparison-selected{stroke:#e87518;stroke-width:4.2}.comparison-area{stroke:none;pointer-events:none}.comparison-baseline{stroke:#e9eeee;stroke-width:1}.comparison-tick{stroke:#e8eeee;stroke-width:1}.comparison-chart:focus-visible{outline:2px solid #e87518;outline-offset:2px}
 .app-shell{max-width:1360px}.pos-screen{padding:34px 0 48px}.pos-screen .hub-heading{margin-bottom:21px}.pos-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.76fr);gap:19px;align-items:start}
 .pos-catalog{min-width:0}.pos-search-wrap{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #dce3e5;border-radius:14px;padding:0 15px;min-height:54px}.pos-search-wrap span{color:#61747c;font-size:20px}.pos-search-wrap input{border:0;outline:0;background:transparent;width:100%;font:16px Georgia,serif;color:#22323a}.pos-search-wrap:focus-within{border-color:#28a979;box-shadow:0 0 0 3px #27ad7c19}.pos-filters{display:flex;gap:9px;margin:17px 0 20px}.pos-filter{border:1px solid #cfd6d8;border-radius:25px;padding:10px 19px;background:transparent;color:#53646c;font:15px Georgia,serif}.pos-filter.active{border-color:#17242a;background:#17242a;color:#fff}
 .pos-product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.pos-product{overflow:hidden;border:1px solid #e6ebed;border-radius:17px;background:#fff;box-shadow:0 8px 22px #2632380b;display:flex;flex-direction:column;text-align:left;padding:0;min-width:0;transition:transform .16s,box-shadow .16s}.pos-product:not(:disabled):hover{transform:translateY(-2px);box-shadow:0 14px 28px #26323817}.pos-product:disabled{cursor:default;opacity:.69}.pos-product-image{width:100%;aspect-ratio:1.35;object-fit:cover;background:#eaf3ee}.pos-product-placeholder{display:grid;place-items:center;color:#7eaaa0;font:800 45px Manrope,sans-serif;background:linear-gradient(145deg,#eff7f3,#deeae6)}.pos-product-details{display:grid;gap:7px;padding:14px 16px 17px}.pos-product-name{font:18px Georgia,serif;color:#1c2a2f;overflow-wrap:anywhere}.pos-product-price{font:700 22px Georgia,serif;color:#14242a}.pos-product-meta{font-size:10px;color:#8a979d}
@@ -91,6 +72,53 @@
 @media(max-width:410px){.pos-product-grid{gap:9px}.pos-product-details{padding:10px}.pos-product-name{font-size:15px}.pos-product-price{font-size:18px}}
 @media(max-width:900px){.finance-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.finance-screen{padding-top:22px}.finance-form-grid{grid-template-columns:1fr 1fr;gap:8px}.finance-summary-grid article{padding:13px}.finance-summary-grid strong{font-size:16px}.finance-section-heading{align-items:flex-start;flex-direction:column}}
+</style>
+<style>
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
+.dashboard-screen{max-width:1020px;padding-top:26px}.dashboard-screen .hub-heading{margin-bottom:15px}.dashboard-screen .hub-heading h1{font:700 30px/1.1 Georgia,serif;letter-spacing:-.03em}
+.overview-period-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:62px;padding:10px 15px;border:1px solid #e3e3e3;border-radius:16px;background:#fff;font:600 12px Georgia,serif;color:#151515}
+.overview-period-bar>strong{font-size:13px;margin-right:3px}.overview-period-text{margin-left:auto;color:#495d72;font-size:12px}
+.overview-segments{display:inline-flex;gap:3px;padding:4px;border:1px solid #dedede;border-radius:13px;background:#f8f8f8}
+.overview-segments button{border:0;border-radius:9px;background:transparent;color:#646464;padding:7px 11px;font:600 12px Georgia,serif;white-space:nowrap}
+.overview-segments button.active{background:#111;color:#fff}.overview-segments button:focus-visible,.overview-alert-filters button:focus-visible{outline:2px solid #1769c6;outline-offset:2px}
+.overview-date{position:relative;display:inline-flex;align-items:center;border:1px solid #d3d3d3;border-radius:10px;background:#f8f8f8;padding:0 10px;min-height:39px;color:#242424}
+.overview-date input{border:0;outline:0;min-width:125px;max-width:148px;background:transparent;color:#1d1d1d;font:600 12px Georgia,serif;cursor:pointer}
+.overview-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}
+.overview-kpis article{min-height:140px;display:flex;flex-direction:column;align-items:flex-start;padding:18px;background:#fff;border:1px solid #e5e5e5;border-radius:18px;box-shadow:0 10px 24px #17232b0c}
+.overview-kpis article>span{color:#2a3749;font:500 14px/1.3 'DM Sans',system-ui,sans-serif}.overview-kpis article>strong{margin:17px 0 auto;color:#101821;font:700 28px/1.1 'DM Sans',system-ui,sans-serif;letter-spacing:-.04em}
+.overview-kpis article>p{margin:10px 0 0;display:flex;gap:7px;align-items:baseline;flex-wrap:wrap;color:#687789;font:12px/1.3 'DM Sans',system-ui,sans-serif}
+.overview-kpis article b{color:#269a20;font-weight:750}.overview-kpis article b.down{color:#d65332}.overview-kpis article b.neutral{color:#8c98a5}
+.overview-panels{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px;margin-top:14px;align-items:start}
+.overview-panel{overflow:hidden;background:#fff;border:1px solid #e4e4e4;border-radius:19px;box-shadow:0 12px 26px #17232b0b}
+.overview-panel-heading,.overview-best-heading{display:flex;justify-content:space-between;align-items:center;gap:13px;padding:18px 20px;border-bottom:1px solid #e8e8e8;flex-wrap:wrap}
+.overview-panel h2{margin:0;color:#111;font:700 20px/1.2 Georgia,serif;letter-spacing:-.02em}.overview-panel-heading p,.overview-best-heading p{margin:4px 0 0;color:#666;font:12px/1.4 Georgia,serif}
+.overview-chart-key{display:flex;flex-wrap:wrap;gap:14px;color:#666;font:15px Georgia,serif}.overview-chart-key span{display:inline-flex;align-items:center;gap:7px}.overview-chart-key i{width:11px;height:11px;border-radius:50%;display:inline-block}.overview-chart-key .orange{background:#e87518}.overview-chart-key .green{background:#17a552}
+.overview-chart-body{position:relative;padding:18px 18px 12px;min-height:250px}.overview-chart-body svg{width:100%;display:block;height:auto;min-height:215px}
+.overview-chart-body .overview-empty{position:absolute;inset:0;margin:auto;display:grid;place-items:center;pointer-events:none}.overview-empty{color:#7c8491;text-align:center;font:16px/1.4 Georgia,serif}
+.overview-alert-heading{display:flex;justify-content:center;align-items:center;gap:12px;padding:19px 18px 0;flex-wrap:wrap}.overview-alert-heading h2{color:#142249;font-size:20px}
+.overview-live{margin-left:auto;color:#687488;font:700 13px Georgia,serif;white-space:nowrap}.overview-live i{display:inline-block;width:10px;height:10px;margin-right:7px;border-radius:50%;background:#14b687;box-shadow:0 0 0 7px #e6f7f1}
+.overview-alert-panel>p{margin:10px 15px 17px;text-align:center;color:#6b7790;font:14px Georgia,serif}
+.overview-alert-filters{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 18px 17px}
+.overview-alert-filters button{border:1px solid #cfd6dd;background:#fff;color:#142249;border-radius:25px;padding:8px 6px;font:700 12px Georgia,serif}
+.overview-alert-filters button.active{background:#142249;border-color:#142249;color:#fff}
+.overview-alert-list{border-top:1px solid #e8e8e8;padding:15px 18px;min-height:120px;max-height:235px;overflow:auto}
+.overview-alert-list .overview-empty{border:1px dashed #cdd6e1;border-radius:17px;margin:0;padding:25px 8px}
+.overview-alert-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 8px;border-bottom:1px solid #eef1f3;color:#263847;font-size:13px}.overview-alert-row:last-child{border:0}.overview-alert-row small{display:block;color:#8a95a1;margin-top:3px}
+.overview-alert-row b{border-radius:17px;padding:6px 10px;font-size:11px;white-space:nowrap;background:#fff1e9;color:#b7562c}.overview-alert-row b.critical{background:#fff0ed;color:#bf3e33}
+.overview-best-panel{margin-top:14px}.overview-best-heading{align-items:center}.overview-best-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.overview-chart-choice button{padding:8px 10px}.overview-best-body{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(190px,.65fr);gap:16px;padding:18px 20px 22px}
+.overview-best-stage{position:relative;min-height:285px;display:grid;place-items:center;border:1px solid #e2e2e2;border-radius:16px;background:#f8f8f8;overflow:hidden}
+.overview-best-stage.is-bar{display:block;place-items:start;overflow-x:auto;overflow-y:hidden}
+.overview-best-stage svg{width:100%;max-width:650px;height:auto;display:block;overflow:visible}.overview-best-stage #bestSellingBar{max-width:none}
+.overview-best-stage .overview-empty{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);margin:0;padding:10px;pointer-events:none}
+.overview-best-legend{align-self:center;display:grid;gap:11px;max-height:350px;overflow-y:auto}.overview-best-legend p{margin:0;color:#677687;font:15px/1.5 Georgia,serif}
+.overview-legend-row{display:flex;justify-content:space-between;gap:13px;align-items:center;color:#273a47;font-size:13px}.overview-legend-row>span:first-child{display:flex;align-items:center;gap:9px;min-width:0}.overview-legend-row i{display:inline-block;width:14px;height:14px;border-radius:4px;flex:none}.overview-legend-row .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.overview-legend-row strong{white-space:nowrap;font-size:12px}
+.overview-legend-row.muted{color:#8c98a4}
+.finance-screen .expense-panel{max-width:none;margin:0 0 18px}
+@media(max-width:1100px){.overview-kpis{gap:10px}.overview-kpis article{padding:20px 17px}.overview-panels{grid-template-columns:1fr}.overview-best-body{grid-template-columns:1fr}.overview-best-legend{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-period-text{margin-left:0}}
+@media(max-width:700px){.overview-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-kpis article{min-height:150px}.overview-kpis article>strong{font-size:28px;margin-top:15px}.overview-panel-heading,.overview-best-heading{padding:20px}.overview-best-body{padding:16px}.overview-alert-filters{margin-left:17px;margin-right:17px}.overview-period-bar{gap:9px;padding:12px}.overview-date input{min-width:120px}.overview-best-legend{grid-template-columns:1fr}}
+@media(max-width:420px){.overview-kpis article>span{font-size:14px}.overview-kpis article>p{font-size:11px}.overview-panel h2{font-size:21px}.overview-best-controls{width:100%}.overview-best-controls .overview-segments{max-width:100%}.overview-segments button{padding:9px 11px;font-size:12px}}
 </style>
 </head>
 <body>
@@ -116,42 +144,41 @@
           <div><div class="eyebrow"><span class="eyebrow-line"></span> STORE OVERVIEW</div><h1>Dashboard</h1><p>Revenue, profit and stock at a glance.</p></div>
           <span id="dashboardUpdated" class="updated-label">Updating…</span>
         </header>
-        <div class="metric-grid">
-          <article class="metric-card revenue-card"><span class="metric-label">Total revenue <small>ALL TIME</small></span><strong id="revenueTotal">—</strong><span class="metric-foot">Completed sales</span></article>
-          <article class="metric-card gross-card"><span class="metric-label">Gross profit <small>ALL TIME</small></span><strong id="grossProfitTotal">—</strong><span class="metric-foot">Revenue minus product cost</span></article>
-          <article class="metric-card net-card"><span class="metric-label">Net profit <small>THIS MONTH</small></span><strong id="netProfitTotal">Unavailable</strong><span id="netProfitFoot" class="metric-foot">Cash basis · enter monthly costs in Finance</span></article>
-          <article class="metric-card stock-card"><span class="metric-label">Inventory on hand <small>UNITS</small></span><strong id="inventoryUnitsTotal">—</strong><span class="metric-foot">Current sellable quantity</span></article>
-        </div>
-        <section class="chart-card">
-          <div class="chart-heading"><div><span class="eyebrow">PERIOD COMPARISON</span><h2>Performance trend</h2><p>Compare one measure across two matching periods</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ One-time expense</button></div>
-          <div id="trendControls" class="trend-controls">
-            <div class="trend-date-field"><span>From</span><button id="trendFromButton" class="trend-date-button" type="button" aria-haspopup="dialog" aria-expanded="false">Choose start date</button></div>
-            <div class="trend-date-field"><span>To</span><button id="trendToButton" class="trend-date-button" type="button" aria-haspopup="dialog" aria-expanded="false">Choose end date</button></div>
-            <button id="trendResetButton" class="trend-reset" type="button">Last month</button>
-            <div id="trendCalendar" class="trend-calendar hidden" role="dialog" aria-label="Choose chart date">
-              <div class="calendar-header"><button id="calendarPrevious" type="button" aria-label="Previous month">‹</button><strong id="calendarMonth"></strong><button id="calendarNext" type="button" aria-label="Next month">›</button></div>
-              <div id="calendarDays" class="calendar-grid"></div>
-              <button id="calendarClose" class="calendar-close" type="button">Close calendar</button>
-            </div>
-            <p id="trendRangeError" class="trend-range-error hidden" role="alert"></p>
+        <div class="overview-period-bar">
+          <strong>Dashboard period</strong>
+          <div class="overview-segments" role="group" aria-label="Dashboard period">
+            <button type="button" data-overview-period="day" aria-pressed="false">Day</button>
+            <button type="button" data-overview-period="month" class="active" aria-pressed="true">Month</button>
+            <button type="button" data-overview-period="year" aria-pressed="false">Year</button>
           </div>
-          <div class="comparison-toolbar"><p id="trendRangeSummary" class="trend-range-summary"></p><label class="comparison-metric" for="trendMetric">Compare<select id="trendMetric"><option value="revenue">Revenue</option><option value="grossProfit">Gross profit</option><option value="netProfit">Net profit (cash basis)</option><option value="inventoryUnits">Units in stock</option></select></label></div>
-          <div class="comparison-legend"><div class="comparison-legend-item"><i class="comparison-dot"></i><span id="selectedPeriodLabel">Last month</span><strong id="selectedPeriodValue">—</strong><small id="selectedPeriodDates"></small></div><div class="comparison-legend-item"><i class="comparison-dot previous"></i><span id="previousPeriodLabel">Previous month</span><strong id="previousPeriodValue">—</strong><small id="previousPeriodDates"></small></div></div>
-          <div class="chart-wrap"><svg id="metricsChart" class="comparison-chart" viewBox="0 0 920 320" role="img" aria-label="Area chart comparing the selected metric with the previous matching period"></svg></div>
-          <p id="chartDayDetails" class="chart-day-details" aria-live="polite">Point to or touch the chart for a day's exact values.</p>
-          <p id="profitDataNotice" class="profit-notice hidden"></p>
-          <p id="dashboardError" class="workflow-notice error hidden" role="status"></p>
+          <label class="overview-date"><span class="sr-only">Dashboard date</span><input id="overviewAnchor" type="date" lang="en-US" aria-label="Dashboard date"></label>
+          <span id="overviewPeriodText" class="overview-period-text">Loading period…</span>
+        </div>
+        <div class="overview-kpis">
+          <article><span id="overviewRevenueLabel">Revenue · Month</span><strong id="overviewRevenue">—</strong><p>vs previous period <b id="overviewRevenueDelta">—</b></p></article>
+          <article><span id="overviewOrdersLabel">Orders · Month</span><strong id="overviewOrders">—</strong><p>vs previous period <b id="overviewOrdersDelta">—</b></p></article>
+          <article><span>Stock Alerts</span><strong id="overviewAlertCount">—</strong><p>Live inventory <b id="overviewAlertBreakdown">—</b></p></article>
+          <article><span>Products</span><strong id="overviewProductCount">—</strong><p><b id="overviewStockBreakdown">Current catalog</b></p></article>
+        </div>
+        <div class="overview-panels">
+          <section class="overview-panel overview-revenue-panel">
+            <div class="overview-panel-heading"><div><h2>Revenue Chart</h2><p id="overviewChartSubtitle">Completed sales</p></div><div class="overview-chart-key"><span><i class="orange"></i>Revenue</span><span><i class="green"></i>Gross Profit</span></div></div>
+            <div class="overview-chart-body"><svg id="overviewRevenueChart" viewBox="0 0 900 320" role="img" aria-label="Revenue and gross profit for the selected period"></svg><p id="overviewChartEmpty" class="overview-empty hidden">No completed sales in this period.</p></div>
+          </section>
+          <section class="overview-panel overview-alert-panel">
+            <div class="overview-alert-heading"><h2>Stock Alerts</h2><span class="overview-live"><i></i> Real-time</span></div>
+            <p id="overviewAlertHeadline">Checking current stock…</p>
+            <div class="overview-alert-filters" role="group" aria-label="Filter stock alerts"><button type="button" data-alert-filter="all" class="active" aria-pressed="true">All</button><button type="button" data-alert-filter="critical" aria-pressed="false">Critical</button><button type="button" data-alert-filter="low" aria-pressed="false">Low</button></div>
+            <div id="overviewAlertList" class="overview-alert-list"><p class="overview-empty">Loading alerts…</p></div>
+          </section>
+        </div>
+        <section class="overview-panel overview-best-panel">
+          <div class="overview-best-heading"><div><h2>Best Selling Item Share</h2><p id="bestSellingSubtitle">Quantity share</p></div>
+            <div class="overview-best-controls"><div class="overview-segments" role="group" aria-label="Best selling item period"><button type="button" data-best-period="day" class="active" aria-pressed="true">Day</button><button type="button" data-best-period="month" aria-pressed="false">Month</button><button type="button" data-best-period="year" aria-pressed="false">Year</button></div><label class="overview-date"><span class="sr-only">Best selling date</span><input id="bestSellingAnchor" type="date" lang="en-US" aria-label="Best selling date"></label><div class="overview-segments overview-chart-choice" role="group" aria-label="Best selling chart type"><button type="button" data-best-view="pie" class="active" aria-pressed="true">3D pie</button><button type="button" data-best-view="bar" aria-pressed="false">Bar chart</button></div></div>
+          </div>
+          <div class="overview-best-body"><div class="overview-best-stage" id="bestSellingStage"><svg id="bestSellingPie" viewBox="0 0 620 350" role="img" aria-label="Three-dimensional ring showing best selling item quantity share"></svg><svg id="bestSellingBar" class="hidden" viewBox="0 0 820 350" role="img" aria-label="Product-colored bars comparing selected and previous period quantities"></svg><p id="bestSellingEmpty" class="overview-empty hidden">No item sales recorded for this period.</p></div><div id="bestSellingLegend" class="overview-best-legend"></div></div>
         </section>
-        <section id="expensePanel" class="workflow-card expense-panel hidden">
-          <div class="workflow-card-heading"><div><span class="eyebrow">OTHER COST</span><h2>Record a one-time expense</h2></div><button id="closeExpenseButton" class="clear-button" type="button">Close</button></div>
-          <form id="expenseForm" class="inventory-form">
-            <label>Expense name<input id="expenseTitle" type="text" maxlength="200" placeholder="For example: repairs or supplies" required></label>
-            <p class="finance-help">Enter recurring utility, salary, and mortgage amounts in Finance. Recording them here too would count them twice.</p>
-            <div class="form-grid"><label>Amount<input id="expenseAmount" type="number" min="0.01" step="0.01" required></label><label>Date<input id="expenseDate" type="date" required></label></div>
-            <p id="expenseMessage" class="workflow-notice hidden" role="status"></p>
-            <button id="saveExpenseButton" class="workflow-primary" type="submit">Save expense</button>
-          </form>
-        </section>
+        <p id="dashboardError" class="workflow-notice error hidden" role="status"></p>
       </section>
 
       <section id="inventoryScreen" class="inventory-screen hidden">
@@ -189,7 +216,17 @@
       </section>
 
       <section id="financeScreen" class="finance-screen hidden">
-        <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE FINANCE</div><h1>Finance</h1><p>Set selling prices and plan the cash needed for monthly bills.</p></div></header>
+        <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE FINANCE</div><h1>Finance</h1><p>Set selling prices and plan the cash needed for monthly bills.</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ One-time expense</button></header>
+        <section id="expensePanel" class="workflow-card expense-panel hidden">
+          <div class="workflow-card-heading"><div><span class="eyebrow">OTHER COST</span><h2>Record a one-time expense</h2></div><button id="closeExpenseButton" class="clear-button" type="button">Close</button></div>
+          <form id="expenseForm" class="inventory-form">
+            <label>Expense name<input id="expenseTitle" type="text" maxlength="200" placeholder="For example: repairs or supplies" required></label>
+            <p class="finance-help">Enter recurring utility, salary, and mortgage amounts in Finance. Recording them here too would count them twice.</p>
+            <div class="form-grid"><label>Amount<input id="expenseAmount" type="number" min="0.01" step="0.01" required></label><label>Date<input id="expenseDate" type="date" required></label></div>
+            <p id="expenseMessage" class="workflow-notice hidden" role="status"></p>
+            <button id="saveExpenseButton" class="workflow-primary" type="submit">Save expense</button>
+          </form>
+        </section>
         <div class="finance-summary-grid">
           <article class="finance-metric-card"><span class="finance-metric-title">Fixed costs / month</span><div class="finance-ring"><strong id="financeMonthlyTotal">Not entered</strong><small>Bills and mortgage</small></div><span id="financeFixedDelta" class="finance-delta unknown">No previous plan</span></article>
           <article class="finance-metric-card"><span class="finance-metric-title">Product purchase cost / month</span><div class="finance-ring"><strong id="financeProductPurchases">—</strong><small>Inbound stock bought</small></div><span id="financePurchaseDelta" class="finance-delta unknown">Previous month unavailable</span></article>
