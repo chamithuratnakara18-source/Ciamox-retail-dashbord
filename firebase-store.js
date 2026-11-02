@@ -104,85 +104,6 @@ function comparisonDates(from, to) {
   return { from: previousFrom, to: previousTo, wholeMonth };
 }
 
-function overviewRange(period, anchor) {
-  validDate(anchor, 'dashboard date');
-  if (anchor > todayLocal()) throw new Error('Choose a dashboard date up to today.');
-  if (!['day', 'month', 'year'].includes(period)) throw new Error('Choose Day, Month, or Year.');
-  const [year, month] = anchor.split('-').map(Number);
-  const date = (y, m, d) => new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
-  if (period === 'day') {
-    const previous = date(year, month - 1, Number(anchor.slice(-2)) - 1);
-    return { from: anchor, to: anchor, previousFrom: previous, previousTo: previous };
-  }
-  if (period === 'month') {
-    const from = `${anchor.slice(0, 7)}-01`;
-    const to = [date(year, month, 0), todayLocal()].sort()[0];
-    const previousFrom = date(year, month - 2, 1);
-    const previousEnd = date(year, month - 1, 0);
-    const previousTo = to === date(year, month, 0) ? previousEnd
-      : date(year, month - 2, Math.min(Number(to.slice(-2)), Number(previousEnd.slice(-2))));
-    return { from, to, previousFrom, previousTo };
-  }
-  const from = `${year}-01-01`;
-  const to = [`${year}-12-31`, todayLocal()].sort()[0];
-  const previousFrom = `${year - 1}-01-01`;
-  const priorEnd = `${year - 1}-12-31`;
-  const previousTo = to === `${year}-12-31` ? priorEnd : date(year - 1, Number(to.slice(5, 7)) - 1,
-    Math.min(Number(to.slice(-2)), new Date(Date.UTC(year - 1, Number(to.slice(5, 7)), 0)).getUTCDate()));
-  return { from, to, previousFrom, previousTo };
-}
-
-function overview(data, period, anchor) {
-  const range = overviewRange(period, anchor);
-  const within = (day, from, to) => typeof day === 'string' && day >= from && day <= to;
-  const sales = data.sales.filter(sale => within(sale.day, range.from, range.to));
-  const previousSales = data.sales.filter(sale => within(sale.day, range.previousFrom, range.previousTo));
-  const revenue = entries => entries.reduce((sum, sale) => sum + (Number(sale.totalOriginalPrice) || 0), 0);
-  const gross = entries => entries.some(sale => sale.grossProfit == null || !Number.isFinite(Number(sale.grossProfit)))
-    ? null : entries.reduce((sum, sale) => sum + Number(sale.grossProfit), 0);
-  const buckets = period === 'month'
-    ? Array.from({ length: Math.ceil(Number(range.to.slice(-2)) / 7) }, (_, index) => ({
-      label: `${index * 7 + 1}–${Math.min((index + 1) * 7, Number(range.to.slice(-2)))}`,
-      from: `${range.from.slice(0, 7)}-${String(index * 7 + 1).padStart(2, '0')}`,
-      to: `${range.from.slice(0, 7)}-${String(Math.min((index + 1) * 7, Number(range.to.slice(-2)))).padStart(2, '0')}`,
-    }))
-    : period === 'year'
-      ? Array.from({ length: Number(range.to.slice(5, 7)) }, (_, index) => ({
-        label: new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(Number(range.from.slice(0, 4)), index, 1))),
-        from: `${range.from.slice(0, 4)}-${String(index + 1).padStart(2, '0')}-01`,
-        to: `${range.from.slice(0, 4)}-${String(index + 1).padStart(2, '0')}-${String(new Date(Date.UTC(Number(range.from.slice(0, 4)), index + 1, 0)).getUTCDate()).padStart(2, '0')}`,
-      })) : [{ label: anchor.slice(5), from: anchor, to: anchor }];
-  const chart = buckets.map(bucket => {
-    const entries = sales.filter(sale => within(sale.day, bucket.from, bucket.to));
-    return { label: bucket.label, revenue: revenue(entries), grossProfit: gross(entries) };
-  });
-  const counts = entries => {
-    const result = new Map();
-    entries.forEach(sale => (Array.isArray(sale.items) ? sale.items : []).forEach(item => {
-      const quantity = Number(item.quantity);
-      if (typeof item.barcode !== 'string' || !Number.isFinite(quantity) || quantity <= 0) return;
-      const existing = result.get(item.barcode);
-      result.set(item.barcode, { barcode: item.barcode, name: String(item.name || item.barcode),
-        quantity: (existing?.quantity || 0) + quantity });
-    }));
-    return [...result.values()];
-  };
-  const bestSelling = counts(sales).sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name));
-  const previousSelling = counts(previousSales);
-  const products = sortedProducts(data.products);
-  const alerts = products.filter(product => product.quantity <= 5)
-    .map(product => ({ barcode: product.barcode, name: product.name, quantity: product.quantity,
-      status: product.quantity === 0 ? 'critical' : 'low' }));
-  return {
-    period, anchor, range, totals: { revenue: revenue(sales), previousRevenue: revenue(previousSales),
-      orders: sales.length, previousOrders: previousSales.length, grossProfit: gross(sales),
-      productCount: products.length, stockAlerts: alerts.length,
-      critical: alerts.filter(alert => alert.status === 'critical').length,
-      low: alerts.filter(alert => alert.status === 'low').length },
-    chart, alerts, bestSelling, previousSelling,
-  };
-}
-
 function purchaseCostInMonth(receipts, month) {
   const inbound = receipts.filter(item => item.type !== 'inventory_removal' &&
     Number(item.quantity) > 0 && item.arrivalDate?.startsWith(month));
@@ -642,10 +563,6 @@ export async function api(path, options = {}) {
     const selected = summarize(data, from, to);
     const previous = comparisonDates(from, to);
     return { ...selected, comparison: { ...previous, points: summarize(data, previous.from, previous.to).points } };
-  }
-  if (url.pathname === '/api/overview' && method === 'GET') {
-    return overview(await loadCollections(), url.searchParams.get('period') || 'month',
-      url.searchParams.get('anchor') || todayLocal());
   }
   if (url.pathname === '/api/inventory' && method === 'GET') {
     const barcode = url.searchParams.get('barcode')?.trim();
