@@ -158,13 +158,18 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
 @media(max-width:700px){.dashboard-screen{padding-top:20px}.overview-period-bar{min-height:auto}.overview-kpis article{min-height:132px;padding:14px}.overview-kpis article>strong{font-size:25px}.overview-chart-body{min-height:215px}.overview-chart-body svg{min-height:185px}}
 </style>
 <style>
-.inventory-category-products{grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),360px));justify-content:start;gap:12px}
-.inventory-category-product{border-radius:13px}.inventory-category-product-media{height:210px;padding:10px}
-.inventory-category-product-details{padding:11px 12px 13px}.inventory-category-product-details h3{font-size:14px}
-.inventory-category-facts{gap:8px 10px;margin-top:10px}.inventory-category-facts p:first-child{grid-column:1/-1}
-.inventory-category-facts span{font-size:10px}.inventory-category-facts strong{font-size:11px}
-@media(max-width:760px){.inventory-category-products{grid-template-columns:repeat(2,minmax(0,1fr))}.inventory-category-product-media{height:160px}}
-@media(max-width:440px){.inventory-category-products{grid-template-columns:1fr}.inventory-category-product-media{height:180px}}
+#inventoryCategoryProducts.inventory-category-products{grid-template-columns:repeat(auto-fill,minmax(250px,320px));justify-content:start;align-items:start;gap:12px}
+#inventoryCategoryProducts .inventory-category-product{width:100%;border-radius:13px}
+#inventoryCategoryProducts .inventory-category-product-media{height:190px;padding:9px;overflow:hidden}
+#inventoryCategoryProducts .inventory-category-product-media>img{display:block;width:100%;height:100%;object-fit:cover;border-radius:8px}
+#inventoryCategoryProducts .inventory-category-product-details{display:grid;gap:8px;padding:11px 12px 13px}
+#inventoryCategoryProducts .inventory-category-product-details h3{font-size:14px;line-height:1.3}
+#inventoryCategoryProducts .inventory-category-facts{gap:8px 10px;margin-top:0}
+#inventoryCategoryProducts .inventory-category-facts p:first-child{grid-column:1/-1}
+#inventoryCategoryProducts .inventory-category-facts span{font-size:10px}
+#inventoryCategoryProducts .inventory-category-facts strong{font-size:11px}
+@media(max-width:760px){#inventoryCategoryProducts.inventory-category-products{grid-template-columns:repeat(2,minmax(0,1fr))}#inventoryCategoryProducts .inventory-category-product-media{height:160px}}
+@media(max-width:440px){#inventoryCategoryProducts.inventory-category-products{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#inventoryCategoryProducts .inventory-category-product-media{height:132px;padding:7px}#inventoryCategoryProducts .inventory-category-product-details{gap:6px;padding:9px}.inventory-category-facts{gap:7px 5px}#inventoryCategoryProducts .inventory-category-facts span{font-size:9px}#inventoryCategoryProducts .inventory-category-facts strong{font-size:10px}}
 </style>
 </head>
 <body>
@@ -365,6 +370,6 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
   
   
   
-  <script type="module" src="./hub.js"></script>
+  <script type="module" src="./hub.js?v=category-cards-20261102-2"></script>
 </body>
 </html>
