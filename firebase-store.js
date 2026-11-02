@@ -69,6 +69,7 @@ function shapeProduct(data) {
     originalPrice: data.originalPrice == null ? null : Number(data.originalPrice),
     unitCost: data.unitCost == null ? null : Number(data.unitCost),
     arrivalDate: data.arrivalDate || '', supplierName: data.supplierName || '', category: data.category || '',
+    manufactureDate: data.manufactureDate || '', expiryDate: data.expiryDate || '',
     photoDataUrl: data.photoDataUrl || '',
     updatedAt: data.updatedAt,
   };
@@ -537,6 +538,11 @@ async function receive(body) {
   const unitCost = positiveNumber(body.unitCost, 'purchase cost', { zero: true });
   const arrivalDate = todayLocal();
   const supplierName = validText(body.supplierName, 'supplier name');
+  const manufactureDate = body.manufactureDate ? validDate(body.manufactureDate, 'manufacture date') : '';
+  const expiryDate = body.expiryDate ? validDate(body.expiryDate, 'expiry date') : '';
+  if (manufactureDate && expiryDate && expiryDate < manufactureDate) {
+    throw new Error('Expiry date must be on or after the manufacture date.');
+  }
   const photoDataUrl = body.photoDataUrl || '';
   if (typeof photoDataUrl !== 'string' || photoDataUrl.length > 100000 ||
       (photoDataUrl && !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photoDataUrl))) {
@@ -554,6 +560,8 @@ async function receive(body) {
     const product = {
       barcode, name, quantity: nextQuantity, originalPrice: existing?.originalPrice ?? null,
       unitCost: averageCost, arrivalDate, supplierName,
+      manufactureDate: manufactureDate || existing?.manufactureDate || '',
+      expiryDate: expiryDate || existing?.expiryDate || '',
       photoDataUrl: photoDataUrl || existing?.photoDataUrl || '', category: existing?.category || '',
       updatedAt: serverTimestamp(),
     };

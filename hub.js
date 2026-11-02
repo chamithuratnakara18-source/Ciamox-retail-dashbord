@@ -10,13 +10,16 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   const inventoryTableBody = document.getElementById('inventoryTableBody');
   const inventoryEmpty = document.getElementById('inventoryEmpty');
   const inventorySearch = document.getElementById('inventorySearch');
-  const categoryList = document.getElementById('inventoryCategoryList');
+  const categoryFilters = document.getElementById('inventoryCategoryFilters');
+  const categoryProducts = document.getElementById('inventoryCategoryProducts');
+  const categorySearch = document.getElementById('inventoryCategorySearch');
   const categoryDialog = document.getElementById('inventoryCategoryDialog');
   const categoryDialogMessage = document.getElementById('inventoryCategoryDialogMessage');
   let dashboardRequestId = 0;
   let currentView = 'dashboard';
   let inventoryProducts = [];
   let inventoryCategories = [];
+  let activeInventoryCategory = 'All products';
   let categoryProduct = null;
   let financeProducts = [];
   let financePlan = null;
@@ -102,6 +105,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   document.getElementById('expenseForm').addEventListener('submit', saveExpense);
   document.getElementById('refreshInventoryButton').addEventListener('click', () => { void refreshInventory(); });
   inventorySearch.addEventListener('input', renderInventoryTable);
+  categorySearch.addEventListener('input', renderInventoryCategories);
   document.querySelectorAll('[data-inventory-tab]').forEach(button => button.addEventListener('click', () => {
     const selected = button.dataset.inventoryTab;
     document.querySelectorAll('[data-inventory-tab]').forEach(tab => {
@@ -820,18 +824,65 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   }
 
   function renderInventoryCategories() {
-    categoryList.replaceChildren();
-    if (!inventoryCategories.length) {
-      const empty = document.createElement('span'); empty.className = 'inventory-empty';
-      empty.textContent = 'No product categories added.'; categoryList.append(empty); return;
+    const hasUncategorized = inventoryProducts.some(product => !product.category);
+    const categories = ['All products', ...inventoryCategories, ...(hasUncategorized ? ['Uncategorized'] : [])];
+    if (!categories.includes(activeInventoryCategory)) activeInventoryCategory = 'All products';
+    categoryFilters.replaceChildren(...categories.map(category => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'inventory-category-filter';
+      button.textContent = category;
+      button.setAttribute('aria-pressed', String(category === activeInventoryCategory));
+      button.classList.toggle('active', category === activeInventoryCategory);
+      button.addEventListener('click', () => { activeInventoryCategory = category; renderInventoryCategories(); });
+      return button;
+    }));
+
+    const query = categorySearch.value.trim().toLocaleLowerCase();
+    const products = inventoryProducts.filter(product => {
+      const inCategory = activeInventoryCategory === 'All products' ||
+        (activeInventoryCategory === 'Uncategorized' ? !product.category : product.category === activeInventoryCategory);
+      const matchesQuery = `${product.name} ${product.barcode} ${product.supplierName}`.toLocaleLowerCase().includes(query);
+      return inCategory && matchesQuery;
+    });
+    categoryProducts.replaceChildren();
+    if (!products.length) {
+      const empty = document.createElement('p'); empty.className = 'inventory-category-empty';
+      empty.textContent = inventoryProducts.length ? 'No products match this category and search.' : 'No inventory products found.';
+      categoryProducts.append(empty); return;
     }
-    for (const category of inventoryCategories) {
-      const products = inventoryProducts.filter(product => product.category === category);
-      const entry = document.createElement('article'); entry.className = 'inventory-category-entry';
-      const title = document.createElement('strong'); title.textContent = category;
-      const count = document.createElement('small'); count.textContent = `${products.length} ${products.length === 1 ? 'product' : 'products'}`;
-      const names = document.createElement('p'); names.textContent = products.length ? products.map(product => product.name).join(', ') : 'No products assigned yet.';
-      entry.append(title, count, names); categoryList.append(entry);
+
+    const formatInventoryDate = value => {
+      if (!value) return '—';
+      const date = new Date(`${value}T00:00:00`);
+      return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+    };
+    for (const product of products) {
+      const card = document.createElement('article'); card.className = 'inventory-category-product';
+      const media = document.createElement('div'); media.className = 'inventory-category-product-media';
+      if (product.photoDataUrl?.startsWith('data:image/')) {
+        const image = document.createElement('img'); image.src = product.photoDataUrl; image.alt = product.name;
+        media.append(image);
+      } else {
+        const placeholder = document.createElement('div'); placeholder.className = 'inventory-category-product-placeholder';
+        placeholder.textContent = product.name.slice(0, 1).toLocaleUpperCase(); media.append(placeholder);
+      }
+      const stock = document.createElement('span'); stock.className = 'inventory-category-stock';
+      stock.textContent = `${Number(product.quantity || 0).toLocaleString()} Stock`; media.append(stock);
+      const details = document.createElement('div'); details.className = 'inventory-category-product-details';
+      const name = document.createElement('h3'); name.textContent = product.name;
+      const barcode = document.createElement('small'); barcode.className = 'inventory-category-barcode'; barcode.textContent = product.barcode;
+      const facts = document.createElement('div'); facts.className = 'inventory-category-facts';
+      for (const [label, value] of [
+        ['Supplier', product.supplierName || '—'],
+        ['Manufactured', formatInventoryDate(product.manufactureDate)],
+        ['Expires', formatInventoryDate(product.expiryDate)],
+      ]) {
+        const fact = document.createElement('p');
+        const caption = document.createElement('span'); caption.textContent = label;
+        const content = document.createElement('strong'); content.textContent = value;
+        fact.append(caption, content); facts.append(fact);
+      }
+      details.append(name, barcode, facts); card.append(media, details); categoryProducts.append(card);
     }
   }
 
