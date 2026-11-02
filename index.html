@@ -157,6 +157,15 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
 .inventory-category-dialog-content{display:grid;gap:13px;padding:23px}.inventory-category-dialog-content h2{margin:0;font:700 20px/1.25 Manrope,sans-serif}.inventory-category-dialog-content>p{margin:0;color:#718087;font-size:13px}.inventory-category-options{display:grid;grid-template-columns:1fr 1fr;gap:9px}.inventory-category-dialog-content label{display:block;margin:11px 0 6px;color:#55636c;font-size:12px;font-weight:700}.inventory-category-dialog-content input,.inventory-category-dialog-content select{box-sizing:border-box;width:100%;min-height:42px;padding:9px 11px;border:1px solid #dfe7e7;border-radius:9px;background:#fff;color:#25343c;font:inherit}.inventory-category-dialog-content #saveNewInventoryCategory,.inventory-category-dialog-content #assignExistingInventoryCategory{margin-top:10px}.inventory-category-dialog-message{color:#b35331;font-size:12px}.inventory-category-cancel{justify-self:end}
 @media(max-width:700px){.dashboard-screen{padding-top:20px}.overview-period-bar{min-height:auto}.overview-kpis article{min-height:132px;padding:14px}.overview-kpis article>strong{font-size:25px}.overview-chart-body{min-height:215px}.overview-chart-body svg{min-height:185px}}
 </style>
+<style>
+.inventory-category-products{grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),360px));justify-content:start;gap:12px}
+.inventory-category-product{border-radius:13px}.inventory-category-product-media{height:210px;padding:10px}
+.inventory-category-product-details{padding:11px 12px 13px}.inventory-category-product-details h3{font-size:14px}
+.inventory-category-facts{gap:8px 10px;margin-top:10px}.inventory-category-facts p:first-child{grid-column:1/-1}
+.inventory-category-facts span{font-size:10px}.inventory-category-facts strong{font-size:11px}
+@media(max-width:760px){.inventory-category-products{grid-template-columns:repeat(2,minmax(0,1fr))}.inventory-category-product-media{height:160px}}
+@media(max-width:440px){.inventory-category-products{grid-template-columns:1fr}.inventory-category-product-media{height:180px}}
+</style>
 </head>
 <body>
   <div class="app-shell">

@@ -870,19 +870,18 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       stock.textContent = `${Number(product.quantity || 0).toLocaleString()} Stock`; media.append(stock);
       const details = document.createElement('div'); details.className = 'inventory-category-product-details';
       const name = document.createElement('h3'); name.textContent = product.name;
-      const barcode = document.createElement('small'); barcode.className = 'inventory-category-barcode'; barcode.textContent = product.barcode;
       const facts = document.createElement('div'); facts.className = 'inventory-category-facts';
       for (const [label, value] of [
         ['Supplier', product.supplierName || '—'],
-        ['Manufactured', formatInventoryDate(product.manufactureDate)],
-        ['Expires', formatInventoryDate(product.expiryDate)],
+        ['Manufacture date', formatInventoryDate(product.manufactureDate)],
+        ['Expiry date', formatInventoryDate(product.expiryDate)],
       ]) {
         const fact = document.createElement('p');
         const caption = document.createElement('span'); caption.textContent = label;
         const content = document.createElement('strong'); content.textContent = value;
         fact.append(caption, content); facts.append(fact);
       }
-      details.append(name, barcode, facts); card.append(media, details); categoryProducts.append(card);
+      details.append(name, facts); card.append(media, details); categoryProducts.append(card);
     }
   }
 
