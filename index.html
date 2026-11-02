@@ -122,6 +122,34 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
 @media(max-width:700px){.overview-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-kpis article{min-height:150px}.overview-kpis article>strong{font-size:28px;margin-top:15px}.overview-panel-heading,.overview-best-heading{padding:20px}.overview-best-body{padding:16px}.overview-alert-filters{margin-left:17px;margin-right:17px}.overview-period-bar{gap:9px;padding:12px}.overview-date input{min-width:120px}.overview-best-legend{grid-template-columns:1fr}}
 @media(max-width:420px){.overview-kpis article>span{font-size:14px}.overview-kpis article>p{font-size:11px}.overview-panel h2{font-size:21px}.overview-best-controls{width:100%}.overview-best-controls .overview-segments{max-width:100%}.overview-segments button{padding:9px 11px;font-size:12px}}
 </style>
+<style>
+.inventory-stock-cell{min-width:116px;text-align:center}.inventory-stock-meter{width:110px;margin:auto;text-align:center;color:#53616a}.inventory-stock-meter svg{width:100%;height:54px;display:block;overflow:visible}.inventory-stock-meter .stock-track{fill:none;stroke:#e8ecec;stroke-width:8;stroke-linecap:round}.inventory-stock-meter .stock-band{fill:none;stroke:url(#stockMeterGradient);stroke-width:8;stroke-linecap:round}.inventory-stock-meter .stock-pointer{fill:#172936;stroke:#fff;stroke-width:2}.inventory-stock-meter strong{display:block;margin-top:-22px;font:700 12px/1.2 'DM Sans',system-ui,sans-serif;color:#25343c}.inventory-stock-meter small{display:block;margin-top:8px;color:#78868d;font-size:8px;letter-spacing:.06em;text-transform:uppercase}
+.dashboard-screen{max-width:1180px;padding-top:26px}.dashboard-screen .hub-heading{margin-bottom:16px}.dashboard-screen .hub-heading h1{font-size:32px}.overview-period-bar{min-height:68px;padding:11px 16px;gap:10px;border-radius:16px;font-size:12px}.overview-period-bar>strong{font-size:14px}.overview-period-text{font-size:12px}.overview-segments button{padding:8px 11px;font-size:12px}.overview-date{min-height:42px;padding:0 10px}.overview-date input{min-width:130px;max-width:150px;font-size:12px}.overview-kpis{gap:12px;margin-top:14px}.overview-kpis article{min-height:148px;padding:18px;border-radius:18px;box-shadow:0 10px 22px #17232b0b}.overview-kpis article>span{font-size:15px}.overview-kpis article>strong{margin-top:17px;font-size:29px}.overview-kpis article>p{margin-top:10px;gap:7px;font-size:12px}.overview-panels{gap:14px;margin-top:14px}.overview-panel{border-radius:20px;box-shadow:0 10px 22px #17232b0b}.overview-panel-heading,.overview-best-heading{gap:14px;padding:19px 21px}.overview-panel h2{font-size:21px}.overview-panel-heading p,.overview-best-heading p{font-size:12px}.overview-chart-key{gap:11px;font-size:12px}.overview-chart-body{padding:20px 17px 13px;min-height:265px}.overview-chart-body svg{min-height:225px}.overview-alert-heading{padding:20px 17px 0;gap:13px}.overview-alert-heading h2{font-size:20px}.overview-live{font-size:14px}.overview-live i{width:10px;height:10px;box-shadow:0 0 0 7px #e6f7f1}.overview-alert-panel>p{margin:10px 14px 16px;font-size:15px}.overview-alert-filters{gap:8px;margin:0 18px 18px}.overview-alert-filters button{padding:9px 6px;font-size:12px}.overview-alert-list{padding:16px 18px;min-height:130px;max-height:230px}.overview-best-panel{margin-top:15px}.overview-best-body{gap:16px;padding:19px 21px 23px}.overview-best-stage{min-height:290px;border-radius:16px}.overview-best-legend{gap:9px;max-height:300px}.overview-best-legend p{font-size:13px}
+@media(max-width:700px){.dashboard-screen{padding-top:22px}.overview-period-bar{min-height:auto}.overview-kpis article{min-height:136px;padding:15px}.overview-kpis article>span{font-size:13px}.overview-kpis article>strong{font-size:26px}.overview-chart-body{min-height:220px}.overview-chart-body svg{min-height:190px}}
+</style>
+<style>
+/* Keep the dashboard at a comfortable desktop scale while leaving other screens unchanged. */
+.dashboard-screen{box-sizing:border-box;width:100%;max-width:1320px;padding:24px 0 40px}
+.dashboard-screen .hub-heading{margin-bottom:16px}
+.dashboard-screen .hub-heading h1{font:800 32px/1.1 Manrope,sans-serif;letter-spacing:-.06em}
+.overview-period-bar{min-height:64px;padding:10px 14px;gap:9px;border-radius:15px;font:600 12px 'DM Sans',system-ui,sans-serif}
+.overview-period-bar>strong{font-size:13px}.overview-period-text{font-size:12px}
+.overview-segments button{padding:8px 11px;font-size:12px}
+.overview-date{min-height:40px;padding:0 10px}.overview-date input{min-width:125px;max-width:145px;font:600 12px 'DM Sans',system-ui,sans-serif}
+.overview-kpis{gap:12px;margin-top:14px}
+.overview-kpis article{min-height:142px;padding:17px 18px;border-radius:17px;box-shadow:0 8px 20px #17232b09}
+.overview-kpis article>span{font-size:14px}.overview-kpis article>strong{margin-top:17px;font-size:28px}.overview-kpis article>p{margin-top:9px;gap:7px;font-size:12px}
+.overview-panels{gap:13px;margin-top:14px}.overview-panel{border-radius:18px;box-shadow:0 8px 20px #17232b09}
+.overview-panel-heading,.overview-best-heading{gap:12px;padding:17px 19px}
+.overview-panel h2{font-size:20px}.overview-panel-heading p,.overview-best-heading p{font-size:12px}
+.overview-chart-key{gap:10px;font-size:12px}.overview-chart-body{min-height:245px;padding:18px 16px 12px}.overview-chart-body svg{min-height:210px}
+.overview-alert-heading{gap:12px;padding:18px 16px 0}.overview-alert-heading h2{font-size:19px}.overview-live{font-size:13px}
+.overview-alert-panel>p{margin:9px 14px 15px;font-size:14px}.overview-alert-filters{gap:8px;margin:0 17px 17px}.overview-alert-filters button{padding:9px 6px;font-size:12px}
+.overview-alert-list{min-height:125px;padding:15px 17px;max-height:220px}
+.overview-best-panel{margin-top:14px}.overview-best-body{gap:15px;padding:17px 19px 21px}.overview-best-stage{min-height:270px;border-radius:15px}.overview-best-legend{gap:9px;max-height:280px}.overview-best-legend p{font-size:12px}
+.inventory-stock-cell{min-width:100px}.inventory-stock-meter{width:94px}.inventory-stock-meter svg{height:48px}.inventory-stock-meter strong{margin-top:-20px;font-size:11px}.inventory-stock-meter small{margin-top:6px;font-size:8px}
+@media(max-width:700px){.dashboard-screen{padding-top:20px}.overview-period-bar{min-height:auto}.overview-kpis article{min-height:132px;padding:14px}.overview-kpis article>strong{font-size:25px}.overview-chart-body{min-height:215px}.overview-chart-body svg{min-height:185px}}
+</style>
 </head>
 <body>
   <div class="app-shell">

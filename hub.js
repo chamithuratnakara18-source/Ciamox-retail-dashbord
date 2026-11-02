@@ -819,6 +819,36 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     }
   }
 
+  let inventoryMeterId = 0;
+  function createInventoryMeter(quantityValue) {
+    const quantity = Number(quantityValue) || 0;
+    const isLow = quantity <= 5;
+    const cell = document.createElement('td');
+    cell.className = 'inventory-stock-cell';
+    const meter = document.createElement('div');
+    meter.className = 'inventory-stock-meter';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 120 68');
+    svg.setAttribute('aria-hidden', 'true');
+    const gradientId = `stockMeterGradient-${++inventoryMeterId}`;
+    svg.innerHTML = `<defs><linearGradient id="${gradientId}" x1="0" x2="1"><stop offset="0" stop-color="#ef5350"/><stop offset=".5" stop-color="#f5c542"/><stop offset="1" stop-color="#31c48d"/></linearGradient></defs><path class="stock-track" d="M12 61 A48 48 0 0 1 108 61"/><path class="stock-band" style="stroke:url(#${gradientId})" d="M12 61 A48 48 0 0 1 108 61"/>`;
+    const pointer = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    pointer.setAttribute('class', 'stock-pointer');
+    const markerRatio = Math.min(1, quantity / 20);
+    const angle = Math.PI * (1 - markerRatio);
+    pointer.setAttribute('cx', String(60 + 48 * Math.cos(angle)));
+    pointer.setAttribute('cy', String(61 - 48 * Math.sin(angle)));
+    pointer.setAttribute('r', '6');
+    svg.append(pointer);
+    const value = document.createElement('strong');
+    value.textContent = quantity.toLocaleString();
+    const status = document.createElement('small');
+    status.textContent = isLow ? 'Low stock' : 'Healthy';
+    meter.append(svg, value, status);
+    cell.append(meter);
+    return cell;
+  }
+
   function renderInventoryTable() {
     const query = inventorySearch.value.trim().toLowerCase();
     const products = inventoryProducts.filter(product => `${product.name} ${product.barcode} ${product.supplierName}`.toLowerCase().includes(query));
@@ -836,7 +866,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       const nameText = document.createElement('strong'); nameText.textContent = product.name;
       summary.append(nameText); name.append(summary);
       const barcode = document.createElement('td'); barcode.textContent = product.barcode;
-      const quantity = document.createElement('td'); quantity.textContent = Number(product.quantity).toLocaleString();
+      const quantity = createInventoryMeter(product.quantity);
       const price = document.createElement('td'); price.textContent = product.originalPrice == null ? 'Set at first sale' : formatAmount(product.originalPrice);
       const arrival = document.createElement('td'); arrival.textContent = product.arrivalDate || '—';
       const supplier = document.createElement('td'); supplier.textContent = product.supplierName || '—';
