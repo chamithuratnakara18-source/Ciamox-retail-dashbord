@@ -148,6 +148,10 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
 .overview-alert-list{min-height:125px;padding:15px 17px;max-height:220px}
 .overview-best-panel{margin-top:14px}.overview-best-body{gap:15px;padding:17px 19px 21px}.overview-best-stage{min-height:270px;border-radius:15px}.overview-best-legend{gap:9px;max-height:280px}.overview-best-legend p{font-size:12px}
 .inventory-stock-cell{min-width:100px}.inventory-stock-meter{width:94px}.inventory-stock-meter svg{height:48px}.inventory-stock-meter strong{margin-top:-20px;font-size:11px}.inventory-stock-meter small{margin-top:6px;font-size:8px}
+.inventory-analytics-card{display:block;min-height:190px;padding:25px}.inventory-analytics-copy h2{font-size:20px}.inventory-analytics-empty{max-width:420px}
+.inventory-row-actions{display:flex;align-items:center;gap:7px;white-space:nowrap}.inventory-row-actions .inventory-action-button{padding:7px 9px;font-size:10px}.inventory-category-entry{min-width:180px;max-width:320px;padding:13px 15px;border:1px solid #dfe7e7;border-radius:11px;background:#fbfcfc}.inventory-category-entry strong{display:block;color:#25343c;font-size:12px}.inventory-category-entry small{display:block;margin-top:4px;color:#84919b;font-size:10px}.inventory-category-entry p{margin:8px 0 0;color:#53616a;font-size:11px;line-height:1.45}
+.inventory-category-dialog{width:min(460px,calc(100vw - 32px));padding:0;border:1px solid #dfe7e7;border-radius:16px;background:#fff;color:#25343c;box-shadow:0 24px 70px #17232b33}.inventory-category-dialog::backdrop{background:#17232b66}
+.inventory-category-dialog-content{display:grid;gap:13px;padding:23px}.inventory-category-dialog-content h2{margin:0;font:700 20px/1.25 Manrope,sans-serif}.inventory-category-dialog-content>p{margin:0;color:#718087;font-size:13px}.inventory-category-options{display:grid;grid-template-columns:1fr 1fr;gap:9px}.inventory-category-dialog-content label{display:block;margin:11px 0 6px;color:#55636c;font-size:12px;font-weight:700}.inventory-category-dialog-content input,.inventory-category-dialog-content select{box-sizing:border-box;width:100%;min-height:42px;padding:9px 11px;border:1px solid #dfe7e7;border-radius:9px;background:#fff;color:#25343c;font:inherit}.inventory-category-dialog-content #saveNewInventoryCategory,.inventory-category-dialog-content #assignExistingInventoryCategory{margin-top:10px}.inventory-category-dialog-message{color:#b35331;font-size:12px}.inventory-category-cancel{justify-self:end}
 @media(max-width:700px){.dashboard-screen{padding-top:20px}.overview-period-bar{min-height:auto}.overview-kpis article{min-height:132px;padding:14px}.overview-kpis article>strong{font-size:25px}.overview-chart-body{min-height:215px}.overview-chart-body svg{min-height:185px}}
 </style>
 </head>
@@ -228,14 +232,36 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
         </section>
         <section class="inventory-view" data-inventory-view="analytics">
           <section class="inventory-table-card inventory-analytics-card">
-            <div class="inventory-meter" aria-hidden="true"><svg viewBox="0 0 260 170" role="img" aria-label="Inventory movement meter placeholder"><defs><linearGradient id="inventoryMeterGradient" x1="0" x2="1"><stop offset="0" stop-color="#ef5350"/><stop offset=".5" stop-color="#f5c542"/><stop offset="1" stop-color="#31c48d"/></linearGradient></defs><path d="M30 145 A100 100 0 0 1 230 145" fill="none" stroke="#edf0f0" stroke-width="18" stroke-linecap="round"/><path d="M30 145 A100 100 0 0 1 230 145" fill="none" stroke="url(#inventoryMeterGradient)" stroke-width="18" stroke-linecap="round"/><circle cx="44" cy="101" r="10" fill="#fff" stroke="#172936" stroke-width="4"/><text x="130" y="111" text-anchor="middle" fill="#172936" font-size="38" font-family="system-ui">—</text><text x="130" y="138" text-anchor="middle" fill="#718087" font-size="12" font-family="system-ui">MOVEMENT</text></svg></div>
-            <div class="inventory-analytics-copy"><h2>Inventory movement</h2><p>See how stock changes as products arrive and sell.</p><div class="inventory-analytics-empty">Analytics are ready to open. Movement data will appear here when added.</div></div>
+            <div class="inventory-analytics-copy"><h2>Inventory analytics</h2><p>Inventory movement analytics will appear here.</p><div class="inventory-analytics-empty">No analytics to show yet.</div></div>
           </section>
         </section>
         <section class="inventory-view" data-inventory-view="categories">
-          <section class="inventory-table-card"><div class="inventory-toolbar"><div><strong>Product categories</strong><span>Organize products into categories.</span></div><button id="addProductCategory" class="inventory-action-button" type="button">+ Add product category</button></div><div id="inventoryCategoryList" class="inventory-category-list"><span class="inventory-empty">No product categories added.</span></div></section>
+          <section class="inventory-table-card"><div class="inventory-toolbar"><div><strong>Product categories</strong><span>Categories assigned from the current inventory.</span></div></div><div id="inventoryCategoryList" class="inventory-category-list"><span class="inventory-empty">No product categories added.</span></div></section>
         </section>
       </section>
+
+      <dialog id="inventoryCategoryDialog" class="inventory-category-dialog" aria-labelledby="inventoryCategoryDialogTitle">
+        <div class="inventory-category-dialog-content">
+          <h2 id="inventoryCategoryDialogTitle">Add product to a category</h2>
+          <p id="inventoryCategoryProductName"></p>
+          <div class="inventory-category-options">
+            <button id="createCategoryChoice" class="secondary-button" type="button">Create a new category</button>
+            <button id="existingCategoryChoice" class="secondary-button" type="button">Add to an existing category</button>
+          </div>
+          <div id="createCategoryFields" class="hidden">
+            <label for="newInventoryCategoryName">New category name</label>
+            <input id="newInventoryCategoryName" type="text" maxlength="80" placeholder="For example: Drinks">
+            <button id="saveNewInventoryCategory" class="inventory-action-button" type="button">Create and assign</button>
+          </div>
+          <div id="existingCategoryFields" class="hidden">
+            <label for="existingInventoryCategory">Choose a category</label>
+            <select id="existingInventoryCategory"></select>
+            <button id="assignExistingInventoryCategory" class="inventory-action-button" type="button">Assign category</button>
+          </div>
+          <p id="inventoryCategoryDialogMessage" class="inventory-category-dialog-message hidden" role="status"></p>
+          <button id="closeInventoryCategoryDialog" class="secondary-button inventory-category-cancel" type="button">Cancel</button>
+        </div>
+      </dialog>
 
       <section id="posScreen" class="pos-screen hidden">
         <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE CHECKOUT</div><h1>POS Sale</h1><p>Phone scans arrive in this order live. You can also tap a product to add it.</p></div><span id="posConnectionLabel" class="updated-label">Connecting…</span></header>

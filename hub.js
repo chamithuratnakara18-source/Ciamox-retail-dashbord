@@ -10,9 +10,14 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   const inventoryTableBody = document.getElementById('inventoryTableBody');
   const inventoryEmpty = document.getElementById('inventoryEmpty');
   const inventorySearch = document.getElementById('inventorySearch');
+  const categoryList = document.getElementById('inventoryCategoryList');
+  const categoryDialog = document.getElementById('inventoryCategoryDialog');
+  const categoryDialogMessage = document.getElementById('inventoryCategoryDialogMessage');
   let dashboardRequestId = 0;
   let currentView = 'dashboard';
   let inventoryProducts = [];
+  let inventoryCategories = [];
+  let categoryProduct = null;
   let financeProducts = [];
   let financePlan = null;
   let financeStats = null;
@@ -106,23 +111,24 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     });
     document.querySelectorAll('[data-inventory-view]').forEach(view => view.classList.toggle('active', view.dataset.inventoryView === selected));
   }));
-  const inventoryCategories = [];
-  const categoryList = document.getElementById('inventoryCategoryList');
-  document.getElementById('addProductCategory').addEventListener('click', () => {
-    const name = window.prompt('Enter a product category name:')?.trim();
-    if (!name) return;
-    if (inventoryCategories.some(category => category.toLowerCase() === name.toLowerCase())) {
-      window.alert('That category already exists.');
-      return;
-    }
-    inventoryCategories.push(name);
-    categoryList.replaceChildren(...inventoryCategories.map(category => {
-      const chip = document.createElement('span');
-      chip.className = 'inventory-category-chip';
-      chip.textContent = category;
-      return chip;
-    }));
+  document.getElementById('createCategoryChoice').addEventListener('click', () => {
+    document.getElementById('createCategoryFields').classList.remove('hidden');
+    document.getElementById('existingCategoryFields').classList.add('hidden');
+    document.getElementById('newInventoryCategoryName').focus();
   });
+  document.getElementById('existingCategoryChoice').addEventListener('click', () => {
+    document.getElementById('existingCategoryFields').classList.remove('hidden');
+    document.getElementById('createCategoryFields').classList.add('hidden');
+    const select = document.getElementById('existingInventoryCategory');
+    select.replaceChildren(...inventoryCategories.map(category => {
+      const option = document.createElement('option'); option.value = category; option.textContent = category; return option;
+    }));
+    if (!inventoryCategories.length) showCategoryDialogMessage('There are no categories yet. Create a new category first.');
+    else { categoryDialogMessage.classList.add('hidden'); select.focus(); }
+  });
+  document.getElementById('closeInventoryCategoryDialog').addEventListener('click', () => categoryDialog.close());
+  document.getElementById('saveNewInventoryCategory').addEventListener('click', () => { void createAndAssignInventoryCategory(); });
+  document.getElementById('assignExistingInventoryCategory').addEventListener('click', () => { void assignInventoryCategory(); });
   document.getElementById('financeSearch').addEventListener('input', renderFinanceTable);
   document.getElementById('posSearch').addEventListener('input', renderPosCatalog);
   document.querySelectorAll('[data-pos-filter]').forEach(button => button.addEventListener('click', () => {
@@ -774,13 +780,15 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     const status = document.getElementById('inventoryStatus');
     status.textContent = 'Loading from Firebase…';
     try {
-      const data = await api('/api/inventory');
+      const [data, categoryData] = await Promise.all([api('/api/inventory'), api('/api/inventory/categories')]);
       inventoryProducts = data.products || [];
+      inventoryCategories = categoryData.categories || [];
       const units = inventoryProducts.reduce((sum, product) => sum + Number(product.quantity || 0), 0);
       summary.textContent = `${inventoryProducts.length} products · ${units.toLocaleString()} units`;
       status.textContent = 'Synced from Firebase';
       setDatabaseStatus(true, 'FIREBASE CONNECTED');
       renderInventoryTable();
+      renderInventoryCategories();
     } catch (error) {
       inventoryProducts = [];
       summary.textContent = 'Inventory unavailable';
@@ -794,6 +802,64 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     const notice = document.getElementById('inventoryActionMessage');
     notice.textContent = message;
     notice.className = `inventory-action-message${error ? ' error' : ''}`;
+  }
+
+  function showCategoryDialogMessage(message) {
+    categoryDialogMessage.textContent = message;
+    categoryDialogMessage.classList.remove('hidden');
+  }
+
+  function openInventoryCategoryDialog(product) {
+    categoryProduct = product;
+    document.getElementById('inventoryCategoryProductName').textContent = `${product.name} · ${product.barcode}`;
+    document.getElementById('createCategoryFields').classList.add('hidden');
+    document.getElementById('existingCategoryFields').classList.add('hidden');
+    document.getElementById('newInventoryCategoryName').value = '';
+    categoryDialogMessage.classList.add('hidden');
+    categoryDialog.showModal();
+  }
+
+  function renderInventoryCategories() {
+    categoryList.replaceChildren();
+    if (!inventoryCategories.length) {
+      const empty = document.createElement('span'); empty.className = 'inventory-empty';
+      empty.textContent = 'No product categories added.'; categoryList.append(empty); return;
+    }
+    for (const category of inventoryCategories) {
+      const products = inventoryProducts.filter(product => product.category === category);
+      const entry = document.createElement('article'); entry.className = 'inventory-category-entry';
+      const title = document.createElement('strong'); title.textContent = category;
+      const count = document.createElement('small'); count.textContent = `${products.length} ${products.length === 1 ? 'product' : 'products'}`;
+      const names = document.createElement('p'); names.textContent = products.length ? products.map(product => product.name).join(', ') : 'No products assigned yet.';
+      entry.append(title, count, names); categoryList.append(entry);
+    }
+  }
+
+  async function createAndAssignInventoryCategory() {
+    const name = document.getElementById('newInventoryCategoryName').value.trim();
+    if (!name || !categoryProduct) return showCategoryDialogMessage('Enter a category name first.');
+    const button = document.getElementById('saveNewInventoryCategory');
+    button.disabled = true; button.textContent = 'Saving…';
+    try {
+      await api('/api/inventory/categories', { method: 'POST', body: JSON.stringify({ name }) });
+      await api('/api/inventory/category', { method: 'PATCH', body: JSON.stringify({ barcode: categoryProduct.barcode, category: name }) });
+      categoryDialog.close(); await refreshInventory();
+      showInventoryAction(`${categoryProduct.name} added to ${name}.`);
+    } catch (error) { showCategoryDialogMessage(error.message); }
+    finally { button.disabled = false; button.textContent = 'Create and assign'; }
+  }
+
+  async function assignInventoryCategory() {
+    const category = document.getElementById('existingInventoryCategory').value;
+    if (!category || !categoryProduct) return showCategoryDialogMessage('Create a category before assigning products.');
+    const button = document.getElementById('assignExistingInventoryCategory');
+    button.disabled = true; button.textContent = 'Saving…';
+    try {
+      await api('/api/inventory/category', { method: 'PATCH', body: JSON.stringify({ barcode: categoryProduct.barcode, category }) });
+      categoryDialog.close(); await refreshInventory();
+      showInventoryAction(`${categoryProduct.name} added to ${category}.`);
+    } catch (error) { showCategoryDialogMessage(error.message); }
+    finally { button.disabled = false; button.textContent = 'Assign category'; }
   }
 
   async function deleteInventoryProduct(product, button) {
@@ -851,7 +917,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
 
   function renderInventoryTable() {
     const query = inventorySearch.value.trim().toLowerCase();
-    const products = inventoryProducts.filter(product => `${product.name} ${product.barcode} ${product.supplierName}`.toLowerCase().includes(query));
+    const products = inventoryProducts.filter(product => `${product.name} ${product.barcode} ${product.supplierName} ${product.category}`.toLowerCase().includes(query));
     inventoryTableBody.replaceChildren();
     inventoryEmpty.classList.toggle('hidden', products.length > 0);
     if (!products.length) return;
@@ -871,11 +937,16 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       const arrival = document.createElement('td'); arrival.textContent = product.arrivalDate || '—';
       const supplier = document.createElement('td'); supplier.textContent = product.supplierName || '—';
       const action = document.createElement('td');
+      const actionButtons = document.createElement('div'); actionButtons.className = 'inventory-row-actions';
+      const addCategory = document.createElement('button');
+      addCategory.type = 'button'; addCategory.className = 'inventory-action-button';
+      addCategory.textContent = product.category ? 'Change category' : 'Add category';
+      addCategory.addEventListener('click', () => openInventoryCategoryDialog(product));
       const remove = document.createElement('button');
       remove.type = 'button'; remove.className = 'inventory-delete'; remove.textContent = 'Delete';
       remove.setAttribute('aria-label', `Delete ${product.name} from inventory`);
       remove.addEventListener('click', () => { void deleteInventoryProduct(product, remove); });
-      action.append(remove);
+      actionButtons.append(addCategory, remove); action.append(actionButtons);
       row.append(name, barcode, quantity, price, arrival, supplier, action);
       inventoryTableBody.append(row);
     });
