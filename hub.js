@@ -780,9 +780,9 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     const status = document.getElementById('inventoryStatus');
     status.textContent = 'Loading from Firebase…';
     try {
-      const [data, categoryData] = await Promise.all([api('/api/inventory'), api('/api/inventory/categories')]);
+      const data = await api('/api/inventory');
       inventoryProducts = data.products || [];
-      inventoryCategories = categoryData.categories || [];
+      inventoryCategories = data.categories || [];
       const units = inventoryProducts.reduce((sum, product) => sum + Number(product.quantity || 0), 0);
       summary.textContent = `${inventoryProducts.length} products · ${units.toLocaleString()} units`;
       status.textContent = 'Synced from Firebase';
@@ -838,10 +838,12 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   async function createAndAssignInventoryCategory() {
     const name = document.getElementById('newInventoryCategoryName').value.trim();
     if (!name || !categoryProduct) return showCategoryDialogMessage('Enter a category name first.');
+    if (inventoryCategories.some(category => category.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      return showCategoryDialogMessage('That category already exists. Choose “Add to an existing category” instead.');
+    }
     const button = document.getElementById('saveNewInventoryCategory');
     button.disabled = true; button.textContent = 'Saving…';
     try {
-      await api('/api/inventory/categories', { method: 'POST', body: JSON.stringify({ name }) });
       await api('/api/inventory/category', { method: 'PATCH', body: JSON.stringify({ barcode: categoryProduct.barcode, category: name }) });
       categoryDialog.close(); await refreshInventory();
       showInventoryAction(`${categoryProduct.name} added to ${name}.`);

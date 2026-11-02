@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js';
 import {
   addDoc, collection, doc, getDoc, getDocFromServer, getDocs, getFirestore,
-  onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, writeBatch,
+  onSnapshot, runTransaction, serverTimestamp, updateDoc, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 
@@ -388,25 +388,9 @@ async function loadCollections() {
   return Object.fromEntries(names.map((name, index) => [name, rows(snapshots[index])]));
 }
 
-async function listInventoryCategories() {
-  const snapshot = await getDocs(collection(db(), 'inventoryCategories'));
-  return snapshot.docs.map(item => item.data().name).filter(name => typeof name === 'string').sort((a, b) => a.localeCompare(b));
-}
-
-async function createInventoryCategory(body) {
-  const name = validText(body.name, 'Category name', 80);
-  const categoryId = encodeURIComponent(name.toLocaleLowerCase());
-  const ref = doc(db(), 'inventoryCategories', categoryId);
-  if ((await getDoc(ref)).exists()) throw new Error('That category already exists. Choose it from the existing category list.');
-  await setDoc(ref, { name, createdAt: serverTimestamp() });
-  return { category: name };
-}
-
 async function assignInventoryCategory(body) {
   const barcode = validText(body.barcode, 'Barcode', 80);
   const category = validText(body.category, 'Category name', 80);
-  const categoryRef = doc(db(), 'inventoryCategories', encodeURIComponent(category.toLocaleLowerCase()));
-  if (!(await getDoc(categoryRef)).exists()) throw new Error('That category no longer exists. Refresh and choose another.');
   const ref = productRef(barcode);
   const snapshot = await getDoc(ref);
   if (!snapshot.exists()) throw new Error('This product is no longer in inventory. Refresh and try again.');
@@ -677,13 +661,13 @@ export async function api(path, options = {}) {
   if (url.pathname === '/api/inventory' && method === 'GET') {
     const barcode = url.searchParams.get('barcode')?.trim();
     if (barcode) return { product: shapeProduct((await getDoc(productRef(barcode))).data()) };
-    const data = await loadCollections();
-    return { products: sortedProducts(data.products) };
+    const products = sortedProducts(rows(await getDocs(collection(db(), 'products'))));
+    const categories = [...new Set(products.map(product => product.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    return { products, categories };
   }
-  if (url.pathname === '/api/inventory/categories' && method === 'GET') return { categories: await listInventoryCategories() };
   if (url.pathname === '/api/pos' && method === 'GET') {
-    const [cart, data] = await Promise.all([getDoc(posRef()), loadCollections()]);
-    return { items: posItems(cart.data()), products: sortedProducts(data.products) };
+    const [cart, products] = await Promise.all([getDoc(posRef()), getDocs(collection(db(), 'products'))]);
+    return { items: posItems(cart.data()), products: sortedProducts(rows(products)) };
   }
   if (url.pathname === '/api/finance' && method === 'GET') return getFinance();
   const body = JSON.parse(options.body || '{}');
@@ -692,7 +676,6 @@ export async function api(path, options = {}) {
   if (url.pathname === '/api/pos/checkout' && method === 'POST') return checkoutPos(body);
   if (url.pathname === '/api/pos' && method === 'DELETE') return clearPos();
   if (url.pathname === '/api/inventory' && method === 'DELETE') return removeInventory(body);
-  if (url.pathname === '/api/inventory/categories' && method === 'POST') return createInventoryCategory(body);
   if (url.pathname === '/api/inventory/category' && method === 'PATCH') return assignInventoryCategory(body);
   if (url.pathname === '/api/finance/price' && method === 'PATCH') return setSellingPrice(body);
   if (url.pathname === '/api/finance/plan' && method === 'PUT') return saveMonthlyPlan(body);
