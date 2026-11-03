@@ -256,17 +256,120 @@ function overview(data, period, anchor) {
   };
 }
 
-function purchaseCostInMonth(receipts, month) {
-  const inbound = receipts.filter(item => item.type !== 'inventory_removal' &&
-    Number(item.quantity) > 0 && item.arrivalDate?.startsWith(month));
-  if (inbound.some(item => item.unitCost == null || !Number.isFinite(Number(item.unitCost)))) return null;
-  return inbound.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitCost), 0);
+function financePeriodRange(period, requestedAnchor = todayLocal()) {
+  if (!['day', 'month', 'year'].includes(period)) throw new Error('Choose Day, Month, or Year.');
+  const anchor = validDate(requestedAnchor, 'finance date');
+  const today = todayLocal();
+  if (anchor > today) throw new Error('Choose a finance date up to today.');
+  if (period === 'day') return { from: anchor, to: anchor };
+  const year = Number(anchor.slice(0, 4)), month = Number(anchor.slice(5, 7));
+  if (period === 'month') {
+    const from = `${anchor.slice(0, 7)}-01`;
+    const lastDay = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    return { from, to: lastDay > today ? today : lastDay };
+  }
+  const from = `${year}-01-01`;
+  const lastDay = `${year}-12-31`;
+  return { from, to: lastDay > today ? today : lastDay };
 }
 
-function grossProfitInMonth(sales, month) {
-  const monthlySales = sales.filter(item => item.day?.startsWith(month));
-  if (monthlySales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)))) return null;
-  return monthlySales.reduce((sum, item) => sum + Number(item.grossProfit), 0);
+function financePreviousRange(period, anchor, selectedRange) {
+  if (period === 'day') {
+    const previousDay = new Date(Date.parse(`${anchor}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+    return { from: previousDay, to: previousDay };
+  }
+  if (period === 'month') {
+    const previousMonth = precedingMonth(anchor.slice(0, 7));
+    const from = `${previousMonth}-01`;
+    const fullEnd = new Date(Date.UTC(Number(previousMonth.slice(0, 4)), Number(previousMonth.slice(5, 7)), 0))
+      .toISOString().slice(0, 10);
+    if (selectedRange.to === todayLocal() && anchor.slice(0, 7) === todayLocal().slice(0, 7)) {
+      const elapsed = Number(selectedRange.to.slice(-2));
+      const previousMonthEnd = Number(fullEnd.slice(-2));
+      const to = new Date(Date.UTC(Number(previousMonth.slice(0, 4)), Number(previousMonth.slice(5, 7)) - 1,
+        Math.min(elapsed, previousMonthEnd))).toISOString().slice(0, 10);
+      return { from, to };
+    }
+    return { from, to: fullEnd };
+  }
+  const selectedYear = Number(anchor.slice(0, 4));
+  const previousYear = selectedYear - 1;
+  const from = `${previousYear}-01-01`;
+  if (selectedYear < Number(todayLocal().slice(0, 4))) return { from, to: `${previousYear}-12-31` };
+  const shifted = addCalendarMonths(anchor, -12);
+  return { from, to: shifted < from ? from : shifted };
+}
+
+function monthEnd(month) {
+  return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+}
+
+function financeMetricsForRange(data, range, currentPlan) {
+  const expenses = data.expenses.filter(item => item.type !== 'monthly_plan' &&
+    item.expenseDate >= range.from && item.expenseDate <= range.to);
+  let costs = expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const planByMonth = new Map(data.expenses
+    .filter(item => item.id?.startsWith('monthly-plan-') && item.type === 'monthly_plan')
+    .map(item => [item.id.slice('monthly-plan-'.length), shapeMonthlyPlan(item)]));
+  const currentMonth = todayLocal().slice(0, 7);
+  let month = range.from.slice(0, 7);
+  const lastMonth = range.to.slice(0, 7);
+  while (month <= lastMonth) {
+    const firstDay = `${month}-01`;
+    if (firstDay >= range.from && firstDay <= range.to) {
+      const plan = planByMonth.get(month) || (month === currentMonth ? currentPlan : null);
+      if (plan) costs += plan.cashCommitments;
+    }
+    month = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1))
+      .toISOString().slice(0, 7);
+  }
+  const inbound = data.receipts.filter(item => item.type !== 'inventory_removal' &&
+    Number(item.quantity) > 0 && item.arrivalDate >= range.from && item.arrivalDate <= range.to);
+  const productPurchases = inbound.some(item => item.unitCost == null || !Number.isFinite(Number(item.unitCost)))
+    ? null : inbound.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitCost), 0);
+  const sales = data.sales.filter(item => item.day >= range.from && item.day <= range.to);
+  const grossProfit = sales.some(item => item.grossProfit == null || !Number.isFinite(Number(item.grossProfit)))
+    ? null : sales.reduce((sum, item) => sum + Number(item.grossProfit), 0);
+  return { costs, productPurchases, grossProfit,
+    netProfit: grossProfit == null ? null : grossProfit - costs };
+}
+
+function financeTrend(data, period, anchor, currentPlan) {
+  const selectedRange = financePeriodRange(period, anchor);
+  const buckets = [];
+  if (period === 'day') {
+    for (let offset = 13; offset >= 0; offset--) {
+      const day = new Date(Date.parse(`${anchor}T00:00:00Z`) - offset * 86400000).toISOString().slice(0, 10);
+      buckets.push({ from: day, to: day, label: new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+        .format(new Date(`${day}T12:00:00Z`)) });
+    }
+  } else if (period === 'month') {
+    let month = anchor.slice(0, 7);
+    for (let index = 5; index >= 0; index--) {
+      const cursor = anchor.slice(0, 7);
+      month = cursor;
+      for (let step = 0; step < index; step++) month = precedingMonth(month);
+      const from = `${month}-01`;
+      const end = monthEnd(month);
+      const to = end > todayLocal() ? todayLocal() : end;
+      buckets.push({ from, to, label: new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' })
+        .format(new Date(`${from}T12:00:00Z`)) });
+    }
+  } else {
+    const year = Number(anchor.slice(0, 4));
+    for (let monthNumber = 1; monthNumber <= 12; monthNumber++) {
+      const month = `${year}-${String(monthNumber).padStart(2, '0')}`;
+      const from = `${month}-01`;
+      const end = monthEnd(month);
+      const to = end > selectedRange.to ? selectedRange.to : end;
+      buckets.push({ from, to: from > selectedRange.to ? null : to,
+        label: new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' })
+          .format(new Date(`${from}T12:00:00Z`)) });
+    }
+  }
+  return buckets.map(bucket => ({ label: bucket.label, ...(bucket.to
+    ? financeMetricsForRange(data, { from: bucket.from, to: bucket.to }, currentPlan)
+    : { costs: null, productPurchases: null, grossProfit: null, netProfit: null }) }));
 }
 
 function shapeMonthlyPlan(data) {
@@ -354,41 +457,31 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
   };
 }
 
-async function getFinance() {
+async function getFinance(requestedPeriod = 'month', requestedAnchor = todayLocal()) {
   const data = await loadCollections();
-  const totals = summarize(data).totals;
   const currentMonth = todayLocal().slice(0, 7);
-  const previousMonth = precedingMonth(currentMonth);
   const currentPlan = shapeMonthlyPlan(data.expenses.find(item => item.id === 'monthly-plan'));
-  const currentPlanSnapshotExists = Boolean(shapeMonthlyPlan(data.expenses.find(item => item.id === `monthly-plan-${currentMonth}`)));
-  const previousPlan = shapeMonthlyPlan(data.expenses.find(item => item.id === `monthly-plan-${previousMonth}`));
-  const previousGrossProfit = grossProfitInMonth(data.sales, previousMonth);
-  const previousOneTimeExpenses = data.expenses.filter(item => item.type !== 'monthly_plan' &&
-    item.expenseDate?.startsWith(previousMonth)).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const period = requestedPeriod;
+  const anchor = validDate(requestedAnchor, 'finance date');
+  const range = financePeriodRange(period, anchor);
+  const comparisonRange = financePreviousRange(period, anchor, range);
+  const metrics = financeMetricsForRange(data, range, currentPlan);
+  const previousMetrics = financeMetricsForRange(data, comparisonRange, currentPlan);
+  const trend = financeTrend(data, period, anchor, currentPlan);
+  const trendSubtitle = period === 'day'
+    ? `Daily movement · ${trend[0]?.label || ''} – ${trend.at(-1)?.label || ''}`
+    : period === 'month' ? `Monthly movement · Last 6 months through ${trend.at(-1)?.label || ''}`
+      : `Monthly movement · ${anchor.slice(0, 4)}`;
+  const comparisonDate = new Date(`${comparisonRange.from}T12:00:00Z`);
+  const comparisonLabel = period === 'day'
+    ? `vs ${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(comparisonDate)}`
+    : period === 'month'
+      ? `vs ${new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(comparisonDate)}`
+      : `vs ${comparisonRange.from.slice(0, 4)}`;
   return {
     products: sortedProducts(data.products),
-    plan: currentPlan,
-    monthGrossProfit: totals.monthlyGrossProfit,
-    monthOneTimeExpenses: totals.monthlyOneTimeExpenses,
-    netProfit: totals.netProfit,
-    netProfitBasis: totals.netProfitBasis,
-    netCashAfterCommitments: totals.netCashAfterCommitments,
-    netUnavailableReason: totals.netUnavailableReason,
-    currentPlanSnapshotExists,
-    comparisonMonth: previousMonth,
-    metrics: {
-      fixedCosts: currentPlan?.cashCommitments ?? null,
-      productPurchases: purchaseCostInMonth(data.receipts, currentMonth),
-      grossProfit: totals.monthlyGrossProfit,
-      netProfit: totals.netProfit,
-    },
-    previousMetrics: {
-      fixedCosts: previousPlan?.cashCommitments ?? null,
-      productPurchases: purchaseCostInMonth(data.receipts, previousMonth),
-      grossProfit: previousGrossProfit,
-      netProfit: previousPlan && previousGrossProfit != null
-        ? previousGrossProfit - previousPlan.cashCommitments - previousOneTimeExpenses : null,
-    },
+    period, anchor, range, trend, trendSubtitle, comparisonRange, comparisonLabel,
+    metrics, previousMetrics,
   };
 }
 
@@ -611,6 +704,8 @@ export async function api(path, options = {}) {
     const [cart, products] = await Promise.all([getDoc(posRef()), getDocs(collection(db(), 'products'))]);
     return { items: posItems(cart.data()), products: sortedProducts(rows(products)) };
   }
-  if (url.pathname === '/api/finance' && method === 'GET') return getFinance();
+  if (url.pathname === '/api/finance' && method === 'GET') {
+    return getFinance(url.searchParams.get('period') || 'month', url.searchParams.get('anchor') || todayLocal());
+  }
   throw new Error('This operation is not available.');
 }

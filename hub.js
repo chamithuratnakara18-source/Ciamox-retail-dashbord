@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-alerts=20261103';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-period-20261103-2';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
@@ -24,10 +24,11 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
   let activeInventoryCategory = 'All products';
   let categoryProduct = null;
   let financeProducts = [];
-  let financePlan = null;
   let financeStats = null;
-  let financePlanDirty = false;
   let financeRequestId = 0;
+  let financePeriod = 'month';
+  let financeAnchor = todayLocal();
+  let financeExpenseKind = 'monthly_cost';
   let posProducts = [];
   let posItems = [];
   let posFilter = 'all';
@@ -48,6 +49,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
   let listenersStarted = false;
   const overviewAnchorInput = document.getElementById('overviewAnchor');
   const bestAnchorInput = document.getElementById('bestSellingAnchor');
+  const financeAnchorInput = document.getElementById('financeAnchor');
 
   function syncOverviewControls() {
     const today = todayLocal();
@@ -69,6 +71,35 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
     });
   }
 
+  function syncFinanceControls() {
+    const today = todayLocal();
+    financeAnchorInput.max = today;
+    financeAnchorInput.value = financeAnchor;
+    document.querySelectorAll('[data-finance-period]').forEach(button => {
+      const active = button.dataset.financePeriod === financePeriod;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    document.getElementById('financePeriodText').textContent = periodName(financePeriod, financeAnchor);
+  }
+
+  function setFinanceExpenseKind(kind) {
+    if (!['monthly_cost', 'one_time'].includes(kind)) return;
+    financeExpenseKind = kind;
+    document.querySelectorAll('[data-cost-kind]').forEach(button => {
+      const active = button.dataset.costKind === kind;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    const monthly = kind === 'monthly_cost';
+    document.getElementById('expensePanelTitle').textContent = monthly ? 'Record a monthly cost' : 'Record a one-time cost';
+    document.getElementById('expenseTitle').placeholder = monthly
+      ? 'For example: electricity or salaries' : 'For example: repairs or supplies';
+    document.getElementById('expenseKindHelp').textContent = monthly
+      ? 'A dated monthly bill is recorded once and included in the selected period.'
+      : 'A one-time cost is included in the period containing its date.';
+  }
+
   document.querySelectorAll('[data-overview-period]').forEach(button => button.addEventListener('click', () => {
     overviewPeriod = button.dataset.overviewPeriod;
     syncOverviewControls(); void refreshDashboard();
@@ -76,6 +107,10 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
   document.querySelectorAll('[data-best-period]').forEach(button => button.addEventListener('click', () => {
     bestPeriod = button.dataset.bestPeriod;
     syncOverviewControls(); void refreshDashboard();
+  }));
+  document.querySelectorAll('[data-finance-period]').forEach(button => button.addEventListener('click', () => {
+    financePeriod = button.dataset.financePeriod;
+    syncFinanceControls(); void refreshFinance();
   }));
   document.querySelectorAll('[data-best-view]').forEach(button => button.addEventListener('click', () => {
     bestView = button.dataset.bestView;
@@ -97,17 +132,32 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
     if (!bestAnchorInput.value || bestAnchorInput.value > todayLocal()) return;
     bestAnchor = bestAnchorInput.value; void refreshDashboard();
   });
+  financeAnchorInput.addEventListener('change', () => {
+    if (!financeAnchorInput.value || financeAnchorInput.value > todayLocal()) {
+      financeAnchorInput.value = financeAnchor;
+      return;
+    }
+    financeAnchor = financeAnchorInput.value;
+    syncFinanceControls(); void refreshFinance();
+  });
 
   document.querySelectorAll('[data-view]').forEach(button => {
     button.addEventListener('click', () => { void setMainView(button.dataset.view); });
   });
   document.getElementById('addExpenseButton').addEventListener('click', () => {
     document.getElementById('expensePanel').classList.remove('hidden');
-    document.getElementById('expenseDate').value = todayLocal();
+    document.getElementById('expenseDate').value = financeAnchor;
+    document.getElementById('expenseDate').max = todayLocal();
+    const message = document.getElementById('expenseMessage');
+    message.textContent = '';
+    message.className = 'workflow-notice hidden';
     document.getElementById('expenseTitle').focus();
   });
   document.getElementById('closeExpenseButton').addEventListener('click', () => document.getElementById('expensePanel').classList.add('hidden'));
   document.getElementById('expenseForm').addEventListener('submit', saveExpense);
+  document.querySelectorAll('[data-cost-kind]').forEach(button => button.addEventListener('click', () => {
+    setFinanceExpenseKind(button.dataset.costKind);
+  }));
   document.getElementById('refreshInventoryButton').addEventListener('click', () => { void refreshInventory(); });
   inventorySearch.addEventListener('input', renderInventoryTable);
   categorySearch.addEventListener('input', renderInventoryCategories);
@@ -177,11 +227,6 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
       });
       return { clear: true, message: `Sale #${sale.id} complete · ${formatAmount(sale.totalOriginalPrice)} paid by ${posPayment.toUpperCase()}.` };
     });
-  });
-  document.getElementById('monthlyPlanForm').addEventListener('submit', saveFinancePlan);
-  document.getElementById('monthlyPlanForm').addEventListener('input', () => {
-    financePlanDirty = true;
-    document.getElementById('financePlanStatus').textContent = 'Unsaved monthly cost changes.';
   });
   function todayLocal() {
     const now = new Date();
@@ -819,6 +864,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
           title: document.getElementById('expenseTitle').value.trim(),
           amount: Number(document.getElementById('expenseAmount').value),
           expenseDate: document.getElementById('expenseDate').value,
+          expenseKind: financeExpenseKind,
         }),
       });
       document.getElementById('expenseForm').reset();
@@ -829,7 +875,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
       message.className = 'workflow-notice error';
     } finally {
       button.disabled = false;
-      button.textContent = 'Save expense';
+      button.textContent = 'Save cost';
     }
   }
 
@@ -1066,24 +1112,15 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
     });
   }
 
-  const monthlyInputIds = {
-    water: 'planWater', electricity: 'planElectricity', gas: 'planGas', sewage: 'planSewage',
-    salaries: 'planSalaries', mortgagePayment: 'planMortgagePayment',
-  };
-
   async function refreshFinance() {
     const requestId = ++financeRequestId;
     try {
-      const data = await api('/api/finance');
+      syncFinanceControls();
+      const query = new URLSearchParams({ period: financePeriod, anchor: financeAnchor });
+      const data = await api(`/api/finance?${query}`);
       if (requestId !== financeRequestId) return;
       financeProducts = data.products;
       financeStats = data;
-      if (!financePlanDirty) {
-        financePlan = data.plan;
-        for (const [field, id] of Object.entries(monthlyInputIds)) {
-          document.getElementById(id).value = data.plan?.[field] ?? '';
-        }
-      }
       setDatabaseStatus(true, 'FIREBASE CONNECTED');
       renderFinanceSummary();
       renderFinanceTable();
@@ -1101,65 +1138,110 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
 
   function showFinanceDelta(id, current, previous, { cost = false } = {}) {
     const element = document.getElementById(id);
-    if (current == null || previous == null || !financeStats?.comparisonMonth) {
-      element.textContent = current == null ? 'Current amount unavailable' : 'Previous month unavailable';
+    if (current == null || previous == null || !financeStats?.comparisonLabel) {
+      element.textContent = current == null ? 'Current amount unavailable' : 'Previous period unavailable';
       element.className = 'finance-delta unknown';
       return;
     }
     const delta = Math.round((current - previous) * 100) / 100;
-    const month = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
-      .format(new Date(`${financeStats.comparisonMonth}-01T12:00:00Z`));
-    element.textContent = `${delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '— '}${formatAmount(Math.abs(delta))} vs ${month}`;
+    element.textContent = `${delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '— '}${formatAmount(Math.abs(delta))} ${financeStats.comparisonLabel}`;
     element.className = `finance-delta ${delta === 0 ? 'flat' : cost ? (delta > 0 ? 'cost-up' : 'cost-down') : delta > 0 ? 'good' : 'bad'}`;
   }
 
+  function renderFinanceTrend(data = financeStats) {
+    const svg = document.getElementById('financeTrendChart');
+    const empty = document.getElementById('financeTrendEmpty');
+    const chart = data?.trend || [];
+    const series = [
+      ['costs', 'Costs', '#4278d0'],
+      ['productPurchases', 'Product purchases', '#e87518'],
+      ['grossProfit', 'Gross profit', '#17a552'],
+      ['netProfit', 'Net profit', '#8565c9'],
+    ];
+    svg.replaceChildren();
+    const values = chart.flatMap(point => series.map(([key]) => point[key]))
+      .filter(value => value != null && Number.isFinite(Number(value))).map(Number);
+    empty.classList.toggle('hidden', values.length > 0);
+    if (!chart.length || !values.length) return;
+
+    const left = 62, right = 850, top = 25, bottom = 260;
+    let minimum = Math.min(0, ...values), maximum = Math.max(0, ...values);
+    if (minimum === maximum) maximum = minimum + 1;
+    const padding = (maximum - minimum) * .1;
+    if (minimum < 0) minimum -= padding;
+    maximum += padding;
+    const y = value => bottom - (value - minimum) / (maximum - minimum) * (bottom - top);
+    const x = index => chart.length === 1 ? (left + right) / 2 : left + index * (right - left) / (chart.length - 1);
+    for (let tick = 0; tick < 5; tick++) {
+      const gridY = top + tick * (bottom - top) / 4;
+      svg.append(svgNode('line', { x1: left, y1: gridY, x2: right, y2: gridY,
+        stroke: '#e8edf0', 'stroke-width': 1 }));
+      const label = svgNode('text', { x: left - 10, y: gridY + 4, 'text-anchor': 'end',
+        fill: '#95a1ad', 'font-size': 12 });
+      label.textContent = compactNumber(maximum - tick * (maximum - minimum) / 4);
+      svg.append(label);
+    }
+    if (minimum <= 0 && maximum >= 0) {
+      svg.append(svgNode('line', { x1: left, y1: y(0), x2: right, y2: y(0),
+        stroke: '#cbd4dc', 'stroke-width': 1.5 }));
+    }
+    const runsFor = key => {
+      const runs = []; let run = [];
+      chart.forEach((point, index) => {
+        const value = point[key];
+        if (value == null || !Number.isFinite(Number(value))) {
+          if (run.length) runs.push(run);
+          run = [];
+        } else run.push({ x: x(index), y: y(Number(value)) });
+      });
+      if (run.length) runs.push(run);
+      return runs;
+    };
+    series.forEach(([key, label, color]) => {
+      const runs = runsFor(key);
+      runs.forEach(run => svg.append(svgNode('path', { d: smoothOverviewPath(run), fill: 'none',
+        stroke: color, 'stroke-width': 3.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })));
+      chart.forEach((point, index) => {
+        const value = point[key];
+        if (value == null || !Number.isFinite(Number(value))) return;
+        const dot = svgNode('circle', { cx: x(index), cy: y(Number(value)), r: index === chart.length - 1 ? 4.5 : 3,
+          fill: color, tabindex: 0 });
+        const title = svgNode('title'); title.textContent = `${point.label} ${label}: ${formatAmount(value)}`;
+        dot.append(title); svg.append(dot);
+      });
+    });
+    chart.forEach((point, index) => {
+      const label = svgNode('text', { x: x(index), y: 292, 'text-anchor': 'middle', fill: '#a7b5c3',
+        'font-size': 12 });
+      label.textContent = point.label;
+      svg.append(label);
+    });
+    svg.setAttribute('aria-label', `Finance trend for ${data?.trendSubtitle || 'selected period'}`);
+  }
+
   function renderFinanceSummary() {
-    const fixed = financePlan?.cashCommitments ?? null;
-    document.getElementById('financeMonthlyTotal').textContent = fixed == null ? 'Not entered' : formatAmount(fixed);
-    const purchased = financeStats?.metrics?.productPurchases;
+    const suffix = financePeriod[0].toUpperCase() + financePeriod.slice(1);
+    document.getElementById('financeCostsTitle').textContent = `Costs · ${suffix}`;
+    document.getElementById('financePurchasesTitle').textContent = `Product purchases · ${suffix}`;
+    document.getElementById('financeGrossTitle').textContent = `Gross profit · ${suffix}`;
+    document.getElementById('financeNetTitle').textContent = `Net profit · ${suffix}`;
+    document.getElementById('financePeriodText').textContent = periodName(financePeriod, financeAnchor);
+    document.getElementById('financeTrendSubtitle').textContent = financeStats?.trendSubtitle || 'Finance movement for selected period';
+    const metrics = financeStats?.metrics || {};
+    const costs = metrics.costs;
+    document.getElementById('financeMonthlyTotal').textContent = costs == null ? 'Unavailable' : formatAmount(costs);
+    const purchased = metrics.productPurchases;
     document.getElementById('financeProductPurchases').textContent = purchased == null ? 'Unavailable' : formatAmount(purchased);
-    const gross = financeStats?.metrics?.grossProfit;
+    const gross = metrics.grossProfit;
     document.getElementById('financeMonthlyGross').textContent = gross == null ? 'Unavailable' : formatAmount(gross);
-    const net = financePlan && gross != null
-      ? gross - financePlan.cashCommitments - (financeStats?.monthOneTimeExpenses || 0) : null;
-    document.getElementById('financeMonthlyNet').textContent = net === null ? 'Unavailable' : formatAmount(net);
+    const net = metrics.netProfit;
+    document.getElementById('financeMonthlyNet').textContent = net == null ? 'Unavailable' : formatAmount(net);
     const previous = financeStats?.previousMetrics;
-    showFinanceDelta('financeFixedDelta', fixed, previous?.fixedCosts, { cost: true });
+    showFinanceDelta('financeFixedDelta', costs, previous?.costs, { cost: true });
     showFinanceDelta('financePurchaseDelta', purchased, previous?.productPurchases, { cost: true });
     showFinanceDelta('financeGrossDelta', gross, previous?.grossProfit);
     showFinanceDelta('financeNetDelta', net, previous?.netProfit);
-    document.getElementById('financePlanStatus').textContent = financePlanDirty ? 'Unsaved monthly cost changes.'
-      : !financePlan ? 'Monthly costs have not been entered. Gross profit is available; net profit is unavailable.'
-        : 'Monthly costs saved. Net profit is ready on a cash basis.';
-    document.getElementById('financeCashResult').textContent = !financePlan
-      ? 'Gross profit is available; enter monthly costs to see net profit on a cash basis.'
-      : 'Net profit = gross profit − utilities − salaries − full mortgage payment − one-time expenses. Cash basis includes loan principal and differs from formal accounting net income.';
-    if (financePlan && financeStats && !financeStats.currentPlanSnapshotExists) {
-      document.getElementById('financeCashResult').textContent += ' Save monthly costs once to record this month for future comparisons.';
-    }
-  }
-
-  async function saveFinancePlan(event) {
-    event.preventDefault();
-    const button = document.getElementById('saveMonthlyPlanButton');
-    button.disabled = true;
-    button.textContent = 'Saving…';
-    try {
-      const body = Object.fromEntries(Object.entries(monthlyInputIds)
-        .map(([field, id]) => [field, document.getElementById(id).value]));
-      const result = await api('/api/finance/plan', { method: 'PUT', body: JSON.stringify(body) });
-      financePlan = result.plan;
-      financePlanDirty = false;
-      if (financeStats) financeStats.currentPlanSnapshotExists = true;
-      renderFinanceSummary();
-      renderFinanceTable();
-      showFinanceMessage('financePlanMessage', 'Monthly costs saved. Net profit has been updated.');
-    } catch (error) {
-      showFinanceMessage('financePlanMessage', `Could not save monthly costs: ${error.message}`, true);
-    } finally {
-      button.disabled = false;
-      button.textContent = 'Save monthly costs';
-    }
+    renderFinanceTrend();
   }
 
   function renderFinanceTable() {
@@ -1241,7 +1323,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
         if (currentView === 'dashboard') void refreshDashboard();
         if (currentView === 'inventory') void refreshInventory();
         if (currentView === 'pos') void refreshPosProducts();
-        if (currentView === 'finance' && !financePlanDirty && !document.activeElement?.classList.contains('finance-price-input')) void refreshFinance();
+        if (currentView === 'finance' && !document.activeElement?.classList.contains('finance-price-input')) void refreshFinance();
       }, error => {
         setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
         dashboardError.textContent = `Firestore is unavailable: ${error.message}`;
@@ -1264,5 +1346,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-al
 
   hubLayout.classList.remove('hidden');
   setDatabaseStatus(false, 'FIREBASE CONNECTING');
+  syncFinanceControls();
+  setFinanceExpenseKind(financeExpenseKind);
   startLiveData('owner');
 })();

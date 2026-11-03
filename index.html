@@ -37,30 +37,24 @@
 .finance-section{margin-bottom:18px}.finance-section-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px}
 .finance-section-heading h2{font:800 19px Manrope,sans-serif;letter-spacing:-.04em;margin:0;color:#1e303a}
 .finance-section-heading p,.finance-help{color:#819098;font-size:11px;line-height:1.55;margin:5px 0 0}
-.finance-costs-summary{display:flex;align-items:center;justify-content:space-between;gap:15px;cursor:pointer;list-style:none}.finance-costs-summary::-webkit-details-marker{display:none}
-.finance-costs-summary:focus-visible{outline:2px solid #25a77c;outline-offset:6px;border-radius:7px}.finance-summary-copy{display:grid;gap:5px}.finance-summary-copy strong{font:800 19px Manrope,sans-serif;letter-spacing:-.04em;color:#1e303a}.finance-summary-copy small{font-size:11px;line-height:1.5;color:#819098}
-.finance-chevron{display:grid;place-items:center;flex:none;width:36px;height:36px;border:1px solid #dce7e5;border-radius:9px;color:#268968;background:#f3faf6;font-size:24px;line-height:1;transition:transform .16s}.finance-costs[open] .finance-chevron{transform:rotate(180deg)}
-.finance-cost-content{border-top:1px solid #e9eeef;margin-top:17px;padding-top:1px}
-.finance-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:10px 0}
-.finance-form-grid label{display:grid;gap:5px;font-size:11px;font-weight:700;color:#53616a}
-.finance-form-grid input{width:100%;min-height:40px;padding:9px;border:1px solid #dfe6e9;border-radius:8px;font-size:12px}
-.finance-divider{margin:18px 0 10px;border-top:1px solid #e9eeef;padding-top:15px;color:#30434d;font-size:12px;font-weight:800}
-.finance-form-footer{display:flex;align-items:center;gap:15px;flex-wrap:wrap}.finance-form-footer .workflow-primary{width:auto;min-width:180px}
-.finance-form-footer p{margin:10px 0 0;font-size:11px;color:#697b83}.finance-message{margin:11px 0 0;color:#247951;font-size:11px}.finance-message.error{color:#b04538}
+.finance-message{margin:11px 0 0;color:#247951;font-size:11px}.finance-message.error{color:#b04538}
 .finance-search{width:min(320px,100%);min-height:38px;padding:9px 12px;border:1px solid #dfe6e9;border-radius:8px;font-size:11px}
 .finance-table{min-width:720px}.finance-product{display:flex;align-items:center;gap:8px;min-width:130px}.finance-product img{width:32px;height:32px;object-fit:cover;border-radius:6px}
 .finance-price-input{width:108px;min-height:34px;border:1px solid #cfdadc;border-radius:7px;padding:6px 8px;font-size:11px}.finance-save-price{border:0;border-radius:7px;background:#1f9e73;color:#fff;padding:9px 12px;font-size:10px;font-weight:800}.finance-save-price:disabled{opacity:.5}
 .finance-profit{font-weight:800;color:#197c59}.finance-negative{color:#b54835}.finance-unavailable{color:#9ba6ab}.net-card strong.unavailable{font-size:clamp(15px,1.6vw,21px)}
 .finance-summary-grid .finance-metric-card{display:flex;flex-direction:column;align-items:center;text-align:center;gap:9px;min-height:232px;padding:17px 10px;background:#fff;border-radius:16px}
+.finance-trend-panel{margin:0 0 18px}.finance-trend-legend{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 13px;color:#66717a;font:12px Georgia,serif}.finance-trend-legend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.finance-trend-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}.finance-trend-legend .costs{background:#4278d0}.finance-trend-legend .purchases{background:#e87518}.finance-trend-legend .gross{background:#17a552}.finance-trend-legend .net{background:#8565c9}.finance-trend-chart-body{min-height:245px;padding:20px 17px 13px}.finance-trend-chart-body svg{width:100%;height:auto;min-height:220px;display:block}.finance-trend-chart-body .overview-empty{position:absolute;inset:0;margin:auto;display:grid;place-items:center;pointer-events:none;padding:18px}
 .finance-metric-title{min-height:30px;display:grid;place-items:center;color:#52636a;font-size:11px;font-weight:800;line-height:1.25}
 .finance-ring{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:none;width:128px;height:128px;border-radius:50%;background:conic-gradient(from 210deg,#a3d855 0deg,#f5bc46 140deg,#fb8437 235deg,#ec5455 302deg,transparent 303deg);isolation:isolate}
 .finance-ring::before{content:"";position:absolute;inset:5px;border-radius:50%;background:#fff;z-index:-1}
 .finance-ring strong{max-width:115px;color:#1b2732;font:800 clamp(15px,1.45vw,21px)/1.1 Manrope,sans-serif;letter-spacing:-.04em;overflow-wrap:anywhere}.finance-ring small{max-width:105px;margin-top:5px;color:#89979c;font-size:8px;line-height:1.25}
 .finance-delta{max-width:100%;min-height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:20px;padding:5px 8px;font-size:9px;font-weight:800;line-height:1.3;white-space:normal}
 .finance-delta.good{color:#16885c;background:#e8f7ed}.finance-delta.bad{color:#b94d39;background:#fff0e9}.finance-delta.cost-up{color:#a46327;background:#fff3e8}.finance-delta.cost-down{color:#28788a;background:#eaf5f7}.finance-delta.flat{color:#61767c;background:#f0f3f3}.finance-delta.unknown{color:#7d898e;background:#f3f5f5}
-.finance-cash-strip{margin:-3px 0 20px;padding:12px 16px;background:#edf8f3;border:1px solid #d8eae0;border-radius:11px;color:#435c53}.finance-cash-strip p{margin:0;color:#567a6a;font-size:11px;line-height:1.5}
-.finance-purchase-note{margin:-9px 0 18px}
-.finance-costs-summary{display:grid;grid-template-columns:1fr;justify-items:center;text-align:center;gap:12px}.finance-summary-copy{justify-items:center}.finance-chevron{width:40px;height:40px}
+.finance-period-bar{margin-bottom:14px}.finance-period-bar .overview-period-text{margin-left:auto}
+.finance-cost-switch{display:inline-flex;width:max-content;gap:3px;padding:4px;border:1px solid #dedede;border-radius:13px;background:#f8f8f8}
+.finance-cost-switch button{border:0;border-radius:10px;background:transparent;color:#646464;padding:9px 13px;font:600 12px Georgia,serif;white-space:nowrap}
+.finance-cost-switch button.active{background:#111;color:#fff}.finance-cost-switch button:focus-visible{outline:2px solid #1769c6;outline-offset:2px}
+.expense-panel .workflow-card-heading{margin-bottom:14px}.expense-panel .inventory-form{gap:11px}.expense-panel .finance-help{margin:0}
 .app-shell{max-width:1360px}.pos-screen{padding:34px 0 48px}.pos-screen .hub-heading{margin-bottom:21px}.pos-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.76fr);gap:19px;align-items:start}
 .pos-catalog{min-width:0}.pos-search-wrap{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #dce3e5;border-radius:14px;padding:0 15px;min-height:54px}.pos-search-wrap span{color:#61747c;font-size:20px}.pos-search-wrap input{border:0;outline:0;background:transparent;width:100%;font:16px Georgia,serif;color:#22323a}.pos-search-wrap:focus-within{border-color:#28a979;box-shadow:0 0 0 3px #27ad7c19}.pos-filters{display:flex;gap:9px;margin:17px 0 20px}.pos-filter{border:1px solid #cfd6d8;border-radius:25px;padding:10px 19px;background:transparent;color:#53646c;font:15px Georgia,serif}.pos-filter.active{border-color:#17242a;background:#17242a;color:#fff}
 .pos-product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.pos-product{overflow:hidden;border:1px solid #e6ebed;border-radius:17px;background:#fff;box-shadow:0 8px 22px #2632380b;display:flex;flex-direction:column;text-align:left;padding:0;min-width:0;transition:transform .16s,box-shadow .16s}.pos-product:not(:disabled):hover{transform:translateY(-2px);box-shadow:0 14px 28px #26323817}.pos-product:disabled{cursor:default;opacity:.69}.pos-product-image{width:100%;aspect-ratio:1.35;object-fit:cover;background:#eaf3ee}.pos-product-placeholder{display:grid;place-items:center;color:#7eaaa0;font:800 45px Manrope,sans-serif;background:linear-gradient(145deg,#eff7f3,#deeae6)}.pos-product-details{display:grid;gap:7px;padding:14px 16px 17px}.pos-product-name{font:18px Georgia,serif;color:#1c2a2f;overflow-wrap:anywhere}.pos-product-price{font:700 22px Georgia,serif;color:#14242a}.pos-product-meta{font-size:10px;color:#8a979d}
@@ -71,8 +65,9 @@
 @media(max-width:980px){.pos-layout{grid-template-columns:minmax(0,1fr)}.pos-order{position:static}.pos-product-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:680px){.pos-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pos-screen{padding-top:22px}.pos-order-head,.pos-order-bottom{padding-left:16px;padding-right:16px}.pos-order-items{padding:8px 16px}}
 @media(max-width:410px){.pos-product-grid{gap:9px}.pos-product-details{padding:10px}.pos-product-name{font-size:15px}.pos-product-price{font-size:18px}}
-@media(max-width:900px){.finance-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.finance-screen{padding-top:22px}.finance-form-grid{grid-template-columns:1fr 1fr;gap:8px}.finance-summary-grid article{padding:13px}.finance-summary-grid strong{font-size:16px}.finance-section-heading{align-items:flex-start;flex-direction:column}}
+@media(max-width:900px){.finance-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.finance-screen{padding-top:22px}.finance-summary-grid article{padding:13px}.finance-summary-grid strong{font-size:16px}.finance-section-heading{align-items:flex-start;flex-direction:column}}
+@media(max-width:700px){.finance-trend-panel .overview-panel-heading{align-items:flex-start}.finance-trend-legend{justify-content:flex-start;gap:8px 11px;font-size:11px}.finance-trend-chart-body{min-height:215px;padding:17px 12px 10px}.finance-trend-chart-body svg{min-height:190px}}
 </style>
 <style>
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -335,54 +330,47 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
       </section>
 
       <section id="financeScreen" class="finance-screen hidden">
-        <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE FINANCE</div><h1>Finance</h1><p>Set selling prices and plan the cash needed for monthly bills.</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ One-time expense</button></header>
+        <header class="hub-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> STORE FINANCE</div><h1>Finance</h1><p>Review costs, purchases, and profit for the selected period.</p></div><button id="addExpenseButton" class="secondary-button" type="button">＋ Add cost</button></header>
+        <div class="overview-period-bar finance-period-bar" aria-label="Finance date range">
+          <strong>Finance period</strong>
+          <div class="overview-segments" role="group" aria-label="Finance period">
+            <button type="button" data-finance-period="day" aria-pressed="false">Day</button>
+            <button type="button" data-finance-period="month" class="active" aria-pressed="true">Month</button>
+            <button type="button" data-finance-period="year" aria-pressed="false">Year</button>
+          </div>
+          <label class="overview-date"><span class="sr-only">Choose finance date</span><input id="financeAnchor" type="date"><span aria-hidden="true">▦</span></label>
+          <span id="financePeriodText" class="overview-period-text">—</span>
+        </div>
         <section id="expensePanel" class="workflow-card expense-panel hidden">
-          <div class="workflow-card-heading"><div><span class="eyebrow">OTHER COST</span><h2>Record a one-time expense</h2></div><button id="closeExpenseButton" class="clear-button" type="button">Close</button></div>
+          <div class="workflow-card-heading"><div><span class="eyebrow">COST ENTRY</span><h2 id="expensePanelTitle">Record a cost</h2></div><button id="closeExpenseButton" class="clear-button" type="button">Close</button></div>
           <form id="expenseForm" class="inventory-form">
-            <label>Expense name<input id="expenseTitle" type="text" maxlength="200" placeholder="For example: repairs or supplies" required></label>
-            <p class="finance-help">Enter recurring utility, salary, and mortgage amounts in Finance. Recording them here too would count them twice.</p>
+            <div class="finance-cost-switch" role="group" aria-label="Cost type">
+              <button type="button" class="active" data-cost-kind="monthly_cost" aria-pressed="true">Monthly cost</button>
+              <button type="button" data-cost-kind="one_time" aria-pressed="false">One-time cost</button>
+            </div>
+            <label id="expenseNameLabel">Cost name<input id="expenseTitle" type="text" maxlength="200" placeholder="For example: electricity or salaries" required></label>
+            <p id="expenseKindHelp" class="finance-help">A dated monthly bill is recorded once and included in the selected period.</p>
             <div class="form-grid"><label>Amount<input id="expenseAmount" type="number" min="0.01" step="0.01" required></label><label>Date<input id="expenseDate" type="date" required></label></div>
             <p id="expenseMessage" class="workflow-notice hidden" role="status"></p>
-            <button id="saveExpenseButton" class="workflow-primary" type="submit">Save expense</button>
+            <button id="saveExpenseButton" class="workflow-primary" type="submit">Save cost</button>
           </form>
         </section>
         <div class="finance-summary-grid">
-          <article class="finance-metric-card"><span class="finance-metric-title">Fixed costs / month</span><div class="finance-ring"><strong id="financeMonthlyTotal">Not entered</strong><small>Bills and mortgage</small></div><span id="financeFixedDelta" class="finance-delta unknown">No previous plan</span></article>
-          <article class="finance-metric-card"><span class="finance-metric-title">Product purchase cost / month</span><div class="finance-ring"><strong id="financeProductPurchases">—</strong><small>Inbound stock bought</small></div><span id="financePurchaseDelta" class="finance-delta unknown">Previous month unavailable</span></article>
-          <article class="finance-metric-card"><span class="finance-metric-title">Gross profit / month</span><div class="finance-ring"><strong id="financeMonthlyGross">—</strong><small>Sales less product cost</small></div><span id="financeGrossDelta" class="finance-delta unknown">Previous month unavailable</span></article>
-          <article class="finance-metric-card"><span class="finance-metric-title">Net profit / month</span><div class="finance-ring"><strong id="financeMonthlyNet">Unavailable</strong><small>Cash basis · after bills</small></div><span id="financeNetDelta" class="finance-delta unknown">Previous month unavailable</span></article>
+          <article class="finance-metric-card"><span id="financeCostsTitle" class="finance-metric-title">Costs · Month</span><div class="finance-ring"><strong id="financeMonthlyTotal">—</strong><small>Recorded costs</small></div><span id="financeFixedDelta" class="finance-delta unknown">Previous period unavailable</span></article>
+          <article class="finance-metric-card"><span id="financePurchasesTitle" class="finance-metric-title">Product purchases · Month</span><div class="finance-ring"><strong id="financeProductPurchases">—</strong><small>Inbound stock bought</small></div><span id="financePurchaseDelta" class="finance-delta unknown">Previous period unavailable</span></article>
+          <article class="finance-metric-card"><span id="financeGrossTitle" class="finance-metric-title">Gross profit · Month</span><div class="finance-ring"><strong id="financeMonthlyGross">—</strong><small>Sales less product cost</small></div><span id="financeGrossDelta" class="finance-delta unknown">Previous period unavailable</span></article>
+          <article class="finance-metric-card"><span id="financeNetTitle" class="finance-metric-title">Net profit · Month</span><div class="finance-ring"><strong id="financeMonthlyNet">—</strong><small>Gross profit after costs</small></div><span id="financeNetDelta" class="finance-delta unknown">Previous period unavailable</span></article>
         </div>
-        <div class="finance-cash-strip"><p id="financeCashResult">Gross profit is available; enter monthly costs to see net profit on a cash basis.</p></div>
-        <p class="finance-help finance-purchase-note">Product purchase cost tracks stock bought this month. Gross profit already deducts the cost of products when they are sold.</p>
-        <details id="monthlyCostsDetails" class="workflow-card finance-section finance-costs">
-          <summary class="finance-costs-summary"><span class="finance-summary-copy"><strong>Monthly costs</strong><small>Click to expand or collapse. Leave a field blank if it does not apply.</small></span><span class="finance-chevron" aria-hidden="true">⌄</span></summary>
-          <div class="finance-cost-content">
-          <form id="monthlyPlanForm">
-            <div class="finance-divider">Utilities</div>
-            <div class="finance-form-grid">
-              <label>Water<input id="planWater" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-              <label>Electricity<input id="planElectricity" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-              <label>Gas<input id="planGas" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-              <label>Sewage (if applicable)<input id="planSewage" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-            </div>
-            <div class="finance-divider">Staff and mortgage</div>
-            <div class="finance-form-grid">
-              <label>Employee salaries (monthly total)<input id="planSalaries" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-              <label>Mortgage payment including interest (monthly total)<input id="planMortgagePayment" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-            </div>
-            <p class="finance-help">Monthly net profit subtracts these bills, including the full mortgage payment, from gross profit. This is cash after bills; mortgage principal means it differs from formal accounting net income. Record one-time expenses separately.</p>
-            <div class="finance-form-footer"><button id="saveMonthlyPlanButton" class="workflow-primary" type="submit">Save monthly costs</button><p id="financePlanStatus">Monthly costs have not been entered. Gross profit is available; net profit is unavailable.</p></div>
-            <p id="financePlanMessage" class="finance-message hidden" role="status"></p>
-          </form>
-          </div>
-        </details>
+        <section class="overview-panel finance-trend-panel">
+          <div class="overview-panel-heading"><div><h2>Finance Trend</h2><p id="financeTrendSubtitle">Monthly movement · Last 6 months</p></div><div class="finance-trend-legend" aria-label="Chart series"><span><i class="costs"></i>Costs</span><span><i class="purchases"></i>Product purchases</span><span><i class="gross"></i>Gross profit</span><span><i class="net"></i>Net profit</span></div></div>
+          <div class="overview-chart-body finance-trend-chart-body"><svg id="financeTrendChart" viewBox="0 0 900 320" role="img" aria-label="Finance trend for the selected period"></svg><p id="financeTrendEmpty" class="overview-empty hidden">Finance history will appear as costs, purchases, and sales are recorded.</p></div>
+        </section>
         <section class="inventory-table-card finance-section">
           <div class="inventory-toolbar finance-section-heading"><div><h2>Inventory pricing</h2><p>Purchase cost is from Inbound. Set or change a selling price; past sales keep their recorded prices.</p></div><input id="financeSearch" class="finance-search" type="search" aria-label="Search finance inventory" placeholder="Search product or barcode"></div>
           <p id="financePriceMessage" class="finance-message hidden" role="status"></p>
           <div class="table-scroll"><table class="finance-table"><thead><tr><th>Product</th><th>In stock</th><th>Purchase cost/unit</th><th>Selling price/unit</th><th>Gross profit/unit</th><th>Action</th></tr></thead><tbody id="financeTableBody"></tbody></table></div>
           <div id="financeEmpty" class="inventory-empty hidden">No inventory products found. Add a product in the scanner first.</div>
         </section>
-        <p class="finance-help">Without a monthly sales forecast, the system cannot divide bills into a reliable amount per product. Use the monthly cash commitments total when planning prices.</p>
       </section>
 
       
@@ -396,6 +384,6 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
   
   
   
-<script type="module" src="./hub.js?v=expiry-stock-alerts-20261103-1"></script>
+<script type="module" src="./hub.js?v=finance-period-20261103-2"></script>
 </body>
 </html>
