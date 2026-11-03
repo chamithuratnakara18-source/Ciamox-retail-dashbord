@@ -1,10 +1,11 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-period-20261103-2';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?order-spike-20261103-1';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
   const inventoryScreen = document.getElementById('inventoryScreen');
   const posScreen = document.getElementById('posScreen');
   const financeScreen = document.getElementById('financeScreen');
+  const ordersScreen = document.getElementById('ordersScreen');
   const connectionStatus = document.getElementById('connectionStatus');
   const connectionStatusText = document.getElementById('connectionStatusText');
   const hubLayout = document.getElementById('hubLayout');
@@ -18,6 +19,9 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-peri
   const categoryDialog = document.getElementById('inventoryCategoryDialog');
   const categoryDialogMessage = document.getElementById('inventoryCategoryDialogMessage');
   let dashboardRequestId = 0;
+  let orderRequestId = 0;
+  let orderPeriod = 'year';
+  let orderAnchor = todayLocal();
   let currentView = 'dashboard';
   let inventoryProducts = [];
   let inventoryCategories = [];
@@ -50,6 +54,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-peri
   const overviewAnchorInput = document.getElementById('overviewAnchor');
   const bestAnchorInput = document.getElementById('bestSellingAnchor');
   const financeAnchorInput = document.getElementById('financeAnchor');
+  const orderAnchorInput = document.getElementById('orderAnchor');
 
   function syncOverviewControls() {
     const today = todayLocal();
@@ -83,6 +88,27 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-peri
     document.getElementById('financePeriodText').textContent = periodName(financePeriod, financeAnchor);
   }
 
+  function syncOrderControls() {
+    const [year, month] = orderAnchor.split('-');
+    orderAnchorInput.type = orderPeriod === 'day' ? 'date' : orderPeriod === 'month' ? 'month' : 'number';
+    orderAnchorInput.value = orderPeriod === 'year' ? year : orderPeriod === 'month' ? `${year}-${month}` : orderAnchor;
+    orderAnchorInput.setAttribute('aria-label', `Order analytics ${orderPeriod}`);
+    if (orderPeriod === 'year') {
+      orderAnchorInput.min = '2000';
+      orderAnchorInput.max = todayLocal().slice(0, 4);
+      orderAnchorInput.step = '1';
+    } else {
+      orderAnchorInput.removeAttribute('min');
+      orderAnchorInput.max = orderPeriod === 'month' ? todayLocal().slice(0, 7) : todayLocal();
+      orderAnchorInput.removeAttribute('step');
+    }
+    document.querySelectorAll('[data-order-period]').forEach(button => {
+      const active = button.dataset.orderPeriod === orderPeriod;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+  }
+
   function setFinanceExpenseKind(kind) {
     if (!['monthly_cost', 'one_time'].includes(kind)) return;
     financeExpenseKind = kind;
@@ -112,6 +138,11 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-peri
     financePeriod = button.dataset.financePeriod;
     syncFinanceControls(); void refreshFinance();
   }));
+  document.querySelectorAll('[data-order-period]').forEach(button => button.addEventListener('click', () => {
+    orderPeriod = button.dataset.orderPeriod;
+    syncOrderControls();
+    void refreshOrderAnalytics();
+  }));
   document.querySelectorAll('[data-best-view]').forEach(button => button.addEventListener('click', () => {
     bestView = button.dataset.bestView;
     syncOverviewControls(); renderBestSelling(bestData);
@@ -139,6 +170,18 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-peri
     }
     financeAnchor = financeAnchorInput.value;
     syncFinanceControls(); void refreshFinance();
+  });
+  orderAnchorInput.addEventListener('change', () => {
+    const value = orderAnchorInput.value;
+    const candidate = orderPeriod === 'year' ? `${value}-01-01`
+      : orderPeriod === 'month' ? `${value}-01` : value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate) || candidate > todayLocal() || Number.isNaN(Date.parse(`${candidate}T12:00:00Z`))) {
+      syncOrderControls();
+      return;
+    }
+    orderAnchor = candidate;
+    syncOrderControls();
+    void refreshOrderAnalytics();
   });
 
   document.querySelectorAll('[data-view]').forEach(button => {
@@ -253,11 +296,13 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-peri
     inventoryScreen.classList.toggle('hidden', view !== 'inventory');
     posScreen.classList.toggle('hidden', view !== 'pos');
     financeScreen.classList.toggle('hidden', view !== 'finance');
+    ordersScreen.classList.toggle('hidden', view !== 'orders');
     document.querySelectorAll('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
     if (view === 'dashboard') await refreshDashboard();
     if (view === 'inventory') await refreshInventory();
     if (view === 'pos') await refreshPosProducts();
     if (view === 'finance') await refreshFinance();
+    if (view === 'orders') await refreshOrderAnalytics();
   }
 
   function formatAmount(value) {
@@ -694,6 +739,151 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-peri
       dashboardError.textContent = `Dashboard data is not available: ${error.message}. Check firebase-config.js and Firestore rules.`;
       dashboardError.classList.remove('hidden');
     }
+  }
+
+  async function refreshOrderAnalytics() {
+    const requestId = ++orderRequestId;
+    document.getElementById('ordersError').classList.add('hidden');
+    document.getElementById('ordersUpdated').textContent = 'Updating…';
+    try {
+      const stats = await api(`/api/order-analytics?${new URLSearchParams({ period: orderPeriod, anchor: orderAnchor })}`);
+      if (requestId !== orderRequestId) return;
+      renderOrderAnalytics(stats);
+      setDatabaseStatus(true, 'FIREBASE CONNECTED');
+      document.getElementById('ordersUpdated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } catch (error) {
+      if (requestId !== orderRequestId) return;
+      setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
+      document.getElementById('ordersUpdated').textContent = 'Waiting for database';
+      document.getElementById('ordersError').textContent = `Order analytics are not available: ${error.message}. Check Firebase access and Firestore rules.`;
+      document.getElementById('ordersError').classList.remove('hidden');
+    }
+  }
+
+  function renderOrderAnalytics(data) {
+    const now = new Date();
+    const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    document.getElementById('orderAnalyticsSubtitle').textContent = data.subtitle;
+    document.getElementById('orderFrequencyTotal').textContent = `${Number(data.orderCount).toLocaleString('en-US')} orders`;
+    document.getElementById('orderPeakLabel').textContent = data.peakPrefix;
+    document.getElementById('orderPeakValue').textContent = data.peakLabel;
+    document.getElementById('orderBusiestTime').textContent = data.busiestTime;
+    document.getElementById('orderAverageSlot').textContent = Number(data.averagePerSlot || 0).toFixed(1);
+    const frequencyTitle = data.period === 'year' ? 'Order frequency by month'
+      : data.period === 'month' ? 'Order frequency by day' : 'Order frequency by 4-hour block';
+    document.getElementById('orderFrequencyTitle').textContent = frequencyTitle;
+    document.getElementById('orderTopItemsSubtitle').textContent = `${periodName(data.period, data.anchor)} · ${data.orderCount} completed orders`;
+    document.getElementById('orderHistorySubtitle').textContent = `${data.totalOrdersInRange} completed orders · ${periodName(data.period, data.anchor)}`;
+    renderOrderBars(document.getElementById('orderFrequencyBars'), data.frequency, '#c95052', 46, `${frequencyTitle}, ${data.orderCount} orders`);
+    renderOrderBars(document.getElementById('orderTimeBars'), data.hourlyCounts, '#252a30', 30, `Time of day order frequency, updated ${stamp}`);
+    renderTopOrderItems(data.topItems);
+    renderOrderHistory(data.orders);
+  }
+
+  function renderOrderBars(container, items, color, maxWidth, description) {
+    container.replaceChildren();
+    container.setAttribute('aria-label', description);
+    const maximum = Math.max(0, ...items.map(item => Number(item.count) || 0));
+    items.forEach(item => {
+      const count = Number(item.count) || 0;
+      const column = document.createElement('div'); column.className = 'orders-bar-item';
+      column.title = `${item.label}: ${count} ${count === 1 ? 'order' : 'orders'}`;
+      const value = document.createElement('span'); value.className = 'orders-bar-value';
+      value.textContent = count ? String(count) : '';
+      const track = document.createElement('span'); track.className = 'orders-bar-track';
+      const bar = document.createElement('i'); bar.className = 'orders-bar';
+      if (count > 0 && maximum > 0) {
+        const height = Math.max(5, count / maximum * 176);
+        bar.style.height = `${height}px`;
+        bar.style.maxWidth = `${maxWidth}px`;
+        bar.style.backgroundColor = color;
+      } else {
+        bar.classList.add('is-zero');
+      }
+      bar.setAttribute('aria-hidden', 'true');
+      track.append(bar);
+      const label = document.createElement('span'); label.className = 'orders-bar-label'; label.textContent = item.label;
+      column.append(value, track, label);
+      container.append(column);
+    });
+  }
+
+  function renderTopOrderItems(items) {
+    const container = document.getElementById('orderTopItems');
+    container.replaceChildren();
+    if (!items.length) {
+      const empty = document.createElement('p'); empty.className = 'overview-empty';
+      empty.textContent = 'No item sales recorded in this period.'; container.append(empty); return;
+    }
+    const maximum = Math.max(...items.map(item => Number(item.quantity) || 0));
+    items.forEach((item, index) => {
+      const row = document.createElement('div'); row.className = 'order-top-row';
+      const rank = document.createElement('span'); rank.className = 'order-top-rank'; rank.textContent = String(index + 1);
+      const name = document.createElement('span'); name.className = 'order-top-name'; name.textContent = item.name; name.title = item.name;
+      const track = document.createElement('span'); track.className = 'order-top-track';
+      const fill = document.createElement('i'); fill.style.width = `${Math.max(0, Number(item.quantity) / maximum * 100)}%`; fill.setAttribute('aria-hidden', 'true'); track.append(fill);
+      const count = document.createElement('span'); count.className = 'order-top-count'; count.textContent = `${item.quantity} ${item.quantity === 1 ? 'item' : 'items'}`;
+      row.append(rank, name, track, count); container.append(row);
+    });
+  }
+
+  function orderDateTime(sale) {
+    const timestamp = sale.createdAt?.toDate?.() || (Number.isFinite(Number(sale.createdAt?.seconds))
+      ? new Date(Number(sale.createdAt.seconds) * 1000) : null);
+    if (timestamp && !Number.isNaN(timestamp.getTime())) {
+      return `${new Intl.DateTimeFormat('en-CA').format(timestamp)} · ${new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit', minute: '2-digit', hour12: true,
+      }).format(timestamp).toLowerCase()}`;
+    }
+    return sale.day ? `${englishDate(sale.day)} · time unavailable` : 'Date unavailable';
+  }
+
+  function orderItemSummary(sale) {
+    return (Array.isArray(sale.items) ? sale.items : []).map(item =>
+      `${Number(item.quantity) || 0}× ${String(item.name || item.barcode || 'Item')}`).join(', ') || 'No item details';
+  }
+
+  function renderOrderHistory(orders) {
+    const container = document.getElementById('orderHistoryList');
+    container.replaceChildren();
+    if (!orders.length) {
+      const empty = document.createElement('p'); empty.className = 'overview-empty';
+      empty.textContent = 'No completed orders in this period.'; container.append(empty); return;
+    }
+    orders.forEach(sale => {
+      const row = document.createElement('article'); row.className = 'order-history-row';
+      const id = document.createElement('span'); id.className = 'order-history-id';
+      id.textContent = sale.id ? `#${String(sale.id).slice(0, 8)}` : '#—';
+      const items = document.createElement('span'); items.className = 'order-history-items'; items.textContent = orderItemSummary(sale); items.title = items.textContent;
+      const date = document.createElement('span'); date.className = 'order-history-date'; date.textContent = orderDateTime(sale);
+      const total = document.createElement('strong'); total.className = 'order-history-total'; total.textContent = `€ ${formatAmount(sale.totalOriginalPrice)}`;
+      const actions = document.createElement('div'); actions.className = 'order-history-actions';
+      const receipt = document.createElement('button'); receipt.type = 'button'; receipt.textContent = '▤ Receipt';
+      receipt.addEventListener('click', () => printOrderReceipt(sale));
+      const reprint = document.createElement('button'); reprint.type = 'button'; reprint.textContent = '⎙ Reprint';
+      reprint.addEventListener('click', () => printOrderReceipt(sale));
+      const done = document.createElement('span'); done.className = 'order-done'; done.textContent = 'DONE'; done.setAttribute('aria-label', 'Completed sale');
+      actions.append(receipt, reprint, done);
+      row.append(id, items, date, total, actions); container.append(row);
+    });
+  }
+
+  function printOrderReceipt(sale) {
+    const popup = window.open('about:blank', '_blank', 'width=520,height=720');
+    if (!popup) {
+      const error = document.getElementById('ordersError');
+      error.textContent = 'Allow pop-ups for this site to print a receipt.';
+      error.classList.remove('hidden'); return;
+    }
+    popup.opener = null;
+    const escape = value => String(value).replace(/[&<>"']/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[character]);
+    const lines = (Array.isArray(sale.items) ? sale.items : []).map(item =>
+      `<tr><td>${escape(item.name || item.barcode || 'Item')} × ${Number(item.quantity) || 0}</td><td>€ ${formatAmount((Number(item.originalPrice) || 0) * (Number(item.quantity) || 0))}</td></tr>`).join('');
+    popup.document.open();
+    popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Receipt ${escape(sale.id || '')}</title><style>body{font:14px system-ui,sans-serif;max-width:380px;margin:36px auto;color:#17232b}h1{font-size:20px}p{color:#667585}table{width:100%;border-collapse:collapse}td{padding:9px 0;border-bottom:1px solid #ddd}td:last-child{text-align:right;white-space:nowrap}.total{display:flex;justify-content:space-between;margin-top:18px;font-size:18px;font-weight:700}</style></head><body><h1>RetailFlow receipt</h1><p>Order #${escape(String(sale.id || '').slice(0, 8))}<br>${escape(orderDateTime(sale))}</p><table>${lines}</table><div class="total"><span>Total</span><span>€ ${formatAmount(sale.totalOriginalPrice)}</span></div><script>window.addEventListener('load',()=>window.print())<\/script></body></html>`);
+    popup.document.close();
   }
 
   function compactNumber(value) {
@@ -1314,13 +1504,14 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-peri
     if (listenersStarted) return;
     listenersStarted = true;
     const cashier = role === 'cashier';
-    document.querySelectorAll('[data-view="dashboard"], [data-view="inventory"], [data-view="finance"]').forEach(button => {
+    document.querySelectorAll('[data-view="dashboard"], [data-view="orders"], [data-view="inventory"], [data-view="finance"]').forEach(button => {
       button.classList.toggle('hidden', cashier);
     });
     if (!cashier) {
       stopRetailListener = watchRetailFlow(() => {
         setDatabaseStatus(true, 'FIREBASE CONNECTED');
         if (currentView === 'dashboard') void refreshDashboard();
+        if (currentView === 'orders') void refreshOrderAnalytics();
         if (currentView === 'inventory') void refreshInventory();
         if (currentView === 'pos') void refreshPosProducts();
         if (currentView === 'finance' && !document.activeElement?.classList.contains('finance-price-input')) void refreshFinance();
@@ -1347,6 +1538,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-peri
   hubLayout.classList.remove('hidden');
   setDatabaseStatus(false, 'FIREBASE CONNECTING');
   syncFinanceControls();
+  syncOrderControls();
   setFinanceExpenseKind(financeExpenseKind);
   startLiveData('owner');
 })();

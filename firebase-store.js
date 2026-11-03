@@ -256,6 +256,97 @@ function overview(data, period, anchor) {
   };
 }
 
+function saleCreatedAt(sale) {
+  try {
+    if (sale.createdAt?.toDate) return sale.createdAt.toDate();
+    if (Number.isFinite(Number(sale.createdAt?.seconds))) return new Date(Number(sale.createdAt.seconds) * 1000);
+    if (sale.createdAt instanceof Date) return sale.createdAt;
+  } catch { /* Older sales may not contain a readable timestamp. */ }
+  return null;
+}
+
+function orderAnalytics(data, period = 'year', anchor = todayLocal()) {
+  if (!['day', 'month', 'year'].includes(period)) throw new Error('Choose Day, Month, or Year.');
+  const selectedAnchor = validDate(anchor, 'order analytics date');
+  if (selectedAnchor > todayLocal()) throw new Error('Choose an order analytics date up to today.');
+  const range = overviewRange(period, selectedAnchor);
+  const sales = data.sales.filter(sale => typeof sale.day === 'string' && sale.day >= range.from && sale.day <= range.to);
+  const buckets = [];
+  const labelDate = value => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${value}T12:00:00Z`));
+
+  if (period === 'year') {
+    const year = Number(selectedAnchor.slice(0, 4));
+    for (let month = 0; month < 12; month++) {
+      const from = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+      const to = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
+      buckets.push({ from, to, label: new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' })
+        .format(new Date(`${from}T12:00:00Z`)) });
+    }
+  } else if (period === 'month') {
+    const year = Number(selectedAnchor.slice(0, 4)), month = Number(selectedAnchor.slice(5, 7));
+    const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    for (let day = 1; day <= days; day++) {
+      const date = new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+      buckets.push({ from: date, to: date, label: String(day) });
+    }
+  } else {
+    for (let block = 0; block < 6; block++) {
+      const startHour = block * 4, endHour = startHour + 3;
+      buckets.push({ startHour, endHour,
+        label: `${String(startHour).padStart(2, '0')}:00–${String(endHour).padStart(2, '0')}:59` });
+    }
+  }
+
+  const hourlyCounts = Array.from({ length: 24 }, (_, hour) => ({
+    hour, label: `${String(hour).padStart(2, '0')}:00`, count: 0,
+  }));
+  sales.forEach(sale => {
+    const date = saleCreatedAt(sale);
+    if (date) hourlyCounts[date.getHours()].count++;
+  });
+  const frequency = buckets.map(bucket => {
+    const count = period === 'day'
+      ? sales.filter(sale => {
+        const date = saleCreatedAt(sale);
+        return date && date.getHours() >= bucket.startHour && date.getHours() <= bucket.endHour;
+      }).length
+      : sales.filter(sale => sale.day >= bucket.from && sale.day <= bucket.to).length;
+    return { label: bucket.label, count, from: bucket.from || null, to: bucket.to || null };
+  });
+  const peak = frequency.reduce((best, item) => item.count > (best?.count ?? 0) ? item : best, null);
+  const peakPrefix = period === 'year' ? 'PEAK MONTH' : period === 'month' ? 'PEAK DAY' : 'PEAK BLOCK';
+  let peakLabel = 'No orders';
+  if (peak?.count) {
+    if (period === 'year') peakLabel = `${peak.label} ${selectedAnchor.slice(0, 4)} · ${peak.count} orders`;
+    else if (period === 'month') peakLabel = `${labelDate(peak.from)} · ${peak.count} orders`;
+    else peakLabel = `${peak.label} · ${peak.count} orders`;
+  }
+  const busiestHour = hourlyCounts.reduce((best, item) => item.count > (best?.count ?? 0) ? item : best, null);
+  const busiestTime = busiestHour?.count
+    ? `${busiestHour.label}–${String(busiestHour.hour).padStart(2, '0')}:59 · ${busiestHour.count} orders`
+    : 'No timed orders';
+  const itemCounts = new Map();
+  sales.forEach(sale => (Array.isArray(sale.items) ? sale.items : []).forEach(item => {
+    const quantity = Number(item.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    const name = String(item.name || item.barcode || 'Item');
+    itemCounts.set(name, (itemCounts.get(name) || 0) + quantity);
+  }));
+  const topItems = [...itemCounts].map(([name, quantity]) => ({ name, quantity }))
+    .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name)).slice(0, 10);
+  const orders = [...sales].sort((a, b) => (saleCreatedAt(b)?.getTime() || 0) - (saleCreatedAt(a)?.getTime() || 0));
+  const subtitle = period === 'year' ? `Monthly frequency · ${selectedAnchor.slice(0, 4)}`
+    : period === 'month' ? `Daily frequency · ${new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+      .format(new Date(`${selectedAnchor.slice(0, 7)}-01T12:00:00Z`))}`
+      : `Order frequency · ${labelDate(selectedAnchor)}`;
+  return {
+    period, anchor: selectedAnchor, range, subtitle, peakLabel, peakPrefix,
+    orderCount: sales.length, averagePerSlot: frequency.length ? sales.length / frequency.length : 0,
+    frequency, hourlyCounts, busiestTime, topItems, orders: orders.slice(0, 50), totalOrdersInRange: orders.length,
+  };
+}
+
 function financePeriodRange(period, requestedAnchor = todayLocal()) {
   if (!['day', 'month', 'year'].includes(period)) throw new Error('Choose Day, Month, or Year.');
   const anchor = validDate(requestedAnchor, 'finance date');
@@ -687,6 +778,10 @@ export async function api(path, options = {}) {
   }
   if (url.pathname === '/api/overview' && method === 'GET') {
     return overview(await loadCollections(), url.searchParams.get('period') || 'month',
+      url.searchParams.get('anchor') || todayLocal());
+  }
+  if (url.pathname === '/api/order-analytics' && method === 'GET') {
+    return orderAnalytics(await loadCollections(), url.searchParams.get('period') || 'year',
       url.searchParams.get('anchor') || todayLocal());
   }
   if (url.pathname === '/api/inventory/analytics' && method === 'GET') {

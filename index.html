@@ -188,6 +188,27 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
 .overview-expiry-list .overview-empty{border:1px dashed #cdd6e1;border-radius:12px;margin:0;padding:18px 9px}
 @media(max-width:700px){.overview-side-stack{gap:11px}.overview-expiry-list{max-height:280px;padding:12px}.overview-alert-rule{margin-left:13px;margin-right:13px}}
 </style>
+<style>
+.orders-screen{box-sizing:border-box;width:100%;max-width:1320px;margin:0 auto;padding:24px 0 40px}
+.orders-screen .hub-heading{margin-bottom:15px}.orders-screen .hub-heading h1{font:800 32px/1.1 Manrope,sans-serif;letter-spacing:-.06em}
+.order-analytics-panel{margin:0 0 14px}.order-analytics-heading{align-items:center;padding:19px 22px}.order-period-controls{display:flex;align-items:center;gap:10px}
+#orderAnchor{width:150px;min-width:150px;font:600 14px Georgia,serif}.order-analytics-body{padding:17px 20px 20px}
+.order-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-bottom:17px}
+.order-summary-grid article{display:grid;align-content:center;gap:5px;min-width:0;min-height:70px;padding:11px 14px;border:1px solid #dedede;border-radius:13px;background:#f8f8f8}
+.order-summary-grid article span{color:#686868;font:700 10px/1.2 Georgia,serif;letter-spacing:.045em}.order-summary-grid article strong{overflow:hidden;color:#171717;font:700 17px/1.3 Georgia,serif;text-overflow:ellipsis;white-space:nowrap}
+.orders-chart-legend{display:flex;flex-wrap:wrap;gap:10px 22px;margin:2px 0 14px;color:#707070;font:12px Georgia,serif}.orders-chart-legend span{display:inline-flex;align-items:center;gap:7px}.orders-chart-legend i{width:10px;height:10px;border-radius:3px}.orders-chart-legend .frequency{background:#c95052}.orders-chart-legend .time{background:#252a30}
+.orders-chart-section h3,.orders-section-heading h3{margin:0;color:#555;font:700 14px Georgia,serif}.orders-bars-scroll{overflow-x:auto;overscroll-behavior-inline:contain}
+.orders-bars{display:grid;align-items:end;gap:7px;min-height:220px;padding:7px 0 0}.frequency-bars{grid-auto-flow:column;grid-auto-columns:minmax(44px,1fr);min-width:720px}.time-bars{grid-template-columns:repeat(24,minmax(31px,1fr));min-width:840px}
+.orders-bar-item{display:grid;grid-template-rows:18px 1fr 22px;align-items:end;min-width:0;text-align:center}.orders-bar-value{align-self:end;color:#777;font:10px 'DM Sans',system-ui,sans-serif}.orders-bar-track{display:flex;align-items:flex-end;justify-content:center;height:176px;border-bottom:1px solid #e7e8e9}.orders-bar{width:min(100%,46px);min-height:3px;border-radius:6px 6px 0 0;background:#c95052;transition:height .2s}.time-bars .orders-bar{width:min(100%,30px);background:#252a30}.orders-bar.is-zero{height:3px;background:#e2e5e8}.time-bars .orders-bar.is-zero{background:#e2e5e8}
+.orders-bar-label{align-self:center;overflow:hidden;color:#747474;font:11px Georgia,serif;text-overflow:ellipsis;white-space:nowrap}.time-bars .orders-bar-label{font:10px 'DM Sans',system-ui,sans-serif}
+.orders-time-section{margin-top:15px;padding-top:14px;border-top:1px solid #e5e5e5}.orders-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}.orders-section-heading>span{color:#717171;font:600 11px Georgia,serif}
+.order-list-panel{margin:0 0 14px}.order-top-items{display:grid;gap:12px;padding:16px 21px 19px}.order-top-row{display:grid;grid-template-columns:24px minmax(130px,1fr) minmax(120px,2fr) auto;align-items:center;gap:12px;color:#626262;font:13px Georgia,serif}.order-top-rank{color:#77818a}.order-top-name{overflow:hidden;color:#1c252c;text-overflow:ellipsis;white-space:nowrap}.order-top-track{height:9px;overflow:hidden;border-radius:9px;background:#e5e5e5}.order-top-track i{display:block;height:100%;border-radius:inherit;background:#202020}.order-top-count{min-width:62px;text-align:right;color:#697078;font:12px Georgia,serif}
+.order-history-list{display:grid;gap:9px;max-height:590px;overflow:auto;padding:15px 18px 18px}.order-history-row{display:grid;grid-template-columns:88px minmax(150px,1fr) minmax(145px,.8fr) auto auto;align-items:center;gap:12px;min-height:62px;padding:10px 12px;border:1px solid #e6e6e6;border-radius:14px;background:#fff}.order-history-id{color:#747474;font:12px Georgia,serif}.order-history-items{overflow:hidden;color:#242424;font:13px Georgia,serif;text-overflow:ellipsis;white-space:nowrap}.order-history-date{color:#737373;font:12px Georgia,serif}.order-history-total{color:#151515;font:700 14px Georgia,serif;white-space:nowrap}.order-history-actions{display:flex;align-items:center;gap:7px}.order-history-actions button{padding:7px 9px;border:1px solid #d8d8d8;border-radius:9px;background:#f8f8f8;color:#252525;font:11px Georgia,serif;white-space:nowrap}.order-history-actions .order-done{display:inline-flex;align-items:center;padding:6px 9px;border:1px solid #dcece4;border-radius:9px;background:#edf8f1;color:#29714f;font-size:9px;font-weight:800;letter-spacing:.04em;white-space:nowrap}
+.order-top-items .overview-empty,.order-history-list .overview-empty{margin:0;padding:27px 12px;border:1px dashed #d5dce2;border-radius:12px}
+@media(max-width:900px){.order-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.order-history-row{grid-template-columns:75px minmax(0,1fr) auto auto}.order-history-date{grid-column:2}.order-history-actions{grid-column:3/5;grid-row:2;justify-self:end}.order-history-row{min-height:74px}}
+@media(max-width:700px){.orders-screen{padding-top:20px}.order-analytics-heading{align-items:flex-start}.order-period-controls{width:100%;justify-content:space-between;flex-wrap:wrap}.order-analytics-heading{gap:13px}.order-analytics-body{padding:14px}.order-summary-grid article{min-height:65px;padding:10px}.order-summary-grid article strong{font-size:15px}.order-bars{min-height:206px}.orders-bar-track{height:160px}.order-top-items{padding:13px}.order-top-row{grid-template-columns:20px minmax(90px,1fr) minmax(70px,1fr) auto;gap:8px;font-size:11px}.order-history-list{padding:12px}.order-history-row{grid-template-columns:65px minmax(0,1fr) auto;gap:7px 9px}.order-history-id{font-size:11px}.order-history-items{grid-column:2/4;font-size:12px}.order-history-date{grid-column:1/3;grid-row:2;font-size:11px}.order-history-total{grid-column:3;grid-row:2;font-size:13px}.order-history-actions{grid-column:1/4;grid-row:3;justify-self:stretch;justify-content:flex-end}.order-history-actions button{padding:7px 8px}}
+@media(max-width:440px){.orders-screen .hub-heading h1{font-size:27px}.order-analytics-heading{padding:16px}.order-analytics-body{padding:12px}.order-period-controls .overview-segments{max-width:100%}.order-period-controls .overview-segments button{padding:8px 10px;font-size:11px}.order-summary-grid{gap:8px}.order-summary-grid article span{font-size:9px}.orders-section-heading{align-items:flex-start;flex-direction:column}.order-top-row{grid-template-columns:18px minmax(70px,1fr) minmax(52px,.9fr) auto;gap:6px}.order-top-count{min-width:50px;font-size:10px}}
+</style>
 </head>
 <body>
   <div class="app-shell">
@@ -200,6 +221,7 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
       <aside class="hub-sidebar" aria-label="Main sections">
         <span class="sidebar-label">WORKSPACE</span>
         <button class="nav-tab active" data-view="dashboard" type="button"><span class="nav-icon">▦</span>Dashboard</button>
+        <button class="nav-tab" data-view="orders" type="button"><span class="nav-icon">▥</span>Order &amp; Spike</button>
         <button class="nav-tab" data-view="inventory" type="button"><span class="nav-icon">▤</span>Inventory</button>
         <button class="nav-tab" data-view="pos" type="button"><span class="nav-icon">▣</span>POS Sale</button>
         <button class="nav-tab" data-view="finance" type="button"><span class="nav-icon">◈</span>Finance</button>
@@ -253,6 +275,52 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
           <div class="overview-best-body"><div class="overview-best-stage" id="bestSellingStage"><svg id="bestSellingPie" viewBox="0 0 620 350" role="img" aria-label="Three-dimensional ring showing best selling item quantity share"></svg><svg id="bestSellingBar" class="hidden" viewBox="0 0 820 350" role="img" aria-label="Product-colored bars comparing selected and previous period quantities"></svg><p id="bestSellingEmpty" class="overview-empty hidden">No item sales recorded for this period.</p></div><div id="bestSellingLegend" class="overview-best-legend"></div></div>
         </section>
         <p id="dashboardError" class="workflow-notice error hidden" role="status"></p>
+      </section>
+
+      <section id="ordersScreen" class="orders-screen hidden">
+        <header class="hub-heading">
+          <div><div class="eyebrow"><span class="eyebrow-line"></span> ORDER ANALYTICS</div><h1>Order &amp; Spike</h1><p>See when orders peak, what sells most, and review completed orders.</p></div>
+          <span id="ordersUpdated" class="updated-label">Updating…</span>
+        </header>
+        <section class="overview-panel order-analytics-panel">
+          <div class="overview-best-heading order-analytics-heading">
+            <div><h2>Order Frequency &amp; Spike Analytics</h2><p id="orderAnalyticsSubtitle">Monthly frequency · 2026</p></div>
+            <div class="order-period-controls">
+              <div class="overview-segments" role="group" aria-label="Order analytics period">
+                <button type="button" data-order-period="day" aria-pressed="false">Day</button>
+                <button type="button" data-order-period="month" aria-pressed="false">Month</button>
+                <button type="button" data-order-period="year" class="active" aria-pressed="true">Year</button>
+              </div>
+              <label class="overview-date"><span class="sr-only">Order analytics date</span><input id="orderAnchor" type="number" min="2020" max="2026" step="1" aria-label="Order analytics year"></label>
+            </div>
+          </div>
+          <div class="order-analytics-body">
+            <div class="order-summary-grid">
+              <article><span>ORDER FREQUENCY</span><strong id="orderFrequencyTotal">—</strong></article>
+              <article><span id="orderPeakLabel">PEAK MONTH</span><strong id="orderPeakValue">—</strong></article>
+              <article><span>BUSIEST TIME</span><strong id="orderBusiestTime">—</strong></article>
+              <article><span>AVERAGE / SLOT</span><strong id="orderAverageSlot">—</strong></article>
+            </div>
+            <div class="orders-chart-legend"><span><i class="frequency"></i> Red = order frequency</span><span><i class="time"></i> Graphite = time-of-day frequency</span></div>
+            <section class="orders-chart-section">
+              <h3 id="orderFrequencyTitle">Order frequency by month</h3>
+              <div class="orders-bars-scroll"><div id="orderFrequencyBars" class="orders-bars frequency-bars" role="img" aria-label="Order frequency chart"></div></div>
+            </section>
+            <section class="orders-time-section">
+              <div class="orders-section-heading"><h3>Time-of-day frequency</h3><span>Orders grouped by local hour</span></div>
+              <div class="orders-bars-scroll"><div id="orderTimeBars" class="orders-bars time-bars" role="img" aria-label="Order frequency by local hour"></div></div>
+            </section>
+          </div>
+        </section>
+        <section class="overview-panel order-list-panel">
+          <div class="overview-panel-heading"><div><h2>Top Items by Volume</h2><p id="orderTopItemsSubtitle">Selected period</p></div></div>
+          <div id="orderTopItems" class="order-top-items"><p class="overview-empty">Loading item totals…</p></div>
+        </section>
+        <section class="overview-panel order-list-panel">
+          <div class="overview-panel-heading"><div><h2>Order History</h2><p id="orderHistorySubtitle">Completed orders in the selected period</p></div></div>
+          <div id="orderHistoryList" class="order-history-list"><p class="overview-empty">Loading orders…</p></div>
+        </section>
+        <p id="ordersError" class="workflow-notice error hidden" role="status"></p>
       </section>
 
       <section id="inventoryScreen" class="inventory-screen hidden">
