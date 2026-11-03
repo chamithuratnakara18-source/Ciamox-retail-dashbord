@@ -347,6 +347,104 @@ function orderAnalytics(data, period = 'year', anchor = todayLocal()) {
   };
 }
 
+function supplierAnalytics(data) {
+  const suppliers = new Map();
+  const getSupplier = value => {
+    const name = typeof value === 'string' ? value.trim() : '';
+    if (!name) return null;
+    const key = name.toLocaleLowerCase();
+    if (!suppliers.has(key)) suppliers.set(key, {
+      key, name, categories: new Set(), items: new Map(), currentStock: 0,
+      currentStockValue: 0, missingCurrentCostProducts: 0, inboundUnits: 0,
+      inboundRecords: 0, recordedInboundCost: 0, costedInboundUnits: 0,
+      lastArrivalDate: '',
+    });
+    return suppliers.get(key);
+  };
+  const unassignedProducts = [];
+  for (const product of sortedProducts(data.products)) {
+    const supplier = getSupplier(product.supplierName);
+    if (!supplier) { unassignedProducts.push(product); continue; }
+    const itemKey = product.barcode || product.name.toLocaleLowerCase();
+    const item = supplier.items.get(itemKey) || {
+      barcode: product.barcode || '', name: product.name || 'Product', category: '', quantity: 0,
+      unitCost: null, receivedUnits: 0, arrivalDate: '',
+    };
+    item.name = product.name || item.name;
+    item.category = product.category || item.category;
+    item.quantity = Math.max(0, Number(product.quantity) || 0);
+    item.unitCost = product.unitCost != null && Number.isFinite(Number(product.unitCost)) ? Number(product.unitCost) : null;
+    item.arrivalDate = product.arrivalDate || item.arrivalDate;
+    supplier.items.set(itemKey, item);
+    if (item.category) supplier.categories.add(item.category);
+    supplier.currentStock += item.quantity;
+    if (item.unitCost == null) supplier.missingCurrentCostProducts++;
+    else supplier.currentStockValue += item.quantity * item.unitCost;
+    if (item.arrivalDate > supplier.lastArrivalDate) supplier.lastArrivalDate = item.arrivalDate;
+  }
+  for (const receipt of data.receipts) {
+    const quantity = Number(receipt.quantity);
+    if (receipt.type === 'inventory_removal' || receipt.type === 'pos_order' ||
+        !Number.isFinite(quantity) || quantity <= 0) continue;
+    const supplier = getSupplier(receipt.supplierName);
+    if (!supplier) continue;
+    supplier.inboundRecords++;
+    supplier.inboundUnits += quantity;
+    if (receipt.arrivalDate > supplier.lastArrivalDate) supplier.lastArrivalDate = receipt.arrivalDate || '';
+    const unitCost = receipt.unitCost == null ? null : Number(receipt.unitCost);
+    if (unitCost != null && Number.isFinite(unitCost) && unitCost >= 0) {
+      supplier.recordedInboundCost += quantity * unitCost;
+      supplier.costedInboundUnits += quantity;
+    }
+    const barcode = typeof receipt.barcode === 'string' ? receipt.barcode : '';
+    const name = String(receipt.productName || barcode || 'Product');
+    const itemKey = barcode || name.toLocaleLowerCase();
+    const item = supplier.items.get(itemKey) || {
+      barcode, name, category: '', quantity: 0, unitCost: unitCost,
+      receivedUnits: 0, arrivalDate: '',
+    };
+    item.receivedUnits += quantity;
+    if (receipt.arrivalDate > item.arrivalDate) item.arrivalDate = receipt.arrivalDate;
+    if (item.unitCost == null && unitCost != null && Number.isFinite(unitCost)) item.unitCost = unitCost;
+    supplier.items.set(itemKey, item);
+  }
+  const list = [...suppliers.values()].map(supplier => ({
+    key: supplier.key,
+    name: supplier.name,
+    categories: [...supplier.categories].sort((a, b) => a.localeCompare(b)),
+    items: [...supplier.items.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    productCount: supplier.items.size,
+    currentProductCount: [...supplier.items.values()].filter(item => item.quantity > 0).length,
+    currentStock: supplier.currentStock,
+    currentStockValue: supplier.currentStockValue,
+    missingCurrentCostProducts: supplier.missingCurrentCostProducts,
+    inboundUnits: supplier.inboundUnits,
+    inboundRecords: supplier.inboundRecords,
+    recordedInboundCost: supplier.recordedInboundCost,
+    costedInboundUnits: supplier.costedInboundUnits,
+    averageRecordedUnitCost: supplier.costedInboundUnits > 0
+      ? supplier.recordedInboundCost / supplier.costedInboundUnits : null,
+    lastArrivalDate: supplier.lastArrivalDate,
+  })).sort((a, b) => a.name.localeCompare(b.name));
+  const categories = [...new Set(list.flatMap(supplier => supplier.categories))].sort((a, b) => a.localeCompare(b));
+  return {
+    summary: {
+      supplierCount: list.length,
+      productsSupplied: list.reduce((total, supplier) => total + supplier.productCount, 0),
+      currentStockUnits: list.reduce((total, supplier) => total + supplier.currentStock, 0),
+      recordedInboundCost: list.reduce((total, supplier) => total + supplier.recordedInboundCost, 0),
+      inboundRecords: list.reduce((total, supplier) => total + supplier.inboundRecords, 0),
+      unassignedProducts: unassignedProducts.length,
+    },
+    categories,
+    suppliers: list,
+    unassignedProducts: unassignedProducts.map(product => ({
+      barcode: product.barcode, name: product.name, quantity: product.quantity,
+      category: product.category, arrivalDate: product.arrivalDate,
+    })),
+  };
+}
+
 function financePeriodRange(period, requestedAnchor = todayLocal()) {
   if (!['day', 'month', 'year'].includes(period)) throw new Error('Choose Day, Month, or Year.');
   const anchor = validDate(requestedAnchor, 'finance date');
@@ -587,6 +685,17 @@ async function loadCollections() {
   return Object.fromEntries(names.map((name, index) => [name, rows(snapshots[index])]));
 }
 
+async function loadSupplierCollections() {
+  if (live) {
+    await live.ready;
+    if (live.error) throw live.error;
+    return { products: live.data.products, receipts: live.data.receipts };
+  }
+  const names = ['products', 'receipts'];
+  const snapshots = await Promise.all(names.map(name => getDocs(collection(db(), name))));
+  return Object.fromEntries(names.map((name, index) => [name, rows(snapshots[index])]));
+}
+
 function inventoryAnalytics(data, requestedPeriod = 'day', requestedAnchor = todayLocal()) {
   const { from, to } = inventoryAnalyticsRange(requestedPeriod, requestedAnchor);
   const dayMilliseconds = 86400000;
@@ -783,6 +892,9 @@ export async function api(path, options = {}) {
   if (url.pathname === '/api/order-analytics' && method === 'GET') {
     return orderAnalytics(await loadCollections(), url.searchParams.get('period') || 'year',
       url.searchParams.get('anchor') || todayLocal());
+  }
+  if (url.pathname === '/api/supplier-analytics' && method === 'GET') {
+    return supplierAnalytics(await loadSupplierCollections());
   }
   if (url.pathname === '/api/inventory/analytics' && method === 'GET') {
     return inventoryAnalytics(await loadCollections(), url.searchParams.get('period') || 'day',
