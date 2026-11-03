@@ -19,7 +19,8 @@ const bkt=d=>d<0?'exp':(d<=7?'b7':(d<=30?'b30':(d<=90?'b90':'ok')));
 const ecol=k=>EB.find(b=>b.k===k);
 const status=document.getElementById('analyticsStatus');
 const updatedStatus=document.getElementById('updatedStatus');
-let inventoryAnalyticsDays=30,loadRequest=0;
+const localDateString=()=>{const date=new Date();return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
+let inventoryAnalyticsPeriod='day',inventoryAnalyticsAnchor=localDateString(),loadRequest=0;
 let CATS=[], EXP=[], RUN=[], PRODUCTS=[], summaryData={};
 function classify(items){
  items.sort((a,b)=>b.v-a.v);
@@ -68,7 +69,7 @@ function renderKpis(){
   ['Stock value',stockValue,summaryData.missingCostProducts?summaryData.missingCostProducts+' stocked product costs missing':CATS.length+(CATS.length===1?' category':' categories')],
   ['Expired',expired.length+' products',f$(expired.reduce((a,b)=>a+b.val,0))+' at recorded cost'],
   ['Expiring within 7 days',w7.length+' products',f$(w7.reduce((a,b)=>a+b.val,0))+' at recorded cost'],
-  ['Running out within 7 days',run.length+' products','Based on recent recorded sales']];
+  ['Running out within 7 days',run.length+' products','Based on selected-period sales']];
  document.getElementById('kpis').innerHTML=cards.map(x=>'<div class="kpi"><span>'+x[0]+'</span><b>'+esc(x[1])+'</b><em>'+esc(x[2])+'</em></div>').join('');
  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>document.getElementById(b.dataset.t).scrollIntoView({behavior:'smooth',block:'start'}));
 }
@@ -148,11 +149,11 @@ function renderExpiry(){
  let fb='all',fc='all';const sel=document.getElementById('ecat');
  sel.innerHTML='<option value="all">All categories</option>'+Array.from(new Set(EXP.map(i=>i.cat))).sort().map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
  sel.onchange=()=>{fc=sel.value;draw();};
- const lab=d=>d<0?'expired '+(-d)+'d ago':(d===0?'today':d+' days');
- const line={id:'today',afterDatasetsDraw(c){const x=c.scales.x,a=c.chartArea,px=x.getPixelForValue(0),ctx=c.ctx;ctx.save();ctx.strokeStyle='#d03b3b';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(px,a.top);ctx.lineTo(px,a.bottom);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#d03b3b';ctx.font='600 11px '+css('--font');ctx.textAlign='left';ctx.fillText('Today',px+4,a.top+10);ctx.restore();}};
+ const lab=d=>d<0?'expired '+(-d)+'d before period end':(d===0?'at period end':d+' days');
+ const line={id:'periodEnd',afterDatasetsDraw(c){const x=c.scales.x,a=c.chartArea,px=x.getPixelForValue(0),ctx=c.ctx;ctx.save();ctx.strokeStyle='#d03b3b';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(px,a.top);ctx.lineTo(px,a.bottom);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#d03b3b';ctx.font='600 11px '+css('--font');ctx.textAlign='left';ctx.fillText('Period end',px+4,a.top+10);ctx.restore();}};
  const chart=new Chart(document.getElementById('cv3'),{type:'bar',plugins:[line],data:{labels:[],datasets:[{data:[],backgroundColor:[],borderRadius:4,barThickness:18}]},
   options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const it=c.chart.$items[c.dataIndex];return it.date+' · '+lab(it.days)+' · '+f$(it.val)+' at risk';}}}},
-   scales:{x:{grid:{color:GRID},border:{display:false},title:{display:true,text:'Days until expiry (left of Today = already expired)'}},y:{grid:{display:false},border:{display:false}}}}});
+   scales:{x:{grid:{color:GRID},border:{display:false},title:{display:true,text:'Days until expiry (negative = expired before period end)'}},y:{grid:{display:false},border:{display:false}}}}});
  function draw(){
   const cnt={},risk={};EB.forEach(b=>{cnt[b.k]=0;risk[b.k]=0;});EXP.filter(i=>fc==='all'||i.cat===fc).forEach(i=>{cnt[i.k]++;risk[i.k]+=i.val;});
   const bk=document.getElementById('bk3');bk.innerHTML=EB.map(b=>'<button class="bkb'+(fb===b.k?' on':'')+'" data-k="'+b.k+'"><span><i style="background:'+b.c+'"></i>'+b.t+'</span><b>'+cnt[b.k]+'</b><em>'+f$(risk[b.k])+' value</em></button>').join('');
@@ -183,7 +184,7 @@ async function loadInventoryDashboard(){
  try{
   if(typeof Chart==='undefined')throw new Error('Chart library did not load. Check your internet connection and refresh.');
   const [analytics,inventory]=await Promise.all([
-   api('/api/inventory/analytics?days='+inventoryAnalyticsDays),
+   api('/api/inventory/analytics?'+new URLSearchParams({period:inventoryAnalyticsPeriod,anchor:inventoryAnalyticsAnchor})),
    api('/api/inventory')
   ]);
   if(request!==loadRequest)return;
@@ -199,7 +200,21 @@ async function loadInventoryDashboard(){
   if(!PRODUCTS.length){const empty=document.createElement('section');empty.id='inventoryAnalyticsEmpty';empty.className='card';empty.innerHTML='<h2>No inventory yet</h2><p class="sub">Add products in Inbound to populate this analytics dashboard.</p>';document.getElementById('kpis').after(empty);}
  }catch(error){if(request!==loadRequest)return;status.textContent='Analytics unavailable: '+error.message;updatedStatus.textContent='Firebase disconnected';updatedStatus.style.color='#c6533b';}
 }
-document.getElementById('inventoryAnalyticsDays').addEventListener('change',event=>{inventoryAnalyticsDays=Number(event.currentTarget.value);loadInventoryDashboard();});
+const analyticsAnchor=document.getElementById('inventoryAnalyticsAnchor');
+analyticsAnchor.value=inventoryAnalyticsAnchor;analyticsAnchor.max=localDateString();
+document.querySelectorAll('[data-period]').forEach(button=>button.addEventListener('click',()=>{
+ inventoryAnalyticsPeriod=button.dataset.period;
+ document.querySelectorAll('[data-period]').forEach(option=>{
+  const active=option===button;option.classList.toggle('active',active);option.setAttribute('aria-pressed',String(active));
+ });
+ loadInventoryDashboard();
+}));
+analyticsAnchor.addEventListener('change',event=>{
+ const today=localDateString(),value=event.currentTarget.value;
+ inventoryAnalyticsAnchor=value&&value<=today?value:today;
+ event.currentTarget.value=inventoryAnalyticsAnchor;
+ loadInventoryDashboard();
+});
 loadInventoryDashboard();
 new ResizeObserver(()=>parent.postMessage({type:'inventory-analytics-height',height:document.documentElement.scrollHeight},location.origin)).observe(document.body);
 window.addEventListener('message',event=>{if(event.origin===location.origin&&event.data?.type==='inventory-analytics-refresh')location.reload();});

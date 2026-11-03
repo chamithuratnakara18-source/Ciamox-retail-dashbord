@@ -46,6 +46,27 @@ function todayLocal(offset = 0) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function inventoryAnalyticsRange(period, requestedAnchor = todayLocal()) {
+  if (!['day', 'month', 'year'].includes(period)) throw new Error('Choose Day, Month, or Year.');
+  const anchor = validDate(requestedAnchor, 'analytics date');
+  const today = todayLocal();
+  if (anchor > today) throw new Error('Choose an analytics date up to today.');
+  const [year, month] = anchor.split('-').map(Number);
+  let from = anchor;
+  let to = anchor;
+  if (period === 'month') {
+    from = `${year}-${String(month).padStart(2, '0')}-01`;
+    const monthEnd = new Date(`${from}T00:00:00.000Z`);
+    monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+    monthEnd.setUTCDate(0);
+    to = monthEnd.toISOString().slice(0, 10);
+  } else if (period === 'year') {
+    from = `${year}-01-01`;
+    to = `${year}-12-31`;
+  }
+  return { from, to: to > today ? today : to };
+}
+
 function shapeProduct(data) {
   if (!data) return null;
   return {
@@ -315,13 +336,11 @@ async function loadCollections() {
   return Object.fromEntries(names.map((name, index) => [name, rows(snapshots[index])]));
 }
 
-function inventoryAnalytics(data, requestedDays = 30) {
-  const days = Number(requestedDays);
-  if (![7, 30, 90].includes(days)) throw new Error('Choose a 7, 30, or 90 day movement period.');
-  const to = todayLocal();
-  const from = todayLocal(-(days - 1));
+function inventoryAnalytics(data, requestedPeriod = 'day', requestedAnchor = todayLocal()) {
+  const { from, to } = inventoryAnalyticsRange(requestedPeriod, requestedAnchor);
   const dayMilliseconds = 86400000;
   const dayIndex = value => Math.floor(Date.parse(`${value}T00:00:00Z`) / dayMilliseconds);
+  const days = dayIndex(to) - dayIndex(from) + 1;
   const labelDate = value => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
     .format(new Date(`${value}T12:00:00Z`));
   const productRows = sortedProducts(data.products).map(product => {
@@ -511,7 +530,8 @@ export async function api(path, options = {}) {
       url.searchParams.get('anchor') || todayLocal());
   }
   if (url.pathname === '/api/inventory/analytics' && method === 'GET') {
-    return inventoryAnalytics(await loadCollections(), url.searchParams.get('days') || 30);
+    return inventoryAnalytics(await loadCollections(), url.searchParams.get('period') || 'day',
+      url.searchParams.get('anchor') || todayLocal());
   }
   if (url.pathname === '/api/inventory' && method === 'GET') {
     const barcode = url.searchParams.get('barcode')?.trim();
