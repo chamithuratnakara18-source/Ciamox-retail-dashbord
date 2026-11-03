@@ -357,7 +357,8 @@ function supplierAnalytics(data) {
       key, name, categories: new Set(), items: new Map(), currentStock: 0,
       currentStockValue: 0, missingCurrentCostProducts: 0, inboundUnits: 0,
       inboundRecords: 0, recordedInboundCost: 0, costedInboundUnits: 0,
-      lastArrivalDate: '',
+      lastArrivalDate: '', city: '', country: '', supplierType: '', latitude: null,
+      longitude: null, leadTimeDays: null, qualityScore: null, defectRate: null,
     });
     return suppliers.get(key);
   };
@@ -408,9 +409,30 @@ function supplierAnalytics(data) {
     if (item.unitCost == null && unitCost != null && Number.isFinite(unitCost)) item.unitCost = unitCost;
     supplier.items.set(itemKey, item);
   }
+  for (const profile of data.suppliers || []) {
+    const supplier = getSupplier(profile.name);
+    if (!supplier) continue;
+    supplier.name = profile.name.trim();
+    supplier.city = profile.city || '';
+    supplier.country = profile.country || '';
+    supplier.supplierType = profile.supplierType || '';
+    supplier.latitude = profile.latitude == null ? null : Number(profile.latitude);
+    supplier.longitude = profile.longitude == null ? null : Number(profile.longitude);
+    supplier.leadTimeDays = profile.leadTimeDays == null ? null : Number(profile.leadTimeDays);
+    supplier.qualityScore = profile.qualityScore == null ? null : Number(profile.qualityScore);
+    supplier.defectRate = profile.defectRate == null ? null : Number(profile.defectRate);
+  }
   const list = [...suppliers.values()].map(supplier => ({
     key: supplier.key,
     name: supplier.name,
+    city: supplier.city,
+    country: supplier.country,
+    supplierType: supplier.supplierType,
+    latitude: supplier.latitude,
+    longitude: supplier.longitude,
+    leadTimeDays: Number.isFinite(supplier.leadTimeDays) ? supplier.leadTimeDays : null,
+    qualityScore: Number.isFinite(supplier.qualityScore) ? supplier.qualityScore : null,
+    defectRate: Number.isFinite(supplier.defectRate) ? supplier.defectRate : null,
     categories: [...supplier.categories].sort((a, b) => a.localeCompare(b)),
     items: [...supplier.items.values()].sort((a, b) => a.name.localeCompare(b.name)),
     productCount: supplier.items.size,
@@ -438,6 +460,7 @@ function supplierAnalytics(data) {
     },
     categories,
     suppliers: list,
+    supplierProfileWarning: data.supplierProfileError || '',
     unassignedProducts: unassignedProducts.map(product => ({
       barcode: product.barcode, name: product.name, quantity: product.quantity,
       category: product.category, arrivalDate: product.arrivalDate,
@@ -689,11 +712,29 @@ async function loadSupplierCollections() {
   if (live) {
     await live.ready;
     if (live.error) throw live.error;
-    return { products: live.data.products, receipts: live.data.receipts };
+    return {
+      products: live.data.products,
+      receipts: live.data.receipts,
+      suppliers: live.data.suppliers || [],
+      supplierProfileError: live.supplierProfileError?.message || '',
+    };
   }
-  const names = ['products', 'receipts'];
-  const snapshots = await Promise.all(names.map(name => getDocs(collection(db(), name))));
-  return Object.fromEntries(names.map((name, index) => [name, rows(snapshots[index])]));
+  const [productsSnapshot, receiptsSnapshot] = await Promise.all([
+    getDocs(collection(db(), 'products')),
+    getDocs(collection(db(), 'receipts')),
+  ]);
+  let suppliers = [], supplierProfileError = '';
+  try {
+    suppliers = rows(await getDocs(collection(db(), 'suppliers')));
+  } catch (error) {
+    supplierProfileError = error?.message || 'Supplier profile details could not be loaded.';
+  }
+  return {
+    products: rows(productsSnapshot),
+    receipts: rows(receiptsSnapshot),
+    suppliers,
+    supplierProfileError,
+  };
 }
 
 function inventoryAnalytics(data, requestedPeriod = 'day', requestedAnchor = todayLocal()) {
@@ -827,17 +868,30 @@ export function watchRetailFlow(onChange, onError) {
   let active = true;
   let resolveReady, rejectReady;
   const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
-  live = { data: { products: null, sales: null, receipts: null, expenses: null }, ready, error: null };
+  const coreNames = ['products', 'sales', 'receipts', 'expenses'];
+  live = {
+    data: { products: null, sales: null, receipts: null, expenses: null, suppliers: [] },
+    ready, error: null, supplierProfileError: null,
+  };
   let settled = false;
   let unsubs = [];
   try {
     unsubs = Object.keys(live.data).map(name => onSnapshot(collection(db(), name), snapshot => {
+      if (!active) return;
       live.data[name] = rows(snapshot);
-      if (Object.values(live.data).every(value => value !== null)) {
+      if (name === 'suppliers') live.supplierProfileError = null;
+      if (coreNames.every(coreName => live.data[coreName] !== null)) {
         if (!settled) { settled = true; resolveReady(); }
         onChange();
       }
     }, error => {
+      if (!active) return;
+      if (name === 'suppliers') {
+        live.data.suppliers = [];
+        live.supplierProfileError = error;
+        if (coreNames.every(coreName => live.data[coreName] !== null)) onChange();
+        return;
+      }
       live.error = error;
       if (!settled) { settled = true; rejectReady(error); }
       onError(error);

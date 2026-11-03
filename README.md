@@ -4,7 +4,7 @@ This package keeps the existing dashboard UI and removes the sign-in screen for 
 
 ## Access warning
 
-This is an unauthenticated preview. Anyone who can reach the site can read store products, costs, sales, receipts, and Finance records, and can submit inventory, POS, category, price, and expense changes. The included Firestore rules allow public reads; the server API accepts writes without a sign-in. Use test data only and do not expose this version publicly. Add authentication and role checks before using real store data.
+This is an unauthenticated preview. Anyone who can reach the site can read store products, costs, sales, receipts, and Finance records, and can submit inventory, POS, category, supplier profile, price, and expense changes. The included Firestore rules allow public reads; the server API accepts writes without a sign-in. Use test data only and do not expose this version publicly. Add authentication and role checks before using real store data.
 
 ## Run the preview
 
@@ -17,6 +17,10 @@ This is an unauthenticated preview. Anyone who can reach the site can read store
 The Firebase web config in `firebase-config.js` contains public app identifiers, not service-account credentials. This single Firebase project models one store and does not provide tenant separation. **Restore Firebase Authentication, server token/role checks, and authenticated Firestore rules before adding real data or using this on a public site.**
 
 Product category cards retain the compact layout with product name, supplier, manufacture date, and expiry date below each photo.
+
+## Suppliers
+
+The Suppliers tab uses the supplied `supplier-dashboard.html` layout and reads the same Firebase project as the phone scanner. Inbound products and receipts with a `supplierName` are grouped automatically by supplier name, and live Firestore updates refresh the dashboard. The four summary cards calculate supplier count, countries recorded, average and longest lead time, and average quality from saved records; missing lead-time and quality values stay marked as **Not tracked**. Use the small **Add supplier data** button to save city, country, supplier type, latitude, longitude, lead time, quality, and defect rate. A map marker appears only after both coordinates are saved. Supplier profile records are stored in the `suppliers` collection; the included rules allow reads and deny browser writes, while the API performs profile writes. Publish the updated supplier read rule if the deployed rules do not already permit reading `suppliers`.
 
 ## Check the connection
 

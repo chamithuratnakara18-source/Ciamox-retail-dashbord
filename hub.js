@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-html-20261104-1';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-profile-20261103-3';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
@@ -27,6 +27,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-htm
   let supplierFrameReady = false;
   let supplierFramePayload = null;
   let supplierFrameError = null;
+  let supplierSaveBusy = false;
   let currentView = 'dashboard';
   let inventoryProducts = [];
   let inventoryCategories = [];
@@ -225,6 +226,8 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-htm
       else if (supplierFrameError) supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-error', message: supplierFrameError }, location.origin);
     } else if (message?.type === 'supplier-dashboard-height') {
       supplierDashboardFrame.style.height = `${Math.max(700, Number(message.height) || 0)}px`;
+    } else if (message?.type === 'supplier-save') {
+      void saveSupplierDataFromFrame(message.data);
     }
   });
   document.querySelectorAll('[data-inventory-tab]').forEach(button => button.addEventListener('click', () => {
@@ -321,7 +324,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-htm
     if (view === 'finance') await refreshFinance();
     if (view === 'orders') await refreshOrderAnalytics();
     if (view === 'suppliers') {
-      if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html';
+      if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html?v=supplier-profile-20261103-3';
       await refreshSupplierDashboard();
     }
   }
@@ -926,6 +929,24 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-htm
         supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-error', message: error.message }, location.origin);
       }
       setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
+    }
+  }
+
+  async function saveSupplierDataFromFrame(data) {
+    if (supplierSaveBusy) return;
+    supplierSaveBusy = true;
+    try {
+      const result = await api('/api/suppliers', { method: 'POST', body: JSON.stringify(data || {}) });
+      setDatabaseStatus(true, 'FIREBASE CONNECTED');
+      if (supplierDashboardFrame?.contentWindow) {
+        supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-save-result', ok: true, supplier: result.supplier }, location.origin);
+      }
+    } catch (error) {
+      if (supplierDashboardFrame?.contentWindow) {
+        supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-save-result', ok: false, message: error.message }, location.origin);
+      }
+    } finally {
+      supplierSaveBusy = false;
     }
   }
 

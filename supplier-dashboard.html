@@ -55,22 +55,42 @@ tr.r.on td{background:var(--bg-accent)}
 <body>
 <div class="page">
 <h1>Supplier management dashboard</h1>
-<p class="intro" id="supplierStatus">Loading live suppliers, products, stock, and receipts from RetailFlow…</p>
+<p class="intro" id="supplierStatus">Loading live supplier, product, and receipt data from RetailFlow…</p>
 
 <div id="kp" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px"></div>
 
 <div class="fr">
-  <input id="q" type="text" placeholder="Search supplier, product or barcode" aria-label="Search suppliers, products, and barcodes">
+  <input id="q" type="text" placeholder="Search supplier, city or product" aria-label="Search suppliers, cities, and products">
   <select id="cat" aria-label="Product category"></select>
   <span id="types" style="display:flex;gap:6px;flex-wrap:wrap"></span>
 </div>
 
 <div class="card">
   <div class="top">
-    <div><p class="hd">Supplier locations</p><p class="sb">Locations appear when a supplier address is recorded in RetailFlow.</p></div>
+    <div><p class="hd">Where our suppliers are</p><p class="sb">Supplier dots use the longitude and latitude saved with supplier data.</p></div>
+    <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text-secondary)"><span>Color by</span><button class="ch on" id="m1" type="button">Lead time</button><button class="ch" id="m2" type="button">Quality</button><button class="ch" id="openSupplierForm" type="button">Add supplier data</button></div>
   </div>
-  <svg id="map" viewBox="0 0 680 330" width="100%" role="img" aria-label="Supplier location map"><title>Supplier locations</title><desc>No supplier location details are currently recorded.</desc></svg>
-  <div class="lg" id="mlg"><span>Supplier locations are not recorded.</span></div>
+  <svg id="map" viewBox="0 0 680 330" width="100%" role="img" aria-label="Map of recorded supplier locations"><title>Supplier locations</title><desc>Supplier map markers use saved longitude and latitude.</desc></svg>
+  <div class="lg" id="mlg"><span>Suppliers without coordinates do not appear on the map.</span></div>
+</div>
+
+<div class="card" id="supplierFormPanel" hidden>
+  <div class="top"><div><p class="hd">Add supplier data</p><p class="sb">Match the supplier name used by the scanner. Coordinates place the supplier on the map.</p></div><button class="ch" id="closeSupplierForm" type="button">Close</button></div>
+  <form id="supplierForm">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin:10px 0">
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Supplier name<input id="supplierName" type="text" maxlength="120" required list="supplierNames" autocomplete="organization" placeholder="Same name as scanner"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Supplier type<input id="supplierType" type="text" maxlength="80" placeholder="For example: finished goods"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">City<input id="supplierCity" type="text" maxlength="120" placeholder="City"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Country<input id="supplierCountry" type="text" maxlength="120" placeholder="Country"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Latitude<input id="supplierLatitude" type="text" inputmode="decimal" placeholder="-90 to 90"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Longitude<input id="supplierLongitude" type="text" inputmode="decimal" placeholder="-180 to 180"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Lead time (days)<input id="supplierLeadTime" type="text" inputmode="decimal" placeholder="Optional"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Quality score (0–100)<input id="supplierQuality" type="text" inputmode="decimal" placeholder="Optional"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Defect rate (%)<input id="supplierDefectRate" type="text" inputmode="decimal" placeholder="Optional"></label>
+    </div>
+    <datalist id="supplierNames"></datalist>
+    <div class="fr" style="margin-bottom:0"><button class="ch on" id="saveSupplierButton" type="submit">Save supplier data</button><span id="supplierFormMessage" class="sb" role="status" style="margin:0"></span></div>
+  </form>
 </div>
 
 <div class="card" id="det"></div>
@@ -78,15 +98,14 @@ tr.r.on td{background:var(--bg-accent)}
 <div class="card">
   <p class="hd">Supplier list</p>
   <p class="sb" id="cnt"></p>
-  <p class="sb" id="unassignedProducts" style="margin:0 0 8px"></p>
-  <div class="tw"><table><thead><tr><th class="s" data-s="name">Supplier</th><th class="s" data-s="productCount">Products</th><th>Categories</th><th class="s" data-s="currentStock">Current stock</th><th class="s" data-s="inboundUnits">Received</th><th class="s" data-s="recordedInboundCost">Recorded cost</th><th class="s" data-s="lastArrivalDate">Last arrival</th></tr></thead><tbody id="tb"></tbody></table></div>
-  <p class="sb" style="margin:10px 0 0">Displayed figures come from recorded products and inbound receipts. Location, delivery lead time, quality scores, and defect rates are not tracked by RetailFlow.</p>
+  <div class="tw"><table><thead><tr><th class="s" data-s="name">Supplier</th><th>Location</th><th>Categories</th><th>Product type</th><th class="s" data-s="leadTimeDays">Lead time</th><th class="s" data-s="qualityScore">Product quality</th></tr></thead><tbody id="tb"></tbody></table></div>
+  <p class="sb" style="margin:10px 0 0">Lead time, quality, and defect values are shown only when entered for a supplier. A saved latitude and longitude place that supplier on the map.</p>
 </div>
 
 <div class="card">
-  <p class="hd">Inbound volume against current stock</p>
-  <p class="sb">Each point uses recorded units received and current units on hand. Click a point to select its supplier.</p>
-  <div id="scatterWrap" style="position:relative;width:100%;height:320px"><canvas id="sc" role="img" aria-label="Scatter chart of received units against current stock">Each dot is a supplier plotted by recorded received units and current stock.</canvas></div>
+  <p class="hd">Lead time against quality</p>
+  <p class="sb">Suppliers in the top left deliver fast and with few defects. Click a dot to select it.</p>
+  <div style="position:relative;width:100%;height:320px"><canvas id="sc" role="img" aria-label="Scatter chart of supplier lead time in days against product quality score">Each dot is a supplier plotted by lead time and quality score.</canvas></div>
 </div>
 </div>
 
@@ -95,154 +114,263 @@ tr.r.on td{background:var(--bg-accent)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 let S=[];
-const st={q:'',cat:'all',type:'all',sel:null,sort:'currentStock',dir:-1};
+let supplierCategories=[];
+let selectedSupplierName='';
+const st={q:'',cat:'all',type:'all',sel:null,sort:'leadTimeDays',dir:1,color:'lead'};
 const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-const numeric=value=>Number.isFinite(Number(value))?Number(value):0;
-const integer=value=>numeric(value).toLocaleString('en-US');
-const money=value=>value==null?'—':'€ '+numeric(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-const date=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)?new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(value+'T12:00:00Z')):'—';
+const numeric=value=>value==null||value===''?null:(Number.isFinite(Number(value))?Number(value):null);
+const fmtNumber=(value,digits=1)=>numeric(value)==null?'Not tracked':Number(value).toLocaleString('en-US',{minimumFractionDigits:digits,maximumFractionDigits:digits});
+const fmtInteger=value=>Number(value||0).toLocaleString('en-US');
+const fmtMoney=value=>value==null?'—':'€ '+Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const lband=d=>d==null?{c:'#9a9890',t:'Not tracked',tx:'#fff'}:d<=7?{c:'#0ca30c',t:'Up to 7 days',tx:'#fff'}:(d<=21?{c:'#fab219',t:'8 to 21 days',tx:'#412402'}:{c:'#d03b3b',t:'Over 21 days',tx:'#fff'});
+const qband=q=>q==null?{c:'#9a9890',t:'Not tracked',tx:'#fff'}:q>=95?{c:'#0ca30c',t:'Excellent',tx:'#fff'}:(q>=85?{c:'#fab219',t:'Acceptable',tx:'#412402'}:{c:'#d03b3b',t:'Poor',tx:'#fff'});
 const status=document.getElementById('supplierStatus');
-const cat=document.getElementById('cat');
-const q=document.getElementById('q');
+const categorySelect=document.getElementById('cat');
+const searchInput=document.getElementById('q');
 const listBody=document.getElementById('tb');
+const supplierForm=document.getElementById('supplierForm');
+const supplierFormPanel=document.getElementById('supplierFormPanel');
+const supplierFormMessage=document.getElementById('supplierFormMessage');
+const supplierSaveButton=document.getElementById('saveSupplierButton');
 let scatter=null;
+let mapSvg=null,landLayer=null,dotLayer=null,labelLayer=null,projection=null,geoPath=null;
+let worldFeatures=null;
 
+function gauge(value,min,max,color,aria){
+ if(numeric(value)==null)return '';
+ const cx=100,cy=88,r=68,sw=18,a0=150,sweep=240;
+ const f=Math.max(0,Math.min(1,(value-min)/(max-min)));
+ const point=(a,rr)=>[cx+rr*Math.cos(a*Math.PI/180),cy+rr*Math.sin(a*Math.PI/180)];
+ const arc=(from,to,rr)=>{const p0=point(from,rr),p1=point(to,rr);return 'M'+p0[0].toFixed(1)+' '+p0[1].toFixed(1)+' A'+rr+' '+rr+' 0 '+((to-from)>180?1:0)+' 1 '+p1[0].toFixed(1)+' '+p1[1].toFixed(1);};
+ let html='<svg viewBox="0 0 200 132" width="100%" role="img" aria-label="'+esc(aria)+'">';
+ html+='<path d="'+arc(a0,a0+sweep,r)+'" fill="none" style="stroke:var(--border-strong)" stroke-width="'+sw+'"/>';
+ if(f>0)html+='<path d="'+arc(a0,a0+sweep*f,r)+'" fill="none" stroke="'+color+'" stroke-width="'+sw+'"/>';
+ return html+'</svg>';
+}
+function smallGauge(value,min,max,color,center,aria){
+ if(numeric(value)==null)return '';
+ const cx=50,cy=46,r=33,sw=10,a0=150,sweep=240;
+ const f=Math.max(0,Math.min(1,(value-min)/(max-min)));
+ const point=(a,rr)=>[cx+rr*Math.cos(a*Math.PI/180),cy+rr*Math.sin(a*Math.PI/180)];
+ const arc=(from,to,rr)=>{const p0=point(from,rr),p1=point(to,rr);return 'M'+p0[0].toFixed(1)+' '+p0[1].toFixed(1)+' A'+rr+' '+rr+' 0 '+((to-from)>180?1:0)+' 1 '+p1[0].toFixed(1)+' '+p1[1].toFixed(1);};
+ let html='<svg viewBox="0 0 100 72" role="img" aria-label="'+esc(aria)+'">';
+ html+='<path d="'+arc(a0,a0+sweep,r)+'" fill="none" style="stroke:var(--border-strong)" stroke-width="'+sw+'"/>';
+ if(f>0)html+='<path d="'+arc(a0,a0+sweep*f,r)+'" fill="none" stroke="'+color+'" stroke-width="'+sw+'"/>';
+ html+='<path d="'+arc(a0+8,a0+sweep-8,r-sw/2-6)+'" fill="none" style="stroke:var(--text-muted)" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.1 5" opacity="0.8"/>';
+ return html+'<text x="50" y="51" text-anchor="middle" style="fill:var(--text-primary)" font-size="21" font-weight="500">'+esc(center)+'</text></svg>';
+}
 function filteredSuppliers(){
  const query=st.q.trim().toLocaleLowerCase();
  return S.filter(s=>{
-  const items=Array.isArray(s.items)?s.items:[];
   const cats=Array.isArray(s.categories)?s.categories:[];
-  const searchable=[s.name,...cats,...items.flatMap(item=>[item.name,item.barcode,item.category])].join(' ').toLocaleLowerCase();
-  return (!query||searchable.includes(query))&&
-   (st.cat==='all'||cats.includes(st.cat))&&
-   (st.type==='all'||(st.type==='stock'?numeric(s.currentStock)>0:numeric(s.inboundUnits)>0));
+  const items=Array.isArray(s.items)?s.items:[];
+  const text=[s.name,s.city,s.country,s.supplierType,...cats,...items.flatMap(item=>[item.name,item.barcode,item.category])].join(' ').toLocaleLowerCase();
+  const kind=s.supplierType||'Not recorded';
+  return (!query||text.includes(query))&&(st.cat==='all'||cats.includes(st.cat))&&(st.type==='all'||kind===st.type);
  });
 }
-function selectSupplier(key){st.sel=key;draw();}
-function typeButtons(){
- const choices=[['all','All suppliers'],['stock','With stock'],['receipts','With receipts']];
- document.getElementById('types').innerHTML=choices.map(([key,label])=>'<button type="button" class="ch'+(st.type===key?' on':'')+'" data-t="'+key+'">'+label+'</button>').join('');
+function drawTypeButtons(){
+ const types=[...new Set(S.map(s=>s.supplierType||'Not recorded'))].sort((a,b)=>a.localeCompare(b));
+ const choices=['all',...types];
+ if(!choices.includes(st.type))st.type='all';
+ document.getElementById('types').innerHTML=choices.map(type=>'<button type="button" class="ch'+(st.type===type?' on':'')+'" data-t="'+esc(type)+'">'+(type==='all'?'All types':esc(type))+'</button>').join('');
  document.querySelectorAll('#types button').forEach(button=>button.addEventListener('click',()=>{st.type=button.dataset.t;draw();}));
 }
-function updateCategories(){
+function updateControls(){
  const current=st.cat;
- const categories=Array.isArray(window.supplierCategories)?window.supplierCategories:[];
- cat.innerHTML='<option value="all">All categories</option>'+categories.map(value=>'<option value="'+esc(value)+'">'+esc(value)+'</option>').join('');
- st.cat=categories.includes(current)?current:'all';cat.value=st.cat;
+ const categories=[...new Set(S.flatMap(s=>s.categories||[]))].sort((a,b)=>a.localeCompare(b));
+ categorySelect.innerHTML='<option value="all">All categories</option>'+categories.map(category=>'<option value="'+esc(category)+'">'+esc(category)+'</option>').join('');
+ st.cat=categories.includes(current)?current:'all';categorySelect.value=st.cat;
+ document.getElementById('supplierNames').innerHTML=S.map(s=>'<option value="'+esc(s.name)+'"></option>').join('');
 }
-function kpi(label,value,note){return '<div class="k"><span class="l">'+esc(label)+'</span><b>'+esc(value)+'</b><i>'+esc(note)+'</i></div>';}
 function drawKpis(rows){
- const productCount=rows.reduce((sum,s)=>sum+numeric(s.productCount),0);
- const stock=rows.reduce((sum,s)=>sum+numeric(s.currentStock),0);
- const receipts=rows.reduce((sum,s)=>sum+numeric(s.inboundRecords),0);
- const cost=rows.reduce((sum,s)=>sum+numeric(s.recordedInboundCost),0);
+ const countries=[...new Set(rows.map(s=>s.country).filter(Boolean))];
+ const leadRows=rows.filter(s=>numeric(s.leadTimeDays)!=null);
+ const qualityRows=rows.filter(s=>numeric(s.qualityScore)!=null);
+ const averageLead=leadRows.length?leadRows.reduce((sum,s)=>sum+Number(s.leadTimeDays),0)/leadRows.length:null;
+ const longest=leadRows.reduce((best,s)=>!best||Number(s.leadTimeDays)>Number(best.leadTimeDays)?s:best,null);
+ const averageQuality=qualityRows.length?qualityRows.reduce((sum,s)=>sum+Number(s.qualityScore),0)/qualityRows.length:null;
+ const best=qualityRows.reduce((winner,s)=>!winner||Number(s.qualityScore)>Number(winner.qualityScore)?s:winner,null);
+ const leadColor=lband(averageLead).c,qualityColor=qband(averageQuality).c;
  document.getElementById('kp').innerHTML=
-  kpi('Suppliers',integer(rows.length),'With recorded supplier names')+
-  kpi('Products supplied',integer(productCount),'Product lines in current inventory')+
-  kpi('Current stock',integer(stock),'Units on hand from linked products')+
-  kpi('Inbound receipts',integer(receipts),money(cost)+' recorded inbound cost');
+  '<div class="k"><span class="l">Suppliers</span><b>'+fmtInteger(rows.length)+'</b><i>'+fmtInteger(countries.length)+' countries recorded</i></div>'+
+  '<div class="k kg"><div><span class="l">Average lead time</span><b>'+(averageLead==null?'Not tracked':fmtNumber(averageLead)+' days')+'</b><i>'+(leadRows.length?'order to delivery · '+fmtInteger(leadRows.length)+' tracked':'Enter supplier lead times to calculate')+'</i></div>'+(averageLead==null?'':gauge(averageLead,0,40,leadColor,'Average lead time '+fmtNumber(averageLead)+' days'))+'</div>'+
+  '<div class="k"><span class="l">Longest lead time</span><b>'+(longest?fmtNumber(longest.leadTimeDays)+' days':'Not tracked')+'</b><i>'+esc(longest?longest.name:'Enter supplier lead times to calculate')+'</i></div>'+
+  '<div class="k kg"><div><span class="l">Average quality</span><b>'+(averageQuality==null?'Not tracked':fmtNumber(averageQuality)+' / 100')+'</b><i>'+(best?'Best: '+esc(best.name):'Enter supplier quality scores to calculate')+'</i></div>'+(averageQuality==null?'':gauge(averageQuality,60,100,qualityColor,'Average supplier quality '+fmtNumber(averageQuality)+' out of 100'))+'</div>';
 }
+function tinyGauge(value,min,max,color,center,aria){return '<div class="cg">'+smallGauge(value,min,max,color,center,aria)+'<div><span class="pill" style="background:'+color+';color:'+(color==='#fab219'?'#412402':'#fff')+'">'+(value==null?'Not tracked':value<=7?'Up to 7 days':value>=95?'Excellent':'Recorded')+'</span><small>'+esc(aria)+'</small></div></div>';}
 function drawDetails(s){
  const detail=document.getElementById('det');
- if(!s){detail.innerHTML='<p class="hd">No supplier selected</p><p class="sb" style="margin:0">No suppliers match these filters. Clear the search or choose another category.</p>';return;}
- const items=Array.isArray(s.items)?s.items:[];
- const costNote=s.missingCurrentCostProducts?money(s.currentStockValue)+' known · '+integer(s.missingCurrentCostProducts)+' product costs missing':money(s.currentStockValue);
+ if(!s){detail.innerHTML='<p class="hd">No supplier selected</p><p class="sb" style="margin:0">No supplier matches these filters. Clear the search or choose another category.</p>';return;}
+ const location=[s.city,s.country].filter(Boolean).join(', ')||'Not recorded';
+ const coordinates=numeric(s.latitude)!=null&&numeric(s.longitude)!=null?Number(s.latitude).toFixed(5)+', '+Number(s.longitude).toFixed(5):'Not recorded';
+ const productNames=(s.items||[]).map(item=>item.name+(item.quantity>0?' ('+fmtInteger(item.quantity)+' in stock)':'' )).join(', ')||'No products recorded yet';
  const fields=[
-  ['Location','Not recorded'],['Product categories',(s.categories||[]).join(', ')||'Not assigned'],
-  ['Products supplied',integer(s.productCount)],['Current stock',integer(s.currentStock)+' units'],
-  ['Current stock value',costNote],['Inbound units',integer(s.inboundUnits)+' units'],
-  ['Inbound receipts',integer(s.inboundRecords)],['Recorded inbound cost',numeric(s.costedInboundUnits)>0?money(s.recordedInboundCost):'No recorded unit costs'],
-  ['Average recorded purchase cost',s.averageRecordedUnitCost==null?'Unavailable':money(s.averageRecordedUnitCost)+' / unit'],
-  ['Last arrival',date(s.lastArrivalDate)],['Lead time','Not tracked'],['Quality and defect rate','Not tracked']
+  ['Location',location],['Coordinates',coordinates],['Product categories',(s.categories||[]).join(', ')||'Not assigned'],['Type of products',s.supplierType||'Not recorded'],
+  ['Products supplied',productNames],['Lead time',s.leadTimeDays==null?'Not tracked':fmtNumber(s.leadTimeDays)+' days'],
+  ['Product quality',s.qualityScore==null?'Not tracked':fmtNumber(s.qualityScore)+' / 100'],['Defect rate',s.defectRate==null?'Not tracked':fmtNumber(s.defectRate)+'%'],
+  ['Current stock',fmtInteger(s.currentStock)+' units'],['Inbound units',fmtInteger(s.inboundUnits)+' units'],['Inbound receipts',fmtInteger(s.inboundRecords)],
+  ['Recorded inbound cost',s.costedInboundUnits?fmtMoney(s.recordedInboundCost):'No recorded unit costs'],['Last arrival',s.lastArrivalDate||'—']
  ];
- const chips=items.map(item=>'<span class="tag" title="'+esc(item.barcode?item.name+' · '+item.barcode:item.name)+'">'+esc(item.name||item.barcode||'Product')+' · '+integer(item.quantity)+' in stock</span>').join('');
- detail.innerHTML='<p class="hd">'+esc(s.name)+'</p><p class="sb" style="margin-bottom:0">'+integer(s.productCount)+' recorded products · '+integer(s.currentStock)+' units on hand</p><div class="dg">'+fields.map(([label,value])=>'<div><span class="l">'+esc(label)+'</span><p>'+esc(value)+'</p></div>').join('')+'</div><p class="sb" style="margin:12px 0 0">Products supplied</p><div>'+ (chips||'<span class="tag">No linked products</span>')+'</div><p class="sb" style="margin:12px 0 0">Supplier location, delivery lead time, quality scores, and defect rates are not recorded in this system.</p>';
+ detail.innerHTML='<p class="hd">'+esc(s.name)+'</p><p class="sb" style="margin-bottom:0">'+fmtInteger(s.productCount)+' products · '+fmtInteger(s.currentStock)+' units in stock</p><div class="dg">'+fields.map(([label,value])=>'<div><span class="l">'+esc(label)+'</span><p>'+esc(value)+'</p></div>').join('')+'</div>';
 }
+function sortValue(s,key){return key==='name'?String(s.name||'').toLocaleLowerCase():key==='lastArrivalDate'?String(s[key]||''):numeric(s[key]);}
 function drawTable(rows){
- const sort=st.sort, direction=st.dir;
  const sorted=[...rows].sort((a,b)=>{
-  const av=a[sort],bv=b[sort];
-  const cmp=typeof av==='string'&&typeof bv==='string'?av.localeCompare(bv):numeric(av)-numeric(bv);
-  return cmp*direction||String(a.name).localeCompare(String(b.name));
+  const av=sortValue(a,st.sort),bv=sortValue(b,st.sort);
+  if(av==null)return bv==null?String(a.name).localeCompare(String(b.name)):1;
+  if(bv==null)return -1;
+  const cmp=typeof av==='string'?av.localeCompare(bv):av-bv;
+  return cmp*st.dir||String(a.name).localeCompare(String(b.name));
  });
- document.getElementById('cnt').textContent='Showing '+rows.length+' of '+S.length+' suppliers, sorted by '+sort.replace(/([A-Z])/g,' $1').toLowerCase();
- if(!sorted.length){listBody.innerHTML='<tr><td colspan="7" style="color:var(--text-secondary)">No suppliers match.</td></tr>';return;}
+ document.getElementById('cnt').textContent='Showing '+rows.length+' of '+S.length+' suppliers, sorted by '+(st.sort==='leadTimeDays'?'lead time':st.sort==='qualityScore'?'quality':'name');
+ if(!sorted.length){listBody.innerHTML='<tr class="r"><td colspan="6" style="color:var(--text-secondary)">No suppliers match.</td></tr>';return;}
  listBody.innerHTML=sorted.map(s=>{
-  const tags=(s.categories||[]).map(name=>'<span class="tag">'+esc(name)+'</span>').join('')||'—';
-  const cost=s.costedInboundUnits?money(s.recordedInboundCost):'—';
-  return '<tr class="r'+(s.key===st.sel?' on':'')+'" data-key="'+esc(s.key)+'"><td><b style="font-weight:600">'+esc(s.name)+'</b></td><td>'+integer(s.productCount)+'</td><td>'+tags+'</td><td>'+integer(s.currentStock)+' units</td><td>'+integer(s.inboundUnits)+' units</td><td>'+esc(cost)+'</td><td>'+date(s.lastArrivalDate)+'</td></tr>';
+  const location=[s.city,s.country].filter(Boolean).join(', ')||'Not recorded';
+  const cats=(s.categories||[]).slice(0,3).map(value=>'<span class="tag">'+esc(value)+'</span>').join('')||'—';
+  const lead=lband(numeric(s.leadTimeDays)),quality=qband(numeric(s.qualityScore));
+  const leadHtml=tinyGauge(numeric(s.leadTimeDays),0,40,lead.c,numeric(s.leadTimeDays)==null?'—':fmtNumber(s.leadTimeDays)+'d',numeric(s.leadTimeDays)==null?'Lead time not tracked':fmtNumber(s.leadTimeDays)+' days');
+  const qualityHtml=tinyGauge(numeric(s.qualityScore),60,100,quality.c,numeric(s.qualityScore)==null?'—':fmtNumber(s.qualityScore),numeric(s.qualityScore)==null?'Quality not tracked':fmtNumber(s.qualityScore)+' / 100 · '+(s.defectRate==null?'defect rate not tracked':fmtNumber(s.defectRate)+'% defects'));
+  return '<tr class="r'+(s.key===st.sel?' on':'')+'" data-key="'+esc(s.key)+'"><td><b style="font-weight:600">'+esc(s.name)+'</b></td><td>'+esc(location)+'</td><td>'+cats+'</td><td>'+esc(s.supplierType||'Not recorded')+'</td><td>'+leadHtml+'</td><td>'+qualityHtml+'</td></tr>';
  }).join('');
- listBody.querySelectorAll('tr.r').forEach(row=>row.addEventListener('click',()=>selectSupplier(row.dataset.key)));
+ listBody.querySelectorAll('tr[data-key]').forEach(row=>row.addEventListener('click',()=>{st.sel=row.dataset.key;draw();}));
 }
-function drawMapNote(){
+function locationOf(s){
+ const lat=numeric(s.latitude),lon=numeric(s.longitude);
+ return lat!=null&&lon!=null&&lat>=-90&&lat<=90&&lon>=-180&&lon<=180?[lon,lat]:null;
+}
+function drawMap(rows){
+ const located=rows.filter(s=>locationOf(s));
+ const dots=dotLayer.selectAll('g.m').data(located,d=>d.key).join(
+  enter=>{const g=enter.append('g').attr('class','m').style('cursor','pointer');g.append('circle').attr('class','ring').attr('r',11).attr('fill','none').attr('stroke','var(--text-primary)').attr('stroke-width',2);g.append('circle').attr('class','dot').attr('r',6).attr('stroke','var(--surface-2)').attr('stroke-width',1.5);g.append('title');return g;},
+  update=>update,
+  exit=>exit.remove());
+ dots.attr('transform',s=>{const point=projection(locationOf(s));return 'translate('+point[0]+','+point[1]+')';})
+  .on('click',(event,s)=>{st.sel=s.key;draw();});
+ dots.select('.dot').attr('fill',s=>{const value=st.color==='lead'?numeric(s.leadTimeDays):numeric(s.qualityScore);return (st.color==='lead'?lband(value):qband(value)).c;});
+ dots.select('.ring').attr('opacity',s=>s.key===st.sel?1:0);
+ dots.select('title').text(s=>s.name+' · '+([s.city,s.country].filter(Boolean).join(', ')||'location recorded')+' · '+(st.color==='lead'?(s.leadTimeDays==null?'lead time not tracked':s.leadTimeDays+' days'):(s.qualityScore==null?'quality not tracked':s.qualityScore+' / 100')));
+ labelLayer.selectAll('*').remove();
+ const selected=located.find(s=>s.key===st.sel);
+ if(selected){const point=projection(locationOf(selected));const text=selected.name;const width=Math.min(210,text.length*6.6+16),x=Math.min(Math.max(point[0]-width/2,4),676-width),y=point[1]>40?point[1]-40:point[1]+18;
+  labelLayer.append('rect').attr('x',x).attr('y',y).attr('width',width).attr('height',22).attr('rx',6).attr('fill','var(--surface-2)').attr('stroke','var(--border-strong)').attr('stroke-width',0.5);
+  labelLayer.append('text').attr('x',x+width/2).attr('y',y+15).attr('text-anchor','middle').attr('font-size',12).attr('fill','var(--text-primary)').text(text);
+ }
  const legend=document.getElementById('mlg');
- const hasLocations=S.some(s=>Number.isFinite(Number(s.latitude))&&Number.isFinite(Number(s.longitude)));
- legend.textContent=hasLocations?'Recorded supplier locations':'Supplier locations are not recorded in RetailFlow.';
+ if(st.color==='lead')legend.innerHTML='<span><i style="background:#0ca30c"></i>Up to 7 days</span><span><i style="background:#fab219"></i>8 to 21 days</span><span><i style="background:#d03b3b"></i>Over 21 days</span><span>No coordinates: '+(S.length-located.length)+' suppliers</span>';
+ else legend.innerHTML='<span><i style="background:#0ca30c"></i>Excellent, 95 and above</span><span><i style="background:#fab219"></i>Acceptable, 85 to 94</span><span><i style="background:#d03b3b"></i>Poor, below 85</span><span>No coordinates: '+(S.length-located.length)+' suppliers</span>';
 }
 function initMap(){
- if(typeof d3==='undefined'||typeof topojson==='undefined')return;
- const svg=d3.select('#map');
- const proj=d3.geoNaturalEarth1().fitSize([680,330],{type:'Polygon',coordinates:[[[45,-4],[125,-4],[125,40],[45,40],[45,-4]]]});
- const path=d3.geoPath(proj);
+ if(typeof d3==='undefined'||typeof topojson==='undefined'){document.getElementById('mlg').textContent='Map libraries are unavailable. Supplier list is still available.';return;}
+ mapSvg=d3.select('#map');landLayer=mapSvg.append('g');dotLayer=mapSvg.append('g');labelLayer=mapSvg.append('g');
  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world=>{
-  svg.selectAll('path.land').data(topojson.feature(world,world.objects.countries).features).join('path').attr('class','land').attr('d',path).attr('fill','var(--surface-1)').attr('stroke','var(--border-strong)').attr('stroke-width',0.5);
-  drawMapNote();
+  worldFeatures=topojson.feature(world,world.objects.countries).features;
+  const land=topojson.feature(world,world.objects.countries);
+  projection=d3.geoNaturalEarth1().fitSize([680,330],land);geoPath=d3.geoPath(projection);
+  landLayer.selectAll('path').data(worldFeatures).join('path').attr('d',geoPath).attr('fill','var(--surface-1)').attr('stroke','var(--border-strong)').attr('stroke-width',0.5);
+  drawMap(filteredSuppliers());
  }).catch(()=>{document.getElementById('mlg').textContent='Map background could not be loaded. Supplier records remain available below.';});
 }
 function initScatter(){
  if(typeof Chart==='undefined')return;
  const muted=getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim()||'#898781';
  const surface=getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim()||'#fff';
+ const quad={id:'quad',beforeDatasetsDraw(chart){const x=chart.scales.x,y=chart.scales.y,a=chart.chartArea,ctx=chart.ctx;if(!a)return;ctx.save();ctx.strokeStyle='rgba(128,128,128,0.55)';ctx.setLineDash([4,4]);ctx.lineWidth=1;const px=x.getPixelForValue(21),py=y.getPixelForValue(90);ctx.beginPath();ctx.moveTo(px,a.top);ctx.lineTo(px,a.bottom);ctx.moveTo(a.left,py);ctx.lineTo(a.right,py);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=muted;ctx.font='12px sans-serif';ctx.textAlign='left';ctx.fillText('Fast and high quality',a.left+8,a.top+16);ctx.textAlign='right';ctx.fillText('Slow and high quality',a.right-8,a.top+16);ctx.textAlign='left';ctx.fillText('Fast, quality to watch',a.left+8,a.bottom-8);ctx.textAlign='right';ctx.fillText('Slow, quality to watch',a.right-8,a.bottom-8);ctx.restore();}};
  Chart.defaults.color=muted;
- scatter=new Chart(document.getElementById('sc'),{type:'scatter',data:{datasets:[{data:[],pointBackgroundColor:'#2a78d6',pointBorderColor:surface,pointBorderWidth:2,pointRadius:6,pointHoverRadius:9}]},options:{responsive:true,maintainAspectRatio:false,animation:false,
-  onClick:(event,elements)=>{if(elements.length){const point=scatter.data.datasets[0].data[elements[0].index];selectSupplier(point.key);}},
-  plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>{const item=S.find(s=>s.key===context.raw.key);return item?item.name+': '+integer(item.inboundUnits)+' received, '+integer(item.currentStock)+' on hand':'Supplier';}}}},
-  scales:{x:{beginAtZero:true,title:{display:true,text:'Received units'},grid:{color:'rgba(128,128,128,0.15)'},border:{display:false}},y:{beginAtZero:true,title:{display:true,text:'Current stock units'},grid:{color:'rgba(128,128,128,0.15)'},border:{display:false}}}}});
+ scatter=new Chart(document.getElementById('sc'),{type:'scatter',plugins:[quad],data:{datasets:[{data:[],pointBackgroundColor:[],pointBorderColor:surface,pointBorderWidth:2,pointRadius:[],pointHoverRadius:9}]},options:{responsive:true,maintainAspectRatio:false,animation:false,
+  onClick:(event,elements)=>{if(elements.length){st.sel=scatter.data.datasets[0].data[elements[0].index].key;draw();}},
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>{const s=S.find(row=>row.key===context.raw.key);return s?s.name+': '+s.leadTimeDays+' days, quality '+s.qualityScore+(s.defectRate==null?'':', defects '+s.defectRate+'%'):'Supplier';}}}},
+  scales:{x:{min:0,max:40,grid:{color:'rgba(128,128,128,0.15)'},border:{display:false},title:{display:true,text:'Lead time (days)'},ticks:{color:muted}},y:{min:0,max:100,grid:{color:'rgba(128,128,128,0.15)'},border:{display:false},title:{display:true,text:'Quality score'},ticks:{color:muted}}}}});
 }
 function drawScatter(rows){
- if(!scatter){document.getElementById('scatterWrap').innerHTML='<p class="sb">The chart library is unavailable. Supplier records are listed above.</p>';return;}
- scatter.data.datasets[0].data=rows.map(s=>({x:numeric(s.inboundUnits),y:numeric(s.currentStock),key:s.key}));
- scatter.data.datasets[0].pointBackgroundColor=rows.map(s=>s.key===st.sel?'#111':'#2a78d6');
- scatter.data.datasets[0].pointRadius=rows.map(s=>s.key===st.sel?9:6);
- scatter.options.scales.x.max=Math.max(1,...rows.map(s=>numeric(s.inboundUnits)));
- scatter.options.scales.y.max=Math.max(1,...rows.map(s=>numeric(s.currentStock)));
+ if(!scatter){const canvas=document.getElementById('sc');if(canvas)canvas.parentElement.innerHTML='<p class="sb">The chart library is unavailable. Supplier records are listed above.</p>';return;}
+ const points=rows.filter(s=>numeric(s.leadTimeDays)!=null&&numeric(s.qualityScore)!=null).map(s=>({x:Number(s.leadTimeDays),y:Number(s.qualityScore),key:s.key}));
+ scatter.data.datasets[0].data=points;
+ scatter.data.datasets[0].pointBackgroundColor=points.map(point=>qband(point.y).c);
+ scatter.data.datasets[0].pointRadius=points.map(point=>point.key===st.sel?10:6);
+ scatter.options.scales.x.max=Math.max(40,...points.map(point=>point.x));
  scatter.update();
 }
 function draw(){
- typeButtons();
+ drawTypeButtons();
  const rows=filteredSuppliers();
- if(!rows.some(s=>s.key===st.sel))st.sel=rows[0]?.key??null;
+ if(!rows.some(s=>s.key===st.sel))st.sel=rows[0]?.key||null;
  drawKpis(rows);
- drawMapNote();
- const unassigned=numeric(window.supplierUnassignedProducts);
- document.getElementById('unassignedProducts').textContent=unassigned?integer(unassigned)+' inventory '+(unassigned===1?'product has':'products have')+' no supplier recorded.':'';
- drawDetails(rows.find(s=>s.key===st.sel)||null);
+ if(projection)drawMap(rows);
+ const selected=rows.find(s=>s.key===st.sel)||null;
+ drawDetails(selected);
  drawTable(rows);
  drawScatter(rows);
  sendHeight();
 }
-function sendHeight(){
- if(window.parent!==window)window.parent.postMessage({type:'supplier-dashboard-height',height:Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)},location.origin);
+function sendHeight(){if(window.parent!==window)window.parent.postMessage({type:'supplier-dashboard-height',height:Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)},location.origin);}
+function fillFormFromSupplier(name){
+ const supplier=S.find(s=>s.name.toLocaleLowerCase()===name.trim().toLocaleLowerCase());
+ if(!supplier)return;
+ document.getElementById('supplierType').value=supplier.supplierType||'';
+ document.getElementById('supplierCity').value=supplier.city||'';
+ document.getElementById('supplierCountry').value=supplier.country||'';
+ document.getElementById('supplierLatitude').value=supplier.latitude??'';
+ document.getElementById('supplierLongitude').value=supplier.longitude??'';
+ document.getElementById('supplierLeadTime').value=supplier.leadTimeDays??'';
+ document.getElementById('supplierQuality').value=supplier.qualityScore??'';
+ document.getElementById('supplierDefectRate').value=supplier.defectRate??'';
+}
+function mergeSavedSupplier(profile){
+ const key=String(profile.name||'').trim().toLocaleLowerCase();
+ if(!key)return;
+ const previous=S.find(s=>s.key===key)||{};
+ const merged={key,name:profile.name,city:profile.city||'',country:profile.country||'',supplierType:profile.supplierType||'',latitude:profile.latitude,longitude:profile.longitude,leadTimeDays:profile.leadTimeDays,qualityScore:profile.qualityScore,defectRate:profile.defectRate,
+  categories:previous.categories||[],items:previous.items||[],productCount:previous.productCount||0,currentProductCount:previous.currentProductCount||0,currentStock:previous.currentStock||0,currentStockValue:previous.currentStockValue||0,missingCurrentCostProducts:previous.missingCurrentCostProducts||0,inboundUnits:previous.inboundUnits||0,inboundRecords:previous.inboundRecords||0,recordedInboundCost:previous.recordedInboundCost||0,costedInboundUnits:previous.costedInboundUnits||0,averageRecordedUnitCost:previous.averageRecordedUnitCost??null,lastArrivalDate:previous.lastArrivalDate||''};
+ S=[...S.filter(s=>s.key!==key),merged].sort((a,b)=>a.name.localeCompare(b.name));
+ st.sel=key;selectedSupplierName=profile.name;updateControls();draw();
 }
 function receiveData(data){
  S=Array.isArray(data?.suppliers)?data.suppliers:[];
- window.supplierCategories=Array.isArray(data?.categories)?data.categories:[];
- window.supplierUnassignedProducts=numeric(data?.summary?.unassignedProducts);
- updateCategories();
- status.textContent='Connected to RetailFlow · Live products and inbound receipts';
+ supplierCategories=Array.isArray(data?.categories)?data.categories:[];
+ updateControls();
+ status.textContent=data?.supplierProfileWarning
+  ?'Live scanner product and receipt data · saved supplier profile details are unavailable; check Firestore read rules.'
+  :'Live RetailFlow data · scanner products and inbound receipts included';
  draw();
+ if(selectedSupplierName){document.getElementById('supplierName').value=selectedSupplierName;fillFormFromSupplier(selectedSupplierName);}
 }
-q.addEventListener('input',()=>{st.q=q.value;draw();});
-cat.addEventListener('change',()=>{st.cat=cat.value;draw();});
-document.querySelectorAll('th.s').forEach(header=>header.addEventListener('click',()=>{
- const key=header.dataset.s;
- st.dir=st.sort===key?st.dir*-1:(key==='name'||key==='lastArrivalDate'?1:-1);st.sort=key;draw();
-}));
+searchInput.addEventListener('input',()=>{st.q=searchInput.value;draw();});
+categorySelect.addEventListener('change',()=>{st.cat=categorySelect.value;draw();});
+document.querySelectorAll('th.s').forEach(header=>header.addEventListener('click',()=>{const key=header.dataset.s;st.dir=st.sort===key?st.dir*-1:(key==='name'?-1:1);st.sort=key;draw();}));
+document.getElementById('m1').addEventListener('click',()=>{st.color='lead';document.getElementById('m1').classList.add('on');document.getElementById('m2').classList.remove('on');draw();});
+document.getElementById('m2').addEventListener('click',()=>{st.color='quality';document.getElementById('m2').classList.add('on');document.getElementById('m1').classList.remove('on');draw();});
+document.getElementById('openSupplierForm').addEventListener('click',()=>{supplierFormPanel.hidden=false;supplierFormPanel.scrollIntoView({behavior:'smooth',block:'nearest'});document.getElementById('supplierName').focus();});
+document.getElementById('closeSupplierForm').addEventListener('click',()=>{supplierFormPanel.hidden=true;});
+document.getElementById('supplierName').addEventListener('change',event=>fillFormFromSupplier(event.target.value));
+supplierForm.addEventListener('submit',event=>{
+ event.preventDefault();supplierFormMessage.textContent='';
+ const raw={name:document.getElementById('supplierName').value.trim(),supplierType:document.getElementById('supplierType').value.trim(),city:document.getElementById('supplierCity').value.trim(),country:document.getElementById('supplierCountry').value.trim(),latitude:document.getElementById('supplierLatitude').value.trim(),longitude:document.getElementById('supplierLongitude').value.trim(),leadTimeDays:document.getElementById('supplierLeadTime').value.trim(),qualityScore:document.getElementById('supplierQuality').value.trim(),defectRate:document.getElementById('supplierDefectRate').value.trim()};
+ const numberOrNull=(value,label)=>{if(!value)return null;const number=Number(value);if(!Number.isFinite(number)){throw new Error(label+' must be a number.');}return number;};
+ try{
+  const latitude=numberOrNull(raw.latitude,'Latitude'),longitude=numberOrNull(raw.longitude,'Longitude');
+  if((latitude==null)!==(longitude==null))throw new Error('Enter both latitude and longitude to place the supplier on the map.');
+  const leadTimeDays=numberOrNull(raw.leadTimeDays,'Lead time'),qualityScore=numberOrNull(raw.qualityScore,'Quality score'),defectRate=numberOrNull(raw.defectRate,'Defect rate');
+  if(latitude!=null&&(latitude < -90||latitude > 90))throw new Error('Latitude must be from -90 to 90.');
+  if(longitude!=null&&(longitude < -180||longitude > 180))throw new Error('Longitude must be from -180 to 180.');
+  if(leadTimeDays!=null&&(leadTimeDays<0||leadTimeDays>3650))throw new Error('Lead time must be between 0 and 3650 days.');
+  if(qualityScore!=null&&(qualityScore<0||qualityScore>100))throw new Error('Quality score must be between 0 and 100.');
+  if(defectRate!=null&&(defectRate<0||defectRate>100))throw new Error('Defect rate must be between 0 and 100.');
+  if(window.parent===window)throw new Error('Open this page from the RetailFlow Suppliers tab to save data.');
+  supplierSaveButton.disabled=true;supplierSaveButton.textContent='Saving…';
+  window.parent.postMessage({type:'supplier-save',data:{...raw,latitude,longitude,leadTimeDays,qualityScore,defectRate}},location.origin);
+ }catch(error){supplierFormMessage.textContent=error.message;}
+});
 initMap();initScatter();draw();
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==window.parent)return;
  if(event.data?.type==='supplier-data')receiveData(event.data.data);
- if(event.data?.type==='supplier-error')status.textContent=S.length?'RetailFlow connection is unavailable · showing the last loaded supplier data':'Supplier data is unavailable. Check the RetailFlow connection and try again.';
+ if(event.data?.type==='supplier-error')status.textContent=S.length?'RetailFlow connection unavailable · showing the last loaded supplier data':'Supplier data is unavailable. Check the RetailFlow connection and try again.';
+ if(event.data?.type==='supplier-save-result'){
+  supplierSaveButton.disabled=false;supplierSaveButton.textContent='Save supplier data';
+  if(event.data.ok){mergeSavedSupplier(event.data.supplier);supplierFormMessage.textContent='Supplier data saved to RetailFlow.';}
+  else supplierFormMessage.textContent=event.data.message||'Supplier data could not be saved.';
+ }
 });
 window.addEventListener('resize',sendHeight);
 if('ResizeObserver'in window)new ResizeObserver(sendHeight).observe(document.body);
