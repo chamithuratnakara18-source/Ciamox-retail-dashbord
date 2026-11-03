@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-profile-20261103-3';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-profile-20261103-4';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
@@ -324,7 +324,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-pro
     if (view === 'finance') await refreshFinance();
     if (view === 'orders') await refreshOrderAnalytics();
     if (view === 'suppliers') {
-      if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html?v=supplier-profile-20261103-3';
+      if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html?v=supplier-profile-20261103-4';
       await refreshSupplierDashboard();
     }
   }
