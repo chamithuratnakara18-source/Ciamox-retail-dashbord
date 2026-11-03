@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?dashboard-alerts=20261103';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
@@ -269,6 +269,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       `${periodName(data.period, data.anchor)} · historical completed sales`;
     renderRevenueChart(data);
     renderAlerts(data);
+    renderExpiryWarnings(data);
   }
 
   function renderAlerts(data) {
@@ -277,7 +278,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     headline.textContent = !data.totals.productCount ? 'No products in inventory'
       : data.alerts.length ? `${data.alerts.length} ${data.alerts.length === 1 ? 'product needs' : 'products need'} attention`
         : 'All products are healthy';
-    headline.title = 'Critical: out of stock. Low: 1–5 units left.';
+    headline.title = 'Critical: out of stock. Low: at or below 30% of recorded peak stock.';
     const list = document.getElementById('overviewAlertList');
     list.replaceChildren();
     const alerts = data.alerts.filter(item => alertFilter === 'all' || item.status === alertFilter);
@@ -295,8 +296,48 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       const code = document.createElement('small'); code.textContent = item.barcode;
       name.append(code);
       const badge = document.createElement('b'); badge.className = item.status;
-      badge.textContent = item.status === 'critical' ? 'Out of stock' : `${item.quantity} left`;
+      badge.textContent = item.status === 'critical' ? 'Out of stock'
+        : `${item.quantity} left · ${Math.round(item.stockPercent)}%`;
+      badge.title = item.status === 'low'
+        ? `${item.quantity} in stock from a recorded peak of ${item.peakStock}. Low-stock warning starts at 30%.`
+        : 'No units currently in stock.';
       row.append(name, badge); list.append(row);
+    });
+  }
+
+  function renderExpiryWarnings(data) {
+    const items = data.expiryWarnings || [];
+    const headline = document.getElementById('overviewExpiryHeadline');
+    const list = document.getElementById('overviewExpiryList');
+    const expiredCount = items.filter(item => item.daysUntilExpiry < 0).length;
+    headline.textContent = items.length
+      ? `${items.length} ${items.length === 1 ? 'product' : 'products'}${expiredCount ? ` · ${expiredCount} expired` : ''}`
+      : 'No products expiring within 2 months';
+    list.replaceChildren();
+    if (!items.length) {
+      const empty = document.createElement('p'); empty.className = 'overview-empty';
+      empty.textContent = 'No expiry warnings right now.'; list.append(empty); return;
+    }
+    items.forEach(item => {
+      const expired = item.daysUntilExpiry < 0;
+      const row = document.createElement('article'); row.className = `overview-expiry-row${expired ? ' expired' : ''}`;
+      const top = document.createElement('div'); top.className = 'overview-expiry-top';
+      const name = document.createElement('strong'); name.textContent = item.name;
+      const badge = document.createElement('b'); badge.textContent = expired ? 'Expired' : `${item.daysUntilExpiry} days left`;
+      top.append(name, badge);
+      const meta = document.createElement('small'); meta.className = 'overview-expiry-meta';
+      meta.textContent = `${item.quantity} in stock · Expires ${englishDate(item.expiryDate)}`;
+      const recommendation = document.createElement('p'); recommendation.className = 'overview-expiry-promo';
+      recommendation.textContent = item.recommendation;
+      row.append(top, meta, recommendation);
+      if (!expired) {
+        const options = document.createElement('small'); options.className = 'overview-expiry-options';
+        options.textContent = item.discountRate == null
+          ? 'Set selling price and unit cost to calculate safe promotion options.'
+          : `Discount option: ${item.discountRate > 0 ? `${item.discountRate}% off` : 'no safe markdown'} · Buy 1 Get 1 Free: ${item.buyOneGetOneSafe ? 'cost-safe' : 'not recommended'}`;
+        row.append(options);
+      }
+      list.append(row);
     });
   }
 

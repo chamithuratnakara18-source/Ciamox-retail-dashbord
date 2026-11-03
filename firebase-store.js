@@ -46,6 +46,44 @@ function todayLocal(offset = 0) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function addCalendarMonths(value, count) {
+  const [year, month, day] = value.split('-').map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + count, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+}
+
+function recordedStockPeaks(products, sales, receipts, today) {
+  const movements = new Map(products.map(product => [product.barcode, []]));
+  const addMovement = (barcode, day, delta, createdAt, received = 0) => {
+    const entries = movements.get(barcode);
+    if (!entries || typeof day !== 'string' || day > today) return;
+    entries.push({ day, delta, received, at: createdAt?.toMillis?.() || 0 });
+  };
+  for (const receipt of receipts) {
+    const quantity = Number(receipt.quantity) || 0;
+    addMovement(receipt.barcode, receipt.arrivalDate, quantity, receipt.createdAt, quantity > 0 ? quantity : 0);
+  }
+  for (const sale of sales) {
+    for (const item of Array.isArray(sale.items) ? sale.items : []) {
+      const quantity = Number(item.quantity);
+      if (Number.isFinite(quantity) && quantity > 0) addMovement(item.barcode, sale.day, -quantity, sale.createdAt);
+    }
+  }
+  return new Map(products.map(product => {
+    const current = Math.max(0, Number(product.quantity) || 0);
+    let balance = current, peak = current;
+    const entries = movements.get(product.barcode) || [];
+    entries.sort((a, b) => b.day.localeCompare(a.day) || b.at - a.at || a.delta - b.delta);
+    for (const event of entries) {
+      const before = balance - event.delta;
+      peak = Math.max(peak, balance, before, before + event.received);
+      balance = before;
+    }
+    return [product.barcode, peak];
+  }));
+}
+
 function inventoryAnalyticsRange(period, requestedAnchor = todayLocal()) {
   if (!['day', 'month', 'year'].includes(period)) throw new Error('Choose Day, Month, or Year.');
   const anchor = validDate(requestedAnchor, 'analytics date');
@@ -140,6 +178,7 @@ function overviewRange(period, anchor) {
 
 function overview(data, period, anchor) {
   const range = overviewRange(period, anchor);
+  const inventoryToday = todayLocal();
   const within = (day, from, to) => typeof day === 'string' && day >= from && day <= to;
   const sales = data.sales.filter(sale => within(sale.day, range.from, range.to));
   const previousSales = data.sales.filter(sale => within(sale.day, range.previousFrom, range.previousTo));
@@ -176,16 +215,44 @@ function overview(data, period, anchor) {
   const bestSelling = counts(sales).sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name));
   const previousSelling = counts(previousSales);
   const products = sortedProducts(data.products);
-  const alerts = products.filter(product => product.quantity <= 5)
-    .map(product => ({ barcode: product.barcode, name: product.name, quantity: product.quantity,
-      status: product.quantity === 0 ? 'critical' : 'low' }));
+  const stockPeaks = recordedStockPeaks(products, data.sales, data.receipts, inventoryToday);
+  const alerts = products.map(product => {
+    const peakStock = stockPeaks.get(product.barcode) || 0;
+    const stockPercent = peakStock > 0 ? product.quantity / peakStock * 100 : 0;
+    return { barcode: product.barcode, name: product.name, quantity: product.quantity, peakStock,
+      stockPercent, status: product.quantity <= 0 ? 'critical' : stockPercent <= 30 ? 'low' : null };
+  }).filter(product => product.status);
+  const todayIndex = Math.floor(Date.parse(`${inventoryToday}T00:00:00Z`) / 86400000);
+  const expiryWindowEnd = addCalendarMonths(inventoryToday, 2);
+  const expiryWarnings = products.filter(product => product.quantity > 0 && product.expiryDate).flatMap(product => {
+    try { validDate(product.expiryDate, 'expiry date'); } catch { return []; }
+    if (product.expiryDate > expiryWindowEnd) return [];
+    const daysUntilExpiry = Math.floor(Date.parse(`${product.expiryDate}T00:00:00Z`) / 86400000) - todayIndex;
+    const price = product.originalPrice != null && Number.isFinite(Number(product.originalPrice)) && Number(product.originalPrice) > 0
+      ? Number(product.originalPrice) : null;
+    const cost = product.unitCost != null && Number.isFinite(Number(product.unitCost))
+      ? Number(product.unitCost) : null;
+    const targetDiscount = daysUntilExpiry <= 14 ? 30 : daysUntilExpiry <= 30 ? 20 : 10;
+    const safeDiscount = price != null && cost != null
+      ? Math.max(0, Math.floor(((price - cost) / price) * 100) - 5) : null;
+    const discountRate = safeDiscount == null ? null : Math.min(targetDiscount, safeDiscount);
+    const buyOneGetOneSafe = product.quantity >= 2 && price != null && cost != null && price >= cost * 2;
+    const recommendation = daysUntilExpiry < 0 ? 'Expired: remove from sale; do not promote.'
+      : price == null || cost == null ? 'Check selling price and unit cost before discounting.'
+        : daysUntilExpiry <= 14 && buyOneGetOneSafe ? 'Recommend Buy 1 Get 1 Free; the pair covers recorded cost.'
+          : discountRate > 0 ? `Recommend ${discountRate}% off; keeps at least 5% gross margin.`
+            : buyOneGetOneSafe ? 'Recommend Buy 1 Get 1 Free; the pair covers recorded cost.'
+              : 'No price-safe promotion; review selling price and unit cost.';
+    return [{ barcode: product.barcode, name: product.name, quantity: product.quantity,
+      expiryDate: product.expiryDate, daysUntilExpiry, discountRate, buyOneGetOneSafe, recommendation }];
+  }).sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry || a.name.localeCompare(b.name));
   return {
     period, anchor, range, totals: { revenue: revenue(sales), previousRevenue: revenue(previousSales),
       orders: sales.length, previousOrders: previousSales.length, grossProfit: gross(sales),
       productCount: products.length, stockAlerts: alerts.length,
       critical: alerts.filter(alert => alert.status === 'critical').length,
       low: alerts.filter(alert => alert.status === 'low').length },
-    chart, alerts, bestSelling, previousSelling,
+    chart, alerts, bestSelling, previousSelling, expiryWindowEnd, expiryWarnings,
   };
 }
 

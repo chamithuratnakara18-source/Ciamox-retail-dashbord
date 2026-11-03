@@ -174,6 +174,25 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
 <style>
 .topbar-auth{display:flex;align-items:center;gap:8px}
 </style>
+<style>
+.overview-side-stack{display:grid;gap:13px;min-width:0}
+.overview-alert-rule{display:block;margin:-7px 18px 13px;color:#8b98a4;text-align:center;font-size:10px;line-height:1.4}
+.overview-alert-row b{max-width:190px;text-align:center;white-space:normal}
+.overview-expiry-panel .overview-panel-heading{align-items:center}
+.overview-expiry-count{flex:none;color:#667585;font-size:11px;font-weight:650}
+.overview-expiry-list{display:grid;gap:9px;max-height:320px;overflow:auto;padding:13px 16px;border-top:1px solid #e8e8e8}
+.overview-expiry-row{min-width:0;padding:10px 11px;border:1px solid #e8edf0;border-radius:12px;background:#fff}
+.overview-expiry-top{display:flex;justify-content:space-between;align-items:flex-start;gap:9px}
+.overview-expiry-top strong{min-width:0;overflow-wrap:anywhere;color:#273946;font-size:12px}
+.overview-expiry-top b{flex:none;padding:4px 8px;border-radius:15px;background:#fff5dc;color:#9a6812;font-size:9px;white-space:nowrap}
+.overview-expiry-row.expired .overview-expiry-top b{background:#fff0ed;color:#b83f35}
+.overview-expiry-meta{display:block;margin-top:5px;color:#82909a;font-size:10px}
+.overview-expiry-promo{margin:8px 0 0;padding:7px 9px;border-radius:8px;background:#f3f6f8;color:#42525e;font-size:10px;line-height:1.45}
+.overview-expiry-options{display:block;margin:7px 2px 0;color:#71818c;font-size:9px;line-height:1.4}
+.overview-expiry-row.expired .overview-expiry-promo{background:#fff4f1;color:#a74437}
+.overview-expiry-list .overview-empty{border:1px dashed #cdd6e1;border-radius:12px;margin:0;padding:18px 9px}
+@media(max-width:700px){.overview-side-stack{gap:11px}.overview-expiry-list{max-height:280px;padding:12px}.overview-alert-rule{margin-left:13px;margin-right:13px}}
+</style>
 </head>
 <body>
   <div class="app-shell">
@@ -218,12 +237,19 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
             <div class="overview-panel-heading"><div><h2>Revenue Chart</h2><p id="overviewChartSubtitle">Completed sales</p></div><div class="overview-chart-key"><span><i class="orange"></i>Revenue</span><span><i class="green"></i>Gross Profit</span></div></div>
             <div class="overview-chart-body"><svg id="overviewRevenueChart" viewBox="0 0 900 320" role="img" aria-label="Revenue and gross profit for the selected period"></svg><p id="overviewChartEmpty" class="overview-empty hidden">No completed sales in this period.</p></div>
           </section>
-          <section class="overview-panel overview-alert-panel">
-            <div class="overview-alert-heading"><h2>Stock Alerts</h2><span class="overview-live"><i></i> Real-time</span></div>
-            <p id="overviewAlertHeadline">Checking current stock…</p>
-            <div class="overview-alert-filters" role="group" aria-label="Filter stock alerts"><button type="button" data-alert-filter="all" class="active" aria-pressed="true">All</button><button type="button" data-alert-filter="critical" aria-pressed="false">Critical</button><button type="button" data-alert-filter="low" aria-pressed="false">Low</button></div>
-            <div id="overviewAlertList" class="overview-alert-list"><p class="overview-empty">Loading alerts…</p></div>
-          </section>
+          <div class="overview-side-stack">
+            <section class="overview-panel overview-alert-panel">
+              <div class="overview-alert-heading"><h2>Stock Alerts</h2><span class="overview-live"><i></i> Real-time</span></div>
+              <p id="overviewAlertHeadline">Checking current stock…</p>
+              <small class="overview-alert-rule">Low stock warning: at or below 30% of recorded peak stock.</small>
+              <div class="overview-alert-filters" role="group" aria-label="Filter stock alerts"><button type="button" data-alert-filter="all" class="active" aria-pressed="true">All</button><button type="button" data-alert-filter="critical" aria-pressed="false">Critical</button><button type="button" data-alert-filter="low" aria-pressed="false">Low</button></div>
+              <div id="overviewAlertList" class="overview-alert-list"><p class="overview-empty">Loading alerts…</p></div>
+            </section>
+            <section class="overview-panel overview-expiry-panel">
+              <div class="overview-panel-heading"><div><h2>Expiry &amp; promotions</h2><p>Warnings start 2 months before expiry</p></div><span id="overviewExpiryHeadline" class="overview-expiry-count">Checking…</span></div>
+              <div id="overviewExpiryList" class="overview-expiry-list"><p class="overview-empty">Checking expiry dates…</p></div>
+            </section>
+          </div>
         </div>
         <section class="overview-panel overview-best-panel">
           <div class="overview-best-heading"><div><h2>Best Selling Item Share</h2><p id="bestSellingSubtitle">Quantity share</p></div>
@@ -370,6 +396,6 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
   
   
   
-  <script type="module" src="./hub.js?v=inventory-html-20261103-1"></script>
+<script type="module" src="./hub.js?v=expiry-stock-alerts-20261103-1"></script>
 </body>
 </html>
