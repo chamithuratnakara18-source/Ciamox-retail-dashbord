@@ -389,6 +389,133 @@ async function loadCollections() {
   return Object.fromEntries(names.map((name, index) => [name, rows(snapshots[index])]));
 }
 
+function inventoryAnalytics(data, requestedDays = 30) {
+  const days = Number(requestedDays);
+  if (![7, 30, 90].includes(days)) throw new Error('Choose a 7, 30, or 90 day movement period.');
+  const to = todayLocal();
+  const from = todayLocal(-(days - 1));
+  const dayMilliseconds = 86400000;
+  const dayIndex = value => Math.floor(Date.parse(`${value}T00:00:00Z`) / dayMilliseconds);
+  const labelDate = value => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${value}T12:00:00Z`));
+  const productRows = sortedProducts(data.products).map(product => {
+    const quantity = Math.max(0, Number(product.quantity) || 0);
+    const hasCost = product.unitCost != null && Number.isFinite(Number(product.unitCost));
+    return { ...product, quantity, stockValue: hasCost ? quantity * Number(product.unitCost) : null };
+  });
+  const categoryMap = new Map();
+  let units = 0, knownStockValue = 0, missingCostProducts = 0;
+  for (const product of productRows) {
+    units += product.quantity;
+    const categoryName = product.category || 'Uncategorized';
+    if (!categoryMap.has(categoryName)) categoryMap.set(categoryName, {
+      name: categoryName, productCount: 0, units: 0, knownValue: 0, complete: true,
+    });
+    const category = categoryMap.get(categoryName);
+    category.productCount += 1;
+    category.units += product.quantity;
+    if (product.stockValue == null && product.quantity > 0) {
+      category.complete = false;
+      missingCostProducts += 1;
+    } else {
+      category.knownValue += product.stockValue || 0;
+      knownStockValue += product.stockValue || 0;
+    }
+  }
+  const categories = [...categoryMap.values()].sort((a, b) => b.knownValue - a.knownValue || a.name.localeCompare(b.name));
+  const totalKnownValue = categories.reduce((sum, category) => sum + category.knownValue, 0);
+  let cumulativeShare = 0;
+  categories.forEach(category => {
+    category.share = totalKnownValue > 0 ? category.knownValue / totalKnownValue * 100 : 0;
+    const before = cumulativeShare;
+    cumulativeShare += category.share;
+    category.cumulativeShare = cumulativeShare;
+    category.abcClass = before < 70 ? 'A' : before < 90 ? 'B' : 'C';
+  });
+
+  const startIndex = dayIndex(from), endIndex = dayIndex(to);
+  const movementBuckets = Math.min(9, days);
+  const bucketSize = Math.max(1, Math.ceil(days / movementBuckets));
+  const points = Array.from({ length: days }, (_, index) => ({
+    date: new Date((startIndex + index) * dayMilliseconds).toISOString().slice(0, 10),
+    received: 0, sold: 0, removed: 0,
+  }));
+  const pointMap = new Map(points.map(point => [point.date, point]));
+  const soldByBarcode = new Map();
+  for (const sale of data.sales) {
+    if (sale.day < from || sale.day > to || !Array.isArray(sale.items)) continue;
+    const point = pointMap.get(sale.day);
+    for (const item of sale.items) {
+      const quantity = Number(item.quantity);
+      if (typeof item.barcode !== 'string' || !Number.isFinite(quantity) || quantity <= 0) continue;
+      soldByBarcode.set(item.barcode, (soldByBarcode.get(item.barcode) || 0) + quantity);
+      if (point) point.sold += quantity;
+    }
+  }
+  for (const receipt of data.receipts) {
+    if (!receipt.arrivalDate || receipt.arrivalDate < from || receipt.arrivalDate > to) continue;
+    const point = pointMap.get(receipt.arrivalDate);
+    const quantity = Number(receipt.quantity) || 0;
+    if (!point || !quantity) continue;
+    if (receipt.type === 'inventory_removal' || quantity < 0) point.removed += Math.abs(quantity);
+    else point.received += quantity;
+  }
+  const buckets = [];
+  for (let index = 0; index < points.length; index += bucketSize) {
+    const group = points.slice(index, index + bucketSize);
+    const first = group[0].date, last = group.at(-1).date;
+    buckets.push({
+      label: first === last ? labelDate(first) : `${labelDate(first)}–${labelDate(last)}`,
+      received: group.reduce((sum, point) => sum + point.received, 0),
+      sold: group.reduce((sum, point) => sum + point.sold, 0),
+      removed: group.reduce((sum, point) => sum + point.removed, 0),
+    });
+  }
+
+  const expiryItems = productRows.filter(product => product.quantity > 0 && /^\d{4}-\d{2}-\d{2}$/.test(product.expiryDate || ''))
+    .map(product => {
+      const expiryIndex = dayIndex(product.expiryDate);
+      const daysLeft = expiryIndex - endIndex;
+      const status = daysLeft < 0 ? 'Expired' : daysLeft <= 7 ? 'Within 7 days'
+        : daysLeft <= 30 ? '8–30 days' : daysLeft <= 90 ? '31–90 days' : 'Over 90 days';
+      return { barcode: product.barcode, name: product.name, category: product.category || 'Uncategorized',
+        expiryDate: product.expiryDate, daysLeft, quantity: product.quantity, valueAtRisk: product.stockValue, status };
+    }).sort((a, b) => a.daysLeft - b.daysLeft || a.name.localeCompare(b.name));
+  const expiringSoon = expiryItems.filter(item => item.daysLeft >= 0 && item.daysLeft <= 7).length;
+  const expiredCount = expiryItems.filter(item => item.daysLeft < 0).length;
+
+  const selling = productRows.map(product => ({
+    barcode: product.barcode, name: product.name, category: product.category || 'Uncategorized',
+    quantity: product.quantity, unitsSold: soldByBarcode.get(product.barcode) || 0,
+    daysLeft: product.quantity <= 0 ? 0 : null,
+  }));
+  const sellingTotal = selling.reduce((sum, item) => sum + item.unitsSold, 0);
+  let soldCumulative = 0;
+  const movers = selling.filter(item => item.unitsSold > 0).sort((a, b) => b.unitsSold - a.unitsSold || a.name.localeCompare(b.name));
+  const classByBarcode = new Map();
+  movers.forEach(item => {
+    const before = soldCumulative / Math.max(1, sellingTotal) * 100;
+    soldCumulative += item.unitsSold;
+    classByBarcode.set(item.barcode, before < 70 ? 'A' : before < 90 ? 'B' : 'C');
+  });
+  const stockoutItems = selling.map(item => {
+    const unitsPerDay = item.unitsSold / days;
+    const daysLeft = item.quantity <= 0 ? 0 : unitsPerDay > 0 ? item.quantity / unitsPerDay : null;
+    const status = item.quantity <= 0 ? 'Out of stock' : item.unitsSold <= 0 ? 'No recent sales'
+      : daysLeft <= 7 ? 'Reorder now' : daysLeft <= 14 ? 'Plan reorder' : 'Healthy';
+    return { ...item, unitsPerDay, daysLeft, movementClass: classByBarcode.get(item.barcode) || '', status };
+  }).sort((a, b) => (a.daysLeft ?? Number.POSITIVE_INFINITY) - (b.daysLeft ?? Number.POSITIVE_INFINITY) ||
+    b.unitsSold - a.unitsSold || a.name.localeCompare(b.name));
+  const runoutCount = stockoutItems.filter(item => item.quantity <= 0 || (item.daysLeft != null && item.daysLeft <= 7)).length;
+
+  return {
+    range: { from, to, days },
+    summary: { productCount: productRows.length, units, stockValue: missingCostProducts ? null : knownStockValue,
+      knownStockValue, missingCostProducts, expiredCount, expiringSoon, runoutCount },
+    categories, movement: buckets, expiryItems, stockoutItems,
+  };
+}
+
 async function assignInventoryCategory(body) {
   const barcode = validText(body.barcode, 'Barcode', 80);
   const category = validText(body.category, 'Category name', 80);
@@ -665,6 +792,9 @@ export async function api(path, options = {}) {
   if (url.pathname === '/api/overview' && method === 'GET') {
     return overview(await loadCollections(), url.searchParams.get('period') || 'month',
       url.searchParams.get('anchor') || todayLocal());
+  }
+  if (url.pathname === '/api/inventory/analytics' && method === 'GET') {
+    return inventoryAnalytics(await loadCollections(), url.searchParams.get('days') || 30);
   }
   if (url.pathname === '/api/inventory' && method === 'GET') {
     const barcode = url.searchParams.get('barcode')?.trim();

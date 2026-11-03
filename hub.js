@@ -19,6 +19,8 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   let currentView = 'dashboard';
   let inventoryProducts = [];
   let inventoryCategories = [];
+  let inventoryAnalyticsDays = 30;
+  let inventoryAnalyticsRequestId = 0;
   let activeInventoryCategory = 'All products';
   let categoryProduct = null;
   let financeProducts = [];
@@ -106,6 +108,10 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   document.getElementById('refreshInventoryButton').addEventListener('click', () => { void refreshInventory(); });
   inventorySearch.addEventListener('input', renderInventoryTable);
   categorySearch.addEventListener('input', renderInventoryCategories);
+  document.getElementById('inventoryAnalyticsDays').addEventListener('change', event => {
+    inventoryAnalyticsDays = Number(event.currentTarget.value);
+    void refreshInventoryAnalytics();
+  });
   document.querySelectorAll('[data-inventory-tab]').forEach(button => button.addEventListener('click', () => {
     const selected = button.dataset.inventoryTab;
     document.querySelectorAll('[data-inventory-tab]').forEach(tab => {
@@ -114,6 +120,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       tab.setAttribute('aria-selected', String(active));
     });
     document.querySelectorAll('[data-inventory-view]').forEach(view => view.classList.toggle('active', view.dataset.inventoryView === selected));
+    if (selected === 'analytics') void refreshInventoryAnalytics();
   }));
   document.getElementById('createCategoryChoice').addEventListener('click', () => {
     document.getElementById('createCategoryFields').classList.remove('hidden');
@@ -793,12 +800,253 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       setDatabaseStatus(true, 'FIREBASE CONNECTED');
       renderInventoryTable();
       renderInventoryCategories();
+      if (document.querySelector('[data-inventory-view="analytics"]')?.classList.contains('active')) {
+        void refreshInventoryAnalytics();
+      }
     } catch (error) {
       inventoryProducts = [];
       summary.textContent = 'Inventory unavailable';
       status.textContent = error.message;
       setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
       renderInventoryTable();
+    }
+  }
+
+  function analyticsTextCell(row, value, strong = false) {
+    const cell = document.createElement('td');
+    if (strong) { const text = document.createElement('strong'); text.textContent = value; cell.append(text); }
+    else cell.textContent = value;
+    row.append(cell);
+    return cell;
+  }
+
+  function analyticsEmptyRow(body, columns, message) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td'); cell.colSpan = columns; cell.textContent = message;
+    cell.className = 'inventory-analytics-table-empty'; row.append(cell); body.replaceChildren(row);
+  }
+
+  function inventoryDaysLabel(days) {
+    if (days == null || !Number.isFinite(Number(days))) return '—';
+    const count = Math.max(0, Number(days));
+    return count < 10 ? `${count.toFixed(1)} days` : `${Math.round(count)} days`;
+  }
+
+  function inventoryExpiryLabel(item) {
+    if (item.daysLeft < 0) return `Expired ${Math.abs(item.daysLeft)} days ago`;
+    if (item.daysLeft === 0) return 'Expires today';
+    return `${item.daysLeft} days`;
+  }
+
+  function renderInventoryAnalytics(data) {
+    const { summary, categories, movement, expiryItems, stockoutItems, range } = data;
+    const kpis = document.getElementById('inventoryAnalyticsKpis');
+    const metrics = [
+      ['Stock value', summary.stockValue == null ? 'Incomplete' : formatAmount(summary.stockValue),
+        summary.missingCostProducts ? `${summary.missingCostProducts} product costs missing` : 'At current recorded purchase cost'],
+      ['Units on hand', summary.units.toLocaleString(), `${summary.productCount.toLocaleString()} products in inventory`],
+      ['Expired products', summary.expiredCount.toLocaleString(), 'With stock and a recorded expiry date'],
+      ['Running out', summary.runoutCount.toLocaleString(), 'Out of stock or 7 days of supply or less'],
+    ];
+    kpis.replaceChildren(...metrics.map(([label, value, foot]) => {
+      const card = document.createElement('article'); card.className = 'inventory-analytics-kpi';
+      const title = document.createElement('span'); title.textContent = label;
+      const amount = document.createElement('strong'); amount.textContent = value;
+      const note = document.createElement('small'); note.textContent = foot;
+      card.append(title, amount, note); return card;
+    }));
+    document.getElementById('inventoryAnalyticsEmpty').classList.toggle('hidden', summary.productCount > 0);
+    renderInventoryMovement(movement, range);
+    renderInventoryCategoryValues(categories, summary);
+    renderInventoryAbc(categories, summary);
+    renderInventoryExpiry(expiryItems);
+    renderInventoryRunout(stockoutItems, range.days);
+  }
+
+  function renderInventoryMovement(points, range) {
+    const svg = document.getElementById('inventoryMovementChart');
+    svg.replaceChildren();
+    const left = 54, right = 884, top = 22, bottom = 198;
+    const series = [
+      { key: 'received', label: 'Received', color: '#28a97a' },
+      { key: 'sold', label: 'Sold', color: '#527cdb' },
+      { key: 'removed', label: 'Removed', color: '#e87518' },
+    ];
+    const maximum = Math.max(1, ...points.flatMap(point => series.map(item => point[item.key])));
+    for (let tick = 0; tick <= 3; tick++) {
+      const y = bottom - (bottom - top) * tick / 3;
+      svg.append(svgNode('line', { x1: left, x2: right, y1: y, y2: y, stroke: '#e9edef', 'stroke-dasharray': '3 5' }));
+      const label = svgNode('text', { x: left - 9, y: y + 3, 'text-anchor': 'end', fill: '#9aa4aa', 'font-size': 9 });
+      label.textContent = String(Math.round(maximum * tick / 3)); svg.append(label);
+    }
+    const groupWidth = (right - left) / Math.max(1, points.length);
+    const barWidth = Math.min(20, Math.max(5, groupWidth * .17));
+    points.forEach((point, index) => {
+      const center = left + groupWidth * (index + .5);
+      series.forEach((item, seriesIndex) => {
+        const value = point[item.key];
+        const height = value / maximum * (bottom - top);
+        const rect = svgNode('rect', { x: center + (seriesIndex - 1) * (barWidth + 2) - barWidth / 2,
+          y: bottom - height, width: barWidth, height: Math.max(value ? 1 : 0, height), rx: 2,
+          fill: item.color, tabindex: value ? 0 : -1, role: value ? 'img' : 'presentation',
+          'aria-label': `${point.label}: ${value} ${item.label.toLowerCase()}` });
+        const title = svgNode('title'); title.textContent = `${point.label} · ${item.label}: ${value}`;
+        rect.append(title); svg.append(rect);
+      });
+      const label = svgNode('text', { x: center, y: 220, 'text-anchor': 'middle', fill: '#89969e', 'font-size': points.length > 7 ? 8 : 9 });
+      label.textContent = point.label; svg.append(label);
+    });
+    const totals = points.reduce((result, point) => ({
+      received: result.received + point.received, sold: result.sold + point.sold, removed: result.removed + point.removed,
+    }), { received: 0, sold: 0, removed: 0 });
+    document.getElementById('inventoryMovementSummary').textContent =
+      `${englishDate(range.from)} – ${englishDate(range.to)} · ${range.days} days · ${totals.received.toLocaleString()} received · ${totals.sold.toLocaleString()} sold · ${totals.removed.toLocaleString()} removed`;
+  }
+
+  function renderInventoryCategoryValues(categories, summary) {
+    const list = document.getElementById('inventoryCategoryValueList');
+    list.replaceChildren();
+    const max = Math.max(0, ...categories.map(category => category.knownValue));
+    if (!categories.length) {
+      const empty = document.createElement('p'); empty.className = 'inventory-analytics-note';
+      empty.textContent = 'No product categories are available yet.'; list.append(empty);
+    }
+    categories.forEach((category, index) => {
+      const row = document.createElement('div'); row.className = 'inventory-category-value-row';
+      const name = document.createElement('span'); name.className = 'inventory-category-value-name'; name.textContent = category.name;
+      name.title = category.name;
+      const track = document.createElement('div'); track.className = 'inventory-category-value-track';
+      const fill = document.createElement('div'); fill.className = 'inventory-category-value-fill';
+      fill.style.width = max ? `${category.knownValue / max * 100}%` : '0%';
+      fill.style.background = `hsl(${145 + index * 47 % 170} 42% 43%)`; track.append(fill);
+      const amount = document.createElement('span'); amount.className = 'inventory-category-value-amount';
+      amount.textContent = formatAmount(category.complete ? category.knownValue : null);
+      amount.title = `${category.units.toLocaleString()} units · ${category.productCount} products`;
+      row.append(name, track, amount); list.append(row);
+    });
+    document.getElementById('inventoryCategoryValueNote').textContent = summary.missingCostProducts
+      ? `Known purchase cost value only. ${summary.missingCostProducts} stocked product${summary.missingCostProducts === 1 ? ' has' : 's have'} no saved purchase cost.`
+      : 'Bar lengths compare known purchase cost value across categories.';
+  }
+
+  function renderInventoryAbc(categories, summary) {
+    const body = document.getElementById('inventoryAbcTableBody');
+    if (!categories.length) return analyticsEmptyRow(body, 5, 'Add categories to compare their stock value.');
+    if (!categories.some(category => category.knownValue > 0)) return analyticsEmptyRow(body, 5, 'There is no stock value to classify yet.');
+    body.replaceChildren();
+    categories.forEach(category => {
+      const row = document.createElement('tr');
+      analyticsTextCell(row, category.name, true);
+      analyticsTextCell(row, category.productCount.toLocaleString());
+      analyticsTextCell(row, category.complete ? formatAmount(category.knownValue) : 'Partial');
+      analyticsTextCell(row, `${category.share.toFixed(1)}%`);
+      const cell = document.createElement('td');
+      const badge = document.createElement('span'); badge.className = `inventory-abc-badge inventory-abc-${category.abcClass.toLowerCase()}`;
+      badge.textContent = `Class ${category.abcClass}`; cell.append(badge); row.append(cell); body.append(row);
+    });
+    document.getElementById('inventoryAbcNote').textContent = summary.missingCostProducts
+      ? 'ABC share is calculated from products with a saved purchase cost.' : 'A covers the first 70% of value; B covers the next 20%; C covers the remainder.';
+  }
+
+  function renderInventoryExpiry(items) {
+    const summary = document.getElementById('inventoryExpirySummary');
+    const counts = [
+      ['Expired', items.filter(item => item.daysLeft < 0).length, 'inventory-risk-expired'],
+      ['Within 7 days', items.filter(item => item.daysLeft >= 0 && item.daysLeft <= 7).length, 'inventory-risk-soon'],
+      ['8–30 days', items.filter(item => item.daysLeft > 7 && item.daysLeft <= 30).length, 'inventory-risk-watch'],
+      ['Over 30 days', items.filter(item => item.daysLeft > 30).length, 'inventory-risk-ok'],
+    ];
+    summary.replaceChildren(...counts.map(([label, count, cls]) => {
+      const chip = document.createElement('span'); chip.className = cls;
+      const strong = document.createElement('b'); strong.textContent = count;
+      chip.append(strong, document.createTextNode(` ${label}`)); return chip;
+    }));
+    const body = document.getElementById('inventoryExpiryTableBody');
+    if (!items.length) return analyticsEmptyRow(body, 6, 'No expiry dates are recorded for stocked products.');
+    body.replaceChildren();
+    items.slice(0, 15).forEach(item => {
+      const row = document.createElement('tr');
+      analyticsTextCell(row, item.name, true);
+      analyticsTextCell(row, item.category);
+      analyticsTextCell(row, englishDate(item.expiryDate));
+      const time = document.createElement('td');
+      const badge = document.createElement('span');
+      const riskClass = item.daysLeft < 0 ? 'inventory-risk-expired' : item.daysLeft <= 7 ? 'inventory-risk-soon'
+        : item.daysLeft <= 30 ? 'inventory-risk-watch' : 'inventory-risk-ok';
+      badge.className = `inventory-risk-badge ${riskClass}`; badge.textContent = inventoryExpiryLabel(item);
+      time.append(badge); row.append(time);
+      analyticsTextCell(row, item.quantity.toLocaleString());
+      analyticsTextCell(row, item.valueAtRisk == null ? '—' : formatAmount(item.valueAtRisk)); body.append(row);
+    });
+    if (items.length > 15) {
+      const row = document.createElement('tr'); analyticsTextCell(row, `Showing 15 of ${items.length} products with expiry dates.`);
+      row.firstElementChild.colSpan = 6; body.append(row);
+    }
+  }
+
+  function renderInventoryRunout(items, periodDays) {
+    const svg = document.getElementById('inventoryRunoutChart'); svg.replaceChildren();
+    const plotted = items.filter(item => item.quantity <= 0 || item.daysLeft != null).slice(0, 8);
+    const left = 205, right = 865, firstY = 28, rowGap = 27, maxDays = 30;
+    [0, 7, 14, 21, 30].forEach(tick => {
+      const x = left + tick / maxDays * (right - left);
+      svg.append(svgNode('line', { x1: x, x2: x, y1: 16, y2: 232, stroke: '#edf0f2', 'stroke-dasharray': '3 5' }));
+      const label = svgNode('text', { x, y: 246, 'text-anchor': 'middle', fill: '#929da4', 'font-size': 9 });
+      label.textContent = String(tick); svg.append(label);
+    });
+    plotted.forEach((item, index) => {
+      const y = firstY + index * rowGap;
+      const label = svgNode('text', { x: left - 10, y: y + 4, 'text-anchor': 'end', fill: '#58666e', 'font-size': 9 });
+      label.textContent = item.name.length > 26 ? `${item.name.slice(0, 23)}…` : item.name; svg.append(label);
+      const days = item.daysLeft == null ? 0 : Math.max(0, Math.min(maxDays, item.daysLeft));
+      const color = item.quantity <= 0 ? '#d75c4b' : item.daysLeft <= 7 ? '#e87518'
+        : item.daysLeft <= 14 ? '#c5a137' : '#28a97a';
+      const bar = svgNode('rect', { x: left, y: y - 7, width: Math.max(days > 0 ? 3 : 0, days / maxDays * (right - left)), height: 13,
+        rx: 6, fill: color, tabindex: 0, role: 'img', 'aria-label': `${item.name}: ${item.daysLeft == null ? 'no recent sales' : inventoryDaysLabel(item.daysLeft)}` });
+      const title = svgNode('title'); title.textContent = `${item.name}: ${item.daysLeft == null ? 'No recent sales' : inventoryDaysLabel(item.daysLeft)}`;
+      bar.append(title); svg.append(bar);
+      if (item.daysLeft != null && item.daysLeft > maxDays) {
+        const end = svgNode('text', { x: right + 7, y: y + 4, fill: '#68757d', 'font-size': 8 }); end.textContent = '30+'; svg.append(end);
+      }
+    });
+    const body = document.getElementById('inventoryRunoutTableBody');
+    if (!items.length) analyticsEmptyRow(body, 6, 'No products are in inventory.');
+    else {
+      body.replaceChildren();
+      items.forEach(item => {
+        const row = document.createElement('tr');
+        analyticsTextCell(row, item.name, true);
+        analyticsTextCell(row, item.movementClass ? `Class ${item.movementClass}` : 'No movement');
+        analyticsTextCell(row, item.quantity.toLocaleString());
+        analyticsTextCell(row, item.unitsSold.toLocaleString());
+        analyticsTextCell(row, item.daysLeft == null ? '—' : inventoryDaysLabel(item.daysLeft));
+        const action = document.createElement('td');
+        const badge = document.createElement('span');
+        const cls = item.quantity <= 0 || item.daysLeft <= 7 && item.daysLeft != null ? 'inventory-reorder-now'
+          : item.daysLeft != null && item.daysLeft <= 14 ? 'inventory-reorder-plan'
+            : item.daysLeft == null ? 'inventory-reorder-none' : 'inventory-reorder-healthy';
+        badge.className = `inventory-reorder-badge ${cls}`; badge.textContent = item.status; action.append(badge); row.append(action); body.append(row);
+      });
+    }
+    document.getElementById('inventoryRunoutNote').textContent = plotted.length
+      ? `Bars are capped at 30 days. Sales velocity uses the last ${periodDays} days; products without sales show “No recent sales.”`
+      : 'Products appear in the chart after a sale is recorded.';
+  }
+
+  async function refreshInventoryAnalytics() {
+    const status = document.getElementById('inventoryAnalyticsStatus');
+    const requestId = ++inventoryAnalyticsRequestId;
+    status.textContent = 'Loading inventory analytics from Firebase…';
+    try {
+      const data = await api(`/api/inventory/analytics?days=${inventoryAnalyticsDays}`);
+      if (requestId !== inventoryAnalyticsRequestId) return;
+      renderInventoryAnalytics(data);
+      status.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · Firebase data`;
+      setDatabaseStatus(true, 'FIREBASE CONNECTED');
+    } catch (error) {
+      if (requestId !== inventoryAnalyticsRequestId) return;
+      status.textContent = `Analytics unavailable: ${error.message}`;
+      setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
     }
   }
 
