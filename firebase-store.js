@@ -349,10 +349,12 @@ function orderAnalytics(data, period = 'year', anchor = todayLocal()) {
 
 function supplierAnalytics(data) {
   const suppliers = new Map();
+  const supplierKey = value => typeof value === 'string'
+    ? value.normalize('NFC').trim().toLocaleLowerCase() : '';
   const getSupplier = value => {
     const name = typeof value === 'string' ? value.trim() : '';
     if (!name) return null;
-    const key = name.toLocaleLowerCase();
+    const key = supplierKey(name);
     if (!suppliers.has(key)) suppliers.set(key, {
       key, name, categories: new Set(), items: new Map(), currentStock: 0,
       currentStockValue: 0, missingCurrentCostProducts: 0, inboundUnits: 0,
@@ -410,9 +412,10 @@ function supplierAnalytics(data) {
     supplier.items.set(itemKey, item);
   }
   for (const profile of data.suppliers || []) {
-    const supplier = getSupplier(profile.name);
+    // A profile adds metadata to a supplier already recorded by the scanner.
+    // Profile-only records must not introduce placeholder suppliers into the UI.
+    const supplier = suppliers.get(supplierKey(profile?.name));
     if (!supplier) continue;
-    supplier.name = profile.name.trim();
     supplier.city = profile.city || '';
     supplier.country = profile.country || '';
     supplier.supplierType = profile.supplierType || '';
