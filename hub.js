@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-dashboard-20261103-1';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-html-20261104-1';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
@@ -24,11 +24,9 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-das
   let orderPeriod = 'year';
   let orderAnchor = todayLocal();
   let supplierRequestId = 0;
-  let supplierData = null;
-  let selectedSupplierKey = null;
-  let supplierMetric = 'currentStock';
-  let supplierSort = 'currentStock';
-  let supplierSortDirection = -1;
+  let supplierFrameReady = false;
+  let supplierFramePayload = null;
+  let supplierFrameError = null;
   let currentView = 'dashboard';
   let inventoryProducts = [];
   let inventoryCategories = [];
@@ -62,9 +60,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-das
   const bestAnchorInput = document.getElementById('bestSellingAnchor');
   const financeAnchorInput = document.getElementById('financeAnchor');
   const orderAnchorInput = document.getElementById('orderAnchor');
-  const supplierSearch = document.getElementById('supplierSearch');
-  const supplierCategoryFilter = document.getElementById('supplierCategoryFilter');
-  const supplierStockFilter = document.getElementById('supplierStockFilter');
+  const supplierDashboardFrame = document.getElementById('supplierDashboardFrame');
 
   function syncOverviewControls() {
     const today = todayLocal();
@@ -153,25 +149,6 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-das
     syncOrderControls();
     void refreshOrderAnalytics();
   }));
-  supplierSearch.addEventListener('input', renderSupplierDashboard);
-  supplierCategoryFilter.addEventListener('change', renderSupplierDashboard);
-  supplierStockFilter.addEventListener('change', renderSupplierDashboard);
-  document.querySelectorAll('[data-supplier-metric]').forEach(button => button.addEventListener('click', () => {
-    supplierMetric = button.dataset.supplierMetric;
-    document.querySelectorAll('[data-supplier-metric]').forEach(option => {
-      const active = option === button;
-      option.classList.toggle('active', active);
-      option.setAttribute('aria-pressed', String(active));
-    });
-    renderSupplierDashboard();
-  }));
-  document.querySelectorAll('[data-supplier-sort]').forEach(button => button.addEventListener('click', () => {
-    const next = button.dataset.supplierSort;
-    supplierSortDirection = supplierSort === next ? supplierSortDirection * -1 : (next === 'name' ? 1 : -1);
-    supplierSort = next;
-    renderSupplierDashboard();
-  }));
-  document.getElementById('refreshSuppliersButton').addEventListener('click', () => { void refreshSupplierDashboard(); });
   document.querySelectorAll('[data-best-view]').forEach(button => button.addEventListener('click', () => {
     bestView = button.dataset.bestView;
     syncOverviewControls(); renderBestSelling(bestData);
@@ -234,10 +211,20 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-das
   inventorySearch.addEventListener('input', renderInventoryTable);
   categorySearch.addEventListener('input', renderInventoryCategories);
   window.addEventListener('message', event => {
-    const frame = document.getElementById('inventoryAnalyticsFrame');
-    if (frame && event.source === frame.contentWindow && event.origin === location.origin &&
-        event.data?.type === 'inventory-analytics-height') {
-      frame.style.height = `${Math.max(900, Number(event.data.height) || 0)}px`;
+    if (event.origin !== location.origin) return;
+    const message = event.data;
+    const analyticsFrame = document.getElementById('inventoryAnalyticsFrame');
+    if (analyticsFrame && event.source === analyticsFrame.contentWindow && message?.type === 'inventory-analytics-height') {
+      analyticsFrame.style.height = `${Math.max(900, Number(message.height) || 0)}px`;
+      return;
+    }
+    if (!supplierDashboardFrame || event.source !== supplierDashboardFrame.contentWindow) return;
+    if (message?.type === 'supplier-dashboard-ready') {
+      supplierFrameReady = true;
+      if (supplierFramePayload) supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-data', data: supplierFramePayload }, location.origin);
+      else if (supplierFrameError) supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-error', message: supplierFrameError }, location.origin);
+    } else if (message?.type === 'supplier-dashboard-height') {
+      supplierDashboardFrame.style.height = `${Math.max(700, Number(message.height) || 0)}px`;
     }
   });
   document.querySelectorAll('[data-inventory-tab]').forEach(button => button.addEventListener('click', () => {
@@ -333,7 +320,10 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-das
     if (view === 'pos') await refreshPosProducts();
     if (view === 'finance') await refreshFinance();
     if (view === 'orders') await refreshOrderAnalytics();
-    if (view === 'suppliers') await refreshSupplierDashboard();
+    if (view === 'suppliers') {
+      if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html';
+      await refreshSupplierDashboard();
+    }
   }
 
   function formatAmount(value) {
@@ -919,215 +909,24 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-das
 
   async function refreshSupplierDashboard() {
     const requestId = ++supplierRequestId;
-    document.getElementById('suppliersError').classList.add('hidden');
-    document.getElementById('suppliersUpdated').textContent = 'Updating…';
     try {
       const data = await api('/api/supplier-analytics');
       if (requestId !== supplierRequestId) return;
-      supplierData = data;
-      renderSupplierDashboard();
+      supplierFramePayload = data;
+      supplierFrameError = null;
+      if (supplierFrameReady && supplierDashboardFrame?.contentWindow) {
+        supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-data', data }, location.origin);
+      }
       setDatabaseStatus(true, 'FIREBASE CONNECTED');
-      document.getElementById('suppliersUpdated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     } catch (error) {
       if (requestId !== supplierRequestId) return;
-      setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
-      document.getElementById('suppliersUpdated').textContent = 'Waiting for database';
-      document.getElementById('suppliersError').textContent = `Supplier records are not available: ${error.message}. Check Firebase access and Firestore rules.`;
-      document.getElementById('suppliersError').classList.remove('hidden');
-    }
-  }
-
-  function supplierCurrency(value) {
-    return value == null || !Number.isFinite(Number(value)) ? '—' : `€ ${formatAmount(Number(value))}`;
-  }
-
-  function supplierDate(value) {
-    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? englishDate(value) : '—';
-  }
-
-  function renderSupplierDashboard() {
-    if (!supplierData) return;
-    const { summary, categories, suppliers } = supplierData;
-    document.getElementById('supplierCount').textContent = Number(summary.supplierCount).toLocaleString('en-US');
-    document.getElementById('supplierProductCount').textContent = Number(summary.productsSupplied).toLocaleString('en-US');
-    document.getElementById('supplierStockUnits').textContent = Number(summary.currentStockUnits).toLocaleString('en-US');
-    document.getElementById('supplierInboundCost').textContent = supplierCurrency(summary.recordedInboundCost);
-    document.getElementById('supplierReceiptCount').textContent = `${Number(summary.inboundRecords).toLocaleString('en-US')} recorded inbound receipts`;
-    const category = supplierCategoryFilter.value;
-    const categoryOptions = [new Option('All categories', 'all'), ...categories.map(value => new Option(value, value))];
-    supplierCategoryFilter.replaceChildren(...categoryOptions);
-    supplierCategoryFilter.value = categories.includes(category) ? category : 'all';
-    const note = document.getElementById('supplierUnassignedNote');
-    note.classList.toggle('hidden', !summary.unassignedProducts);
-    if (summary.unassignedProducts) {
-      note.textContent = `${summary.unassignedProducts} current ${summary.unassignedProducts === 1 ? 'product has' : 'products have'} no supplier recorded.`;
-    }
-    const query = supplierSearch.value.trim().toLocaleLowerCase();
-    const selectedCategory = supplierCategoryFilter.value;
-    const stockMode = supplierStockFilter.value;
-    const filtered = suppliers.filter(supplier => {
-      const text = `${supplier.name} ${supplier.items.map(item => `${item.name} ${item.barcode} ${item.category}`).join(' ')} ${supplier.categories.join(' ')}`.toLocaleLowerCase();
-      return (!query || text.includes(query)) &&
-        (selectedCategory === 'all' || supplier.categories.includes(selectedCategory)) &&
-        (stockMode === 'all' || (stockMode === 'stock' ? supplier.currentStock > 0 : supplier.currentStock <= 0));
-    });
-    if (!filtered.some(supplier => supplier.key === selectedSupplierKey)) selectedSupplierKey = filtered[0]?.key || null;
-    renderSupplierOverview(filtered);
-    renderSupplierDetails(filtered.find(supplier => supplier.key === selectedSupplierKey) || null);
-    renderSupplierTable(filtered, suppliers.length);
-    renderSupplierScatter(filtered);
-  }
-
-  function renderSupplierOverview(suppliers) {
-    const container = document.getElementById('supplierOverviewBars');
-    const metric = supplierMetric;
-    const metricLabel = metric === 'currentStock' ? 'current stock' : 'received units';
-    document.getElementById('supplierOverviewSubtitle').textContent = `Suppliers ranked by ${metricLabel}.`;
-    container.replaceChildren();
-    if (!suppliers.length) {
-      const empty = document.createElement('p'); empty.className = 'overview-empty';
-      empty.textContent = 'No suppliers match the current filters.'; container.append(empty); return;
-    }
-    const sorted = [...suppliers].sort((a, b) => (Number(b[metric]) || 0) - (Number(a[metric]) || 0) || a.name.localeCompare(b.name)).slice(0, 8);
-    const maximum = Math.max(1, ...sorted.map(supplier => Number(supplier[metric]) || 0));
-    sorted.forEach(supplier => {
-      const value = Number(supplier[metric]) || 0;
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'supplier-bar-row';
-      button.setAttribute('aria-label', `${supplier.name}, ${value} ${metricLabel}`);
-      button.addEventListener('click', () => { selectedSupplierKey = supplier.key; renderSupplierDashboard(); });
-      const name = document.createElement('span'); name.className = 'supplier-bar-name'; name.textContent = supplier.name; name.title = supplier.name;
-      const track = document.createElement('span'); track.className = 'supplier-bar-track';
-      const fill = document.createElement('i'); fill.style.width = `${value ? Math.max(1, value / maximum * 100) : 0}%`; track.append(fill);
-      const amount = document.createElement('span'); amount.className = 'supplier-bar-value'; amount.textContent = `${value.toLocaleString('en-US')} units`;
-      button.append(name, track, amount); container.append(button);
-    });
-  }
-
-  function renderSupplierDetails(supplier) {
-    const container = document.getElementById('supplierSelection');
-    container.replaceChildren();
-    if (!supplier) {
-      const empty = document.createElement('p'); empty.textContent = supplierData?.suppliers.length
-        ? 'No suppliers match the current filters.' : 'No supplier names are recorded in inventory yet.';
-      container.append(empty); return;
-    }
-    const heading = document.createElement('h3'); heading.textContent = supplier.name;
-    const subheading = document.createElement('p');
-    subheading.textContent = `${supplier.productCount} recorded products · ${supplier.currentProductCount} currently in stock`;
-    const details = document.createElement('div'); details.className = 'supplier-data-grid';
-    const stockValue = supplier.missingCurrentCostProducts
-      ? `${supplierCurrency(supplier.currentStockValue)} known · ${supplier.missingCurrentCostProducts} product costs missing`
-      : supplierCurrency(supplier.currentStockValue);
-    const fields = [
-      ['Location', 'Not recorded'],
-      ['Product categories', supplier.categories.join(', ') || 'Not assigned'],
-      ['Current stock', `${Number(supplier.currentStock).toLocaleString('en-US')} units`],
-      ['Current stock value', stockValue],
-      ['Inbound units', `${Number(supplier.inboundUnits).toLocaleString('en-US')} units`],
-      ['Inbound receipts', Number(supplier.inboundRecords).toLocaleString('en-US')],
-      ['Recorded inbound cost', supplier.costedInboundUnits ? supplierCurrency(supplier.recordedInboundCost) : 'No recorded unit costs'],
-      ['Average recorded purchase cost', supplier.averageRecordedUnitCost == null ? 'Unavailable' : `${supplierCurrency(supplier.averageRecordedUnitCost)} / unit`],
-      ['Last arrival', supplierDate(supplier.lastArrivalDate)],
-      ['Lead time', 'Not tracked'],
-      ['Quality score', 'Not tracked'],
-      ['Defect rate', 'Not tracked'],
-    ];
-    fields.forEach(([label, value]) => {
-      const cell = document.createElement('div');
-      const key = document.createElement('span'); key.textContent = label;
-      const content = document.createElement('strong'); content.textContent = value;
-      cell.append(key, content); details.append(cell);
-    });
-    const productWrap = document.createElement('div'); productWrap.className = 'supplier-product-list';
-    const productLabel = document.createElement('span'); productLabel.textContent = 'Products supplied';
-    const chips = document.createElement('div'); chips.className = 'supplier-product-chips';
-    supplier.items.forEach(item => {
-      const chip = document.createElement('span'); chip.className = 'tag';
-      chip.textContent = item.quantity > 0 ? `${item.name} · ${item.quantity} in stock` : item.name;
-      chip.title = item.barcode ? `${item.name} · ${item.barcode}` : item.name;
-      chips.append(chip);
-    });
-    productWrap.append(productLabel, chips);
-    const notice = document.createElement('p'); notice.className = 'supplier-data-notice';
-    notice.textContent = 'Location, delivery lead time, product quality, and defect rate are not recorded by the current system, so no estimates are shown.';
-    container.append(heading, subheading, details, productWrap, notice);
-  }
-
-  function renderSupplierTable(suppliers, totalSuppliers) {
-    const body = document.getElementById('supplierTableBody');
-    body.replaceChildren();
-    const sorted = [...suppliers].sort((a, b) => {
-      const left = a[supplierSort], right = b[supplierSort];
-      const compare = typeof left === 'string' && typeof right === 'string'
-        ? left.localeCompare(right) : (Number(left) || 0) - (Number(right) || 0);
-      return compare * supplierSortDirection || a.name.localeCompare(b.name);
-    });
-    document.getElementById('supplierListCount').textContent = `Showing ${suppliers.length} of ${totalSuppliers} suppliers`;
-    if (!sorted.length) {
-      const row = document.createElement('tr'); row.className = 'supplier-table-empty';
-      const cell = document.createElement('td'); cell.colSpan = 7; cell.textContent = 'No supplier records match the current filters.';
-      row.append(cell); body.append(row); return;
-    }
-    sorted.forEach(supplier => {
-      const row = document.createElement('tr');
-      row.classList.toggle('selected', supplier.key === selectedSupplierKey);
-      row.tabIndex = 0; row.setAttribute('role', 'button'); row.setAttribute('aria-label', `View ${supplier.name}`);
-      const values = [supplier.name, supplier.productCount.toLocaleString('en-US'), supplier.categories.join(', ') || '—',
-        `${Number(supplier.currentStock).toLocaleString('en-US')} units`, `${Number(supplier.inboundUnits).toLocaleString('en-US')} units`,
-        supplier.costedInboundUnits ? supplierCurrency(supplier.recordedInboundCost) : '—', supplierDate(supplier.lastArrivalDate)];
-      values.forEach(value => { const cell = document.createElement('td'); cell.textContent = value; row.append(cell); });
-      const select = () => { selectedSupplierKey = supplier.key; renderSupplierDashboard(); };
-      row.addEventListener('click', select);
-      row.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } });
-      body.append(row);
-    });
-  }
-
-  function renderSupplierScatter(suppliers) {
-    const svg = document.getElementById('supplierScatterChart');
-    svg.replaceChildren();
-    if (!suppliers.length) {
-      const empty = svgNode('text', { x: 400, y: 175, 'text-anchor': 'middle', fill: '#7c8491', 'font-size': 15 });
-      empty.textContent = 'Supplier data will appear here when inventory receipts are recorded.';
-      svg.append(empty); return;
-    }
-    const left = 76, right = 770, top = 25, bottom = 295;
-    const maxReceived = Math.max(1, ...suppliers.map(item => Number(item.inboundUnits) || 0));
-    const maxStock = Math.max(1, ...suppliers.map(item => Number(item.currentStock) || 0));
-    for (let step = 0; step <= 4; step++) {
-      const y = bottom - (bottom - top) * step / 4;
-      svg.append(svgNode('line', { x1: left, x2: right, y1: y, y2: y, stroke: '#e8edef', 'stroke-width': 1 }));
-      const yLabel = svgNode('text', { x: left - 12, y: y + 4, 'text-anchor': 'end', fill: '#87939b', 'font-size': 10 });
-      yLabel.textContent = Math.round(maxStock * step / 4).toLocaleString('en-US'); svg.append(yLabel);
-      const x = left + (right - left) * step / 4;
-      svg.append(svgNode('line', { x1: x, x2: x, y1: top, y2: bottom, stroke: '#f0f2f3', 'stroke-width': 1 }));
-      const xLabel = svgNode('text', { x, y: bottom + 18, 'text-anchor': 'middle', fill: '#87939b', 'font-size': 10 });
-      xLabel.textContent = Math.round(maxReceived * step / 4).toLocaleString('en-US'); svg.append(xLabel);
-    }
-    svg.append(svgNode('line', { x1: left, x2: right, y1: bottom, y2: bottom, stroke: '#b9c3c8', 'stroke-width': 1.2 }));
-    svg.append(svgNode('line', { x1: left, x2: left, y1: top, y2: bottom, stroke: '#b9c3c8', 'stroke-width': 1.2 }));
-    const xTitle = svgNode('text', { x: (left + right) / 2, y: 340, 'text-anchor': 'middle', fill: '#64737e', 'font-size': 11 });
-    xTitle.textContent = 'Received units'; svg.append(xTitle);
-    const yTitle = svgNode('text', { x: 17, y: (top + bottom) / 2, transform: `rotate(-90 17 ${(top + bottom) / 2})`, 'text-anchor': 'middle', fill: '#64737e', 'font-size': 11 });
-    yTitle.textContent = 'Current stock'; svg.append(yTitle);
-    suppliers.forEach(supplier => {
-      const received = Number(supplier.inboundUnits) || 0, stock = Number(supplier.currentStock) || 0;
-      const x = left + (right - left) * received / maxReceived;
-      const y = bottom - (bottom - top) * stock / maxStock;
-      const group = svgNode('g', { role: 'button', tabindex: 0, 'aria-label': `${supplier.name}: ${received} received units and ${stock} units on hand`, style: 'cursor:pointer' });
-      const circle = svgNode('circle', { cx: x, cy: y, r: supplier.key === selectedSupplierKey ? 9 : 6,
-        fill: '#28b783', stroke: supplier.key === selectedSupplierKey ? '#172936' : '#fff', 'stroke-width': supplier.key === selectedSupplierKey ? 3 : 2 });
-      const title = svgNode('title'); title.textContent = `${supplier.name} · received ${received} · in stock ${stock}`;
-      group.append(circle, title);
-      if (supplier.key === selectedSupplierKey) {
-        const label = svgNode('text', { x: Math.min(right - 4, x + 12), y: Math.max(top + 12, y - 10), fill: '#273846', 'font-size': 11, 'font-weight': 650 });
-        label.textContent = supplier.name; group.append(label);
+      supplierFramePayload = null;
+      supplierFrameError = error.message;
+      if (supplierFrameReady && supplierDashboardFrame?.contentWindow) {
+        supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-error', message: error.message }, location.origin);
       }
-      const select = () => { selectedSupplierKey = supplier.key; renderSupplierDashboard(); };
-      group.addEventListener('click', select);
-      group.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } });
-      svg.append(group);
-    });
+      setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
+    }
   }
 
   function compactNumber(value) {
@@ -1764,6 +1563,12 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-das
         setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
         dashboardError.textContent = `Firestore is unavailable: ${error.message}`;
         dashboardError.classList.remove('hidden');
+        if (currentView === 'suppliers') {
+          supplierFrameError = error.message;
+          if (supplierFrameReady && supplierDashboardFrame?.contentWindow) {
+            supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-error', message: error.message }, location.origin);
+          }
+        }
       });
     }
     stopPosListener = watchPos(items => {

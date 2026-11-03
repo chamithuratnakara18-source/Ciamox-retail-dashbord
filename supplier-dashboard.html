@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supplier Management Dashboard</title>
+<style>
+:root{--bg:#f4f3ef;--surface-0:#f4f3ef;--surface-1:#eeede8;--surface-2:#ffffff;--border:#e0ded7;--border-strong:#cfcdc4;--border-stronger:#9a9890;--text-primary:#16202b;--text-secondary:#5d6672;--text-muted:#898781;--bg-accent:#dbe9f8;--radius:8px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color-scheme:light}
+@media (prefers-color-scheme: dark){:root{--bg:#11151a;--surface-0:#11151a;--surface-1:#222a33;--surface-2:#1a2027;--border:#2b333c;--border-strong:#3a444f;--border-stronger:#6b7785;--text-primary:#e8ecf0;--text-secondary:#9aa5b1;--text-muted:#7c8794;--bg-accent:#1d3550;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text-primary);font-family:var(--font);font-size:15px;line-height:1.5}
+.page{max-width:1080px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;font-weight:600;margin:0 0 2px}
+.intro{font-size:13px;color:var(--text-secondary);margin:0 0 16px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+input,select,button{font:inherit;color:var(--text-primary)}
+input[type=text],select{height:36px;padding:0 10px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface-2)}
+button{border:1px solid var(--border-strong);background:transparent;border-radius:var(--radius);cursor:pointer;padding:6px 12px}
+button:hover{background:var(--surface-1)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #2a78d6;outline-offset:2px}
+.k{background:var(--surface-1);border-radius:var(--radius);padding:10px 12px}
+.k span.l{font-size:12px;color:var(--text-secondary);display:block}
+.k b{font-size:22px;font-weight:600;display:block}
+.k i{font-size:12px;font-style:normal;color:var(--text-secondary)}
+.kg{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.kg svg{width:84px;flex:none}
+.card{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.hd{font-size:15px;font-weight:600;margin:0}
+.sb{font-size:12px;color:var(--text-secondary);margin:2px 0 8px}
+.fr{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.fr input{flex:1;min-width:160px}
+.fr select{min-width:140px}
+.ch{font-size:12px;padding:4px 11px;height:auto}
+.ch.on{background:var(--surface-1);border-color:var(--border-stronger)}
+.top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.lg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-top:6px}
+.lg span{display:flex;align-items:center;gap:5px}.lg i{width:10px;height:10px;border-radius:50%;display:inline-block}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-weight:400;font-size:12px;color:var(--text-secondary);text-align:left;padding:6px;border-bottom:1px solid var(--border-strong);white-space:nowrap}
+th.s{cursor:pointer}th.s:hover{color:var(--text-primary)}
+td{padding:8px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr.r{cursor:pointer}tr.r:hover td{background:var(--surface-1)}
+tr.r.on td{background:var(--bg-accent)}
+.tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;background:var(--surface-1);border:1px solid var(--border);margin:1px 3px 1px 0;white-space:nowrap}
+.pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:6px;white-space:nowrap}
+.cg{display:flex;align-items:center;gap:8px;min-width:140px}
+.cg svg{width:62px;flex:none;display:block}
+.cg small{display:block;font-size:11px;color:var(--text-secondary);margin-top:3px;white-space:nowrap}
+.dg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 18px;margin-top:12px}
+.dg span.l{font-size:12px;color:var(--text-secondary);display:block}
+.dg p{margin:0;font-size:14px}
+.tw{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Supplier management dashboard</h1>
+<p class="intro" id="supplierStatus">Loading live suppliers, products, stock, and receipts from RetailFlow…</p>
+
+<div id="kp" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px"></div>
+
+<div class="fr">
+  <input id="q" type="text" placeholder="Search supplier, product or barcode" aria-label="Search suppliers, products, and barcodes">
+  <select id="cat" aria-label="Product category"></select>
+  <span id="types" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+</div>
+
+<div class="card">
+  <div class="top">
+    <div><p class="hd">Supplier locations</p><p class="sb">Locations appear when a supplier address is recorded in RetailFlow.</p></div>
+  </div>
+  <svg id="map" viewBox="0 0 680 330" width="100%" role="img" aria-label="Supplier location map"><title>Supplier locations</title><desc>No supplier location details are currently recorded.</desc></svg>
+  <div class="lg" id="mlg"><span>Supplier locations are not recorded.</span></div>
+</div>
+
+<div class="card" id="det"></div>
+
+<div class="card">
+  <p class="hd">Supplier list</p>
+  <p class="sb" id="cnt"></p>
+  <p class="sb" id="unassignedProducts" style="margin:0 0 8px"></p>
+  <div class="tw"><table><thead><tr><th class="s" data-s="name">Supplier</th><th class="s" data-s="productCount">Products</th><th>Categories</th><th class="s" data-s="currentStock">Current stock</th><th class="s" data-s="inboundUnits">Received</th><th class="s" data-s="recordedInboundCost">Recorded cost</th><th class="s" data-s="lastArrivalDate">Last arrival</th></tr></thead><tbody id="tb"></tbody></table></div>
+  <p class="sb" style="margin:10px 0 0">Displayed figures come from recorded products and inbound receipts. Location, delivery lead time, quality scores, and defect rates are not tracked by RetailFlow.</p>
+</div>
+
+<div class="card">
+  <p class="hd">Inbound volume against current stock</p>
+  <p class="sb">Each point uses recorded units received and current units on hand. Click a point to select its supplier.</p>
+  <div id="scatterWrap" style="position:relative;width:100%;height:320px"><canvas id="sc" role="img" aria-label="Scatter chart of received units against current stock">Each dot is a supplier plotted by recorded received units and current stock.</canvas></div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+let S=[];
+const st={q:'',cat:'all',type:'all',sel:null,sort:'currentStock',dir:-1};
+const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const numeric=value=>Number.isFinite(Number(value))?Number(value):0;
+const integer=value=>numeric(value).toLocaleString('en-US');
+const money=value=>value==null?'—':'€ '+numeric(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const date=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)?new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(value+'T12:00:00Z')):'—';
+const status=document.getElementById('supplierStatus');
+const cat=document.getElementById('cat');
+const q=document.getElementById('q');
+const listBody=document.getElementById('tb');
+let scatter=null;
+
+function filteredSuppliers(){
+ const query=st.q.trim().toLocaleLowerCase();
+ return S.filter(s=>{
+  const items=Array.isArray(s.items)?s.items:[];
+  const cats=Array.isArray(s.categories)?s.categories:[];
+  const searchable=[s.name,...cats,...items.flatMap(item=>[item.name,item.barcode,item.category])].join(' ').toLocaleLowerCase();
+  return (!query||searchable.includes(query))&&
+   (st.cat==='all'||cats.includes(st.cat))&&
+   (st.type==='all'||(st.type==='stock'?numeric(s.currentStock)>0:numeric(s.inboundUnits)>0));
+ });
+}
+function selectSupplier(key){st.sel=key;draw();}
+function typeButtons(){
+ const choices=[['all','All suppliers'],['stock','With stock'],['receipts','With receipts']];
+ document.getElementById('types').innerHTML=choices.map(([key,label])=>'<button type="button" class="ch'+(st.type===key?' on':'')+'" data-t="'+key+'">'+label+'</button>').join('');
+ document.querySelectorAll('#types button').forEach(button=>button.addEventListener('click',()=>{st.type=button.dataset.t;draw();}));
+}
+function updateCategories(){
+ const current=st.cat;
+ const categories=Array.isArray(window.supplierCategories)?window.supplierCategories:[];
+ cat.innerHTML='<option value="all">All categories</option>'+categories.map(value=>'<option value="'+esc(value)+'">'+esc(value)+'</option>').join('');
+ st.cat=categories.includes(current)?current:'all';cat.value=st.cat;
+}
+function kpi(label,value,note){return '<div class="k"><span class="l">'+esc(label)+'</span><b>'+esc(value)+'</b><i>'+esc(note)+'</i></div>';}
+function drawKpis(rows){
+ const productCount=rows.reduce((sum,s)=>sum+numeric(s.productCount),0);
+ const stock=rows.reduce((sum,s)=>sum+numeric(s.currentStock),0);
+ const receipts=rows.reduce((sum,s)=>sum+numeric(s.inboundRecords),0);
+ const cost=rows.reduce((sum,s)=>sum+numeric(s.recordedInboundCost),0);
+ document.getElementById('kp').innerHTML=
+  kpi('Suppliers',integer(rows.length),'With recorded supplier names')+
+  kpi('Products supplied',integer(productCount),'Product lines in current inventory')+
+  kpi('Current stock',integer(stock),'Units on hand from linked products')+
+  kpi('Inbound receipts',integer(receipts),money(cost)+' recorded inbound cost');
+}
+function drawDetails(s){
+ const detail=document.getElementById('det');
+ if(!s){detail.innerHTML='<p class="hd">No supplier selected</p><p class="sb" style="margin:0">No suppliers match these filters. Clear the search or choose another category.</p>';return;}
+ const items=Array.isArray(s.items)?s.items:[];
+ const costNote=s.missingCurrentCostProducts?money(s.currentStockValue)+' known · '+integer(s.missingCurrentCostProducts)+' product costs missing':money(s.currentStockValue);
+ const fields=[
+  ['Location','Not recorded'],['Product categories',(s.categories||[]).join(', ')||'Not assigned'],
+  ['Products supplied',integer(s.productCount)],['Current stock',integer(s.currentStock)+' units'],
+  ['Current stock value',costNote],['Inbound units',integer(s.inboundUnits)+' units'],
+  ['Inbound receipts',integer(s.inboundRecords)],['Recorded inbound cost',numeric(s.costedInboundUnits)>0?money(s.recordedInboundCost):'No recorded unit costs'],
+  ['Average recorded purchase cost',s.averageRecordedUnitCost==null?'Unavailable':money(s.averageRecordedUnitCost)+' / unit'],
+  ['Last arrival',date(s.lastArrivalDate)],['Lead time','Not tracked'],['Quality and defect rate','Not tracked']
+ ];
+ const chips=items.map(item=>'<span class="tag" title="'+esc(item.barcode?item.name+' · '+item.barcode:item.name)+'">'+esc(item.name||item.barcode||'Product')+' · '+integer(item.quantity)+' in stock</span>').join('');
+ detail.innerHTML='<p class="hd">'+esc(s.name)+'</p><p class="sb" style="margin-bottom:0">'+integer(s.productCount)+' recorded products · '+integer(s.currentStock)+' units on hand</p><div class="dg">'+fields.map(([label,value])=>'<div><span class="l">'+esc(label)+'</span><p>'+esc(value)+'</p></div>').join('')+'</div><p class="sb" style="margin:12px 0 0">Products supplied</p><div>'+ (chips||'<span class="tag">No linked products</span>')+'</div><p class="sb" style="margin:12px 0 0">Supplier location, delivery lead time, quality scores, and defect rates are not recorded in this system.</p>';
+}
+function drawTable(rows){
+ const sort=st.sort, direction=st.dir;
+ const sorted=[...rows].sort((a,b)=>{
+  const av=a[sort],bv=b[sort];
+  const cmp=typeof av==='string'&&typeof bv==='string'?av.localeCompare(bv):numeric(av)-numeric(bv);
+  return cmp*direction||String(a.name).localeCompare(String(b.name));
+ });
+ document.getElementById('cnt').textContent='Showing '+rows.length+' of '+S.length+' suppliers, sorted by '+sort.replace(/([A-Z])/g,' $1').toLowerCase();
+ if(!sorted.length){listBody.innerHTML='<tr><td colspan="7" style="color:var(--text-secondary)">No suppliers match.</td></tr>';return;}
+ listBody.innerHTML=sorted.map(s=>{
+  const tags=(s.categories||[]).map(name=>'<span class="tag">'+esc(name)+'</span>').join('')||'—';
+  const cost=s.costedInboundUnits?money(s.recordedInboundCost):'—';
+  return '<tr class="r'+(s.key===st.sel?' on':'')+'" data-key="'+esc(s.key)+'"><td><b style="font-weight:600">'+esc(s.name)+'</b></td><td>'+integer(s.productCount)+'</td><td>'+tags+'</td><td>'+integer(s.currentStock)+' units</td><td>'+integer(s.inboundUnits)+' units</td><td>'+esc(cost)+'</td><td>'+date(s.lastArrivalDate)+'</td></tr>';
+ }).join('');
+ listBody.querySelectorAll('tr.r').forEach(row=>row.addEventListener('click',()=>selectSupplier(row.dataset.key)));
+}
+function drawMapNote(){
+ const legend=document.getElementById('mlg');
+ const hasLocations=S.some(s=>Number.isFinite(Number(s.latitude))&&Number.isFinite(Number(s.longitude)));
+ legend.textContent=hasLocations?'Recorded supplier locations':'Supplier locations are not recorded in RetailFlow.';
+}
+function initMap(){
+ if(typeof d3==='undefined'||typeof topojson==='undefined')return;
+ const svg=d3.select('#map');
+ const proj=d3.geoNaturalEarth1().fitSize([680,330],{type:'Polygon',coordinates:[[[45,-4],[125,-4],[125,40],[45,40],[45,-4]]]});
+ const path=d3.geoPath(proj);
+ d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world=>{
+  svg.selectAll('path.land').data(topojson.feature(world,world.objects.countries).features).join('path').attr('class','land').attr('d',path).attr('fill','var(--surface-1)').attr('stroke','var(--border-strong)').attr('stroke-width',0.5);
+  drawMapNote();
+ }).catch(()=>{document.getElementById('mlg').textContent='Map background could not be loaded. Supplier records remain available below.';});
+}
+function initScatter(){
+ if(typeof Chart==='undefined')return;
+ const muted=getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim()||'#898781';
+ const surface=getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim()||'#fff';
+ Chart.defaults.color=muted;
+ scatter=new Chart(document.getElementById('sc'),{type:'scatter',data:{datasets:[{data:[],pointBackgroundColor:'#2a78d6',pointBorderColor:surface,pointBorderWidth:2,pointRadius:6,pointHoverRadius:9}]},options:{responsive:true,maintainAspectRatio:false,animation:false,
+  onClick:(event,elements)=>{if(elements.length){const point=scatter.data.datasets[0].data[elements[0].index];selectSupplier(point.key);}},
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>{const item=S.find(s=>s.key===context.raw.key);return item?item.name+': '+integer(item.inboundUnits)+' received, '+integer(item.currentStock)+' on hand':'Supplier';}}}},
+  scales:{x:{beginAtZero:true,title:{display:true,text:'Received units'},grid:{color:'rgba(128,128,128,0.15)'},border:{display:false}},y:{beginAtZero:true,title:{display:true,text:'Current stock units'},grid:{color:'rgba(128,128,128,0.15)'},border:{display:false}}}}});
+}
+function drawScatter(rows){
+ if(!scatter){document.getElementById('scatterWrap').innerHTML='<p class="sb">The chart library is unavailable. Supplier records are listed above.</p>';return;}
+ scatter.data.datasets[0].data=rows.map(s=>({x:numeric(s.inboundUnits),y:numeric(s.currentStock),key:s.key}));
+ scatter.data.datasets[0].pointBackgroundColor=rows.map(s=>s.key===st.sel?'#111':'#2a78d6');
+ scatter.data.datasets[0].pointRadius=rows.map(s=>s.key===st.sel?9:6);
+ scatter.options.scales.x.max=Math.max(1,...rows.map(s=>numeric(s.inboundUnits)));
+ scatter.options.scales.y.max=Math.max(1,...rows.map(s=>numeric(s.currentStock)));
+ scatter.update();
+}
+function draw(){
+ typeButtons();
+ const rows=filteredSuppliers();
+ if(!rows.some(s=>s.key===st.sel))st.sel=rows[0]?.key??null;
+ drawKpis(rows);
+ drawMapNote();
+ const unassigned=numeric(window.supplierUnassignedProducts);
+ document.getElementById('unassignedProducts').textContent=unassigned?integer(unassigned)+' inventory '+(unassigned===1?'product has':'products have')+' no supplier recorded.':'';
+ drawDetails(rows.find(s=>s.key===st.sel)||null);
+ drawTable(rows);
+ drawScatter(rows);
+ sendHeight();
+}
+function sendHeight(){
+ if(window.parent!==window)window.parent.postMessage({type:'supplier-dashboard-height',height:Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)},location.origin);
+}
+function receiveData(data){
+ S=Array.isArray(data?.suppliers)?data.suppliers:[];
+ window.supplierCategories=Array.isArray(data?.categories)?data.categories:[];
+ window.supplierUnassignedProducts=numeric(data?.summary?.unassignedProducts);
+ updateCategories();
+ status.textContent='Connected to RetailFlow · Live products and inbound receipts';
+ draw();
+}
+q.addEventListener('input',()=>{st.q=q.value;draw();});
+cat.addEventListener('change',()=>{st.cat=cat.value;draw();});
+document.querySelectorAll('th.s').forEach(header=>header.addEventListener('click',()=>{
+ const key=header.dataset.s;
+ st.dir=st.sort===key?st.dir*-1:(key==='name'||key==='lastArrivalDate'?1:-1);st.sort=key;draw();
+}));
+initMap();initScatter();draw();
+window.addEventListener('message',event=>{
+ if(event.origin!==location.origin||event.source!==window.parent)return;
+ if(event.data?.type==='supplier-data')receiveData(event.data.data);
+ if(event.data?.type==='supplier-error')status.textContent=S.length?'RetailFlow connection is unavailable · showing the last loaded supplier data':'Supplier data is unavailable. Check the RetailFlow connection and try again.';
+});
+window.addEventListener('resize',sendHeight);
+if('ResizeObserver'in window)new ResizeObserver(sendHeight).observe(document.body);
+if(window.parent!==window)window.parent.postMessage({type:'supplier-dashboard-ready'},location.origin);
+</script>
+</body>
+</html>

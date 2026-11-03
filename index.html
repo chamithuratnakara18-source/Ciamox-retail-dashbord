@@ -210,23 +210,7 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
 @media(max-width:440px){.orders-screen .hub-heading h1{font-size:27px}.order-analytics-heading{padding:16px}.order-analytics-body{padding:12px}.order-period-controls .overview-segments{max-width:100%}.order-period-controls .overview-segments button{padding:8px 10px;font-size:11px}.order-summary-grid{gap:8px}.order-summary-grid article span{font-size:9px}.orders-section-heading{align-items:flex-start;flex-direction:column}.order-top-row{grid-template-columns:18px minmax(70px,1fr) minmax(52px,.9fr) auto;gap:6px}.order-top-count{min-width:50px;font-size:10px}}
 </style>
 <style>
-.suppliers-screen{box-sizing:border-box;width:100%;max-width:1320px;margin:0 auto;padding:24px 0 40px}
-.suppliers-screen .hub-heading{margin-bottom:15px}.suppliers-screen .hub-heading h1{font:800 32px/1.1 Manrope,sans-serif;letter-spacing:-.06em}
-.supplier-actions{display:flex;align-items:center;gap:9px}.supplier-refresh{min-height:40px;padding:0 15px;border:1px solid #dfe5e8;border-radius:22px;background:#fff;color:#283846;font-size:12px;font-weight:700}
-.supplier-kpis{margin-top:0;margin-bottom:14px}.supplier-kpis article{min-height:130px}.supplier-kpis article>strong{font-size:26px}.supplier-kpis article>p{margin-top:8px;color:#7c8992;font-size:11px}
-.supplier-filterbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border:1px solid #e4e4e4;border-radius:16px;background:#fff}
-.supplier-filterbar input,.supplier-filterbar select{box-sizing:border-box;min-height:39px;padding:0 12px;border:1px solid #dfe5e8;border-radius:10px;background:#fff;color:#293a47;font:12px 'DM Sans',system-ui,sans-serif}
-.supplier-filterbar input{flex:1;min-width:190px}.supplier-filterbar select{min-width:145px}
-.supplier-chart-controls{display:flex;gap:5px;padding:3px;border:1px solid #e0e3e5;border-radius:12px;background:#f7f8f8}.supplier-chart-controls button{padding:7px 10px;border:0;border-radius:9px;background:transparent;color:#687580;font-size:11px;font-weight:650}.supplier-chart-controls button.active{background:#172936;color:#fff}
-.supplier-overview-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,.42fr);gap:20px;padding:18px 21px 20px}.supplier-bar-list{display:grid;gap:10px;align-content:start}.supplier-bar-row{display:grid;grid-template-columns:minmax(105px,1.1fr) minmax(100px,2fr) auto;align-items:center;gap:12px;width:100%;padding:4px 2px;border:0;background:transparent;text-align:left}.supplier-bar-name{overflow:hidden;color:#273846;font-size:12px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.supplier-bar-track{height:9px;overflow:hidden;border-radius:9px;background:#e8ecee}.supplier-bar-track i{display:block;height:100%;border-radius:inherit;background:#28b783}.supplier-bar-value{min-width:76px;color:#62717c;font-size:11px;text-align:right;white-space:nowrap}.supplier-chart-note{align-self:center;padding:15px;border-radius:14px;background:#f5f8f7;color:#72818a;font-size:11px;line-height:1.55}
-.supplier-selection{min-height:100px;padding:18px 21px 20px}.supplier-selection h3{margin:0;color:#1b2732;font:700 20px/1.25 Georgia,serif}.supplier-selection>p{margin:4px 0 0;color:#7c8992;font-size:12px}.supplier-data-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px 20px;margin-top:17px}.supplier-data-grid div{min-width:0}.supplier-data-grid span{display:block;color:#84919b;font-size:10px}.supplier-data-grid strong{display:block;margin-top:4px;overflow-wrap:anywhere;color:#33434f;font-size:12px;font-weight:650;line-height:1.45}.supplier-data-notice{margin:16px 0 0;padding:10px 12px;border:1px solid #e8ebed;border-radius:10px;background:#fafbfb;color:#6d7982;font-size:11px;line-height:1.5}
-.supplier-product-list{margin-top:15px}.supplier-product-list>span{display:block;margin-bottom:7px;color:#84919b;font-size:10px}.supplier-product-chips{display:flex;flex-wrap:wrap;gap:4px}
-.supplier-table-wrap{overflow:auto}.supplier-table{width:100%;border-collapse:collapse}.supplier-table th{padding:10px 12px;border-bottom:1px solid #e9edef;background:#fbfcfc;color:#84919b;font-size:10px;letter-spacing:.035em;text-align:left;white-space:nowrap}.supplier-table th button{padding:0;border:0;background:transparent;color:inherit;font:inherit;letter-spacing:inherit;text-align:left}.supplier-table td{padding:11px 12px;border-bottom:1px solid #edf0f1;color:#586771;font-size:11px;vertical-align:middle}.supplier-table tbody tr{cursor:pointer}.supplier-table tbody tr:hover td,.supplier-table tbody tr.selected td{background:#f2f8f6}.supplier-table td:first-child{color:#273846;font-weight:650}.supplier-table-empty td{padding:25px;text-align:center;color:#85929b}
-.supplier-scatter-body{padding:16px 20px 18px}.supplier-scatter-body svg{display:block;width:100%;height:auto;min-height:250px}.supplier-scatter-legend{display:flex;align-items:center;gap:8px;color:#72808a;font-size:11px}.supplier-scatter-legend i{width:10px;height:10px;border-radius:50%;background:#28b783}
-.supplier-error{margin-top:12px}
-@media(max-width:900px){.supplier-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.supplier-overview-body{grid-template-columns:1fr}.supplier-chart-note{max-width:none}.supplier-data-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:700px){.suppliers-screen{padding-top:20px}.supplier-filterbar{align-items:stretch}.supplier-filterbar input,.supplier-filterbar select{width:100%;min-width:0}.supplier-filterbar .supplier-chart-controls{justify-content:center}.supplier-kpis article{min-height:112px;padding:14px}.supplier-kpis article>strong{margin-top:13px;font-size:23px}.supplier-overview-body{padding:14px}.supplier-bar-row{grid-template-columns:minmax(90px,1fr) minmax(70px,1.4fr) auto;gap:8px}.supplier-bar-value{min-width:60px;font-size:10px}.supplier-selection{padding:15px}.supplier-table th,.supplier-table td{padding:9px 10px}.supplier-scatter-body{padding:12px}.supplier-scatter-body svg{min-height:210px}}
-@media(max-width:440px){.suppliers-screen .hub-heading h1{font-size:27px}.supplier-kpis{gap:8px}.supplier-kpis article>span{font-size:12px}.supplier-kpis article>strong{font-size:21px}.supplier-data-grid{gap:12px}.supplier-data-grid strong{font-size:11px}}
+.supplier-dashboard-frame{display:block;width:100%;height:1200px;min-height:700px;border:0;background:transparent}
 </style>
 </head>
 <body>
@@ -393,41 +377,8 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
         </div>
       </dialog>
 
-      <section id="suppliersScreen" class="suppliers-screen hidden">
-        <header class="hub-heading">
-          <div><div class="eyebrow"><span class="eyebrow-line"></span> SUPPLIER OPERATIONS</div><h1>Supplier dashboard</h1><p>Supplier performance from recorded products and inbound inventory.</p></div>
-          <div class="supplier-actions"><span id="suppliersUpdated" class="updated-label">Updating…</span><button id="refreshSuppliersButton" class="supplier-refresh" type="button">Refresh</button></div>
-        </header>
-        <div class="overview-kpis supplier-kpis">
-          <article><span>Suppliers</span><strong id="supplierCount">—</strong><p>From product and receipt records</p></article>
-          <article><span>Products supplied</span><strong id="supplierProductCount">—</strong><p>Unique recorded product lines</p></article>
-          <article><span>Units on hand</span><strong id="supplierStockUnits">—</strong><p>Current inventory linked to suppliers</p></article>
-          <article><span>Recorded inbound cost</span><strong id="supplierInboundCost">—</strong><p id="supplierReceiptCount">Across recorded receipts</p></article>
-        </div>
-        <div class="supplier-filterbar">
-          <input id="supplierSearch" type="search" placeholder="Search supplier or product" aria-label="Search suppliers and products">
-          <select id="supplierCategoryFilter" aria-label="Filter suppliers by product category"><option value="all">All categories</option></select>
-          <select id="supplierStockFilter" aria-label="Filter suppliers by stock"><option value="all">All suppliers</option><option value="stock">With current stock</option><option value="empty">No current stock</option></select>
-          <div class="supplier-chart-controls" role="group" aria-label="Supplier chart metric"><button type="button" data-supplier-metric="currentStock" class="active" aria-pressed="true">Current stock</button><button type="button" data-supplier-metric="inboundUnits" aria-pressed="false">Received units</button></div>
-        </div>
-        <section class="overview-panel supplier-overview-panel">
-          <div class="overview-panel-heading"><div><h2>Supplier overview</h2><p id="supplierOverviewSubtitle">Suppliers ranked by current stock.</p></div></div>
-          <div class="supplier-overview-body"><div id="supplierOverviewBars" class="supplier-bar-list"></div><p class="supplier-chart-note">Bars use recorded stock and receipt quantities. Supplier locations, delivery lead times, quality scores, and defect rates are not stored in the current inventory records.</p></div>
-        </section>
-        <section class="overview-panel supplier-detail-panel">
-          <div class="overview-panel-heading"><div><h2>Supplier details</h2><p>Click a supplier chart row or list row to view its recorded products.</p></div></div>
-          <div id="supplierSelection" class="supplier-selection"><p>Loading supplier details…</p></div>
-        </section>
-        <section class="inventory-table-card supplier-directory-panel">
-          <div class="inventory-toolbar"><div><strong>Supplier list</strong><span id="supplierListCount">Loading suppliers…</span></div></div>
-          <div class="table-scroll supplier-table-wrap"><table class="supplier-table"><thead><tr><th><button type="button" data-supplier-sort="name">Supplier</button></th><th><button type="button" data-supplier-sort="productCount">Products</button></th><th>Categories</th><th><button type="button" data-supplier-sort="currentStock">Stock</button></th><th><button type="button" data-supplier-sort="inboundUnits">Received</button></th><th><button type="button" data-supplier-sort="recordedInboundCost">Recorded cost</button></th><th><button type="button" data-supplier-sort="lastArrivalDate">Last arrival</button></th></tr></thead><tbody id="supplierTableBody"></tbody></table></div>
-          <div id="supplierUnassignedNote" class="inventory-action-message hidden"></div>
-        </section>
-        <section class="overview-panel supplier-scatter-panel">
-          <div class="overview-panel-heading"><div><h2>Inbound volume vs current stock</h2><p>One point per supplier; select a point to view its details.</p></div><span class="supplier-scatter-legend"><i></i>Supplier</span></div>
-          <div class="supplier-scatter-body"><svg id="supplierScatterChart" viewBox="0 0 800 350" role="img" aria-label="Supplier chart comparing received units with current stock"></svg></div>
-        </section>
-        <p id="suppliersError" class="workflow-notice error hidden supplier-error" role="status"></p>
+      <section id="suppliersScreen" class="hidden">
+        <iframe id="supplierDashboardFrame" class="supplier-dashboard-frame" title="Supplier management dashboard" src="about:blank" loading="lazy"></iframe>
       </section>
 
       <section id="posScreen" class="pos-screen hidden">
@@ -509,6 +460,6 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
   
   
   
-<script type="module" src="./hub.js?v=supplier-dashboard-20261103-1"></script>
+<script type="module" src="./hub.js?v=supplier-html-20261104-1"></script>
 </body>
 </html>
