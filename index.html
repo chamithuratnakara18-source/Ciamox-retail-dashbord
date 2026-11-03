@@ -171,16 +171,38 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
 @media(max-width:760px){#inventoryCategoryProducts.inventory-category-products{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:440px){#inventoryCategoryProducts.inventory-category-products{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#inventoryCategoryProducts .inventory-category-product-details{gap:6px;padding:9px}.inventory-category-facts{gap:7px 5px}#inventoryCategoryProducts .inventory-category-facts span{font-size:9px}#inventoryCategoryProducts .inventory-category-facts strong{font-size:10px}}
 </style>
+<style>
+.auth-gate{max-width:410px;margin:64px auto;padding:26px;border:1px solid #e4eaed;border-radius:16px;background:#fff;box-shadow:0 12px 36px #2032400a}
+.auth-gate h1{font:800 26px/1.15 Manrope,sans-serif;letter-spacing:-.05em;margin:10px 0 7px;color:#182630}
+.auth-gate p{color:#7d8a93;font-size:12px;line-height:1.55;margin:0 0 18px}
+.auth-form{display:grid;gap:12px}.auth-form label{display:grid;gap:6px;color:#53616a;font-size:11px;font-weight:700}
+.auth-form input{min-height:42px;border:1px solid #dfe6e9;border-radius:8px;padding:10px 11px;color:#1b2732;background:#fff}
+.auth-form input:focus{outline:2px solid #28b78355;border-color:#28b783}.auth-submit{min-height:42px;border:0;border-radius:9px;background:#172936;color:#fff;font-weight:800}
+.auth-error{min-height:16px;color:#a94d2f;font-size:11px;line-height:1.45}.auth-signout{border:1px solid #dfe6e9;border-radius:20px;background:#fff;color:#53616a;padding:7px 10px;font-size:9px;font-weight:700}
+.topbar-auth{display:flex;align-items:center;gap:8px}
+</style>
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="./" aria-label="RetailFlow home"><span class="brand-mark">R</span><span><b>RetailFlow</b><small>STORE OPERATIONS</small></span></a>
-<div style="display:flex;align-items:center;gap:8px"><span id="connectionStatus" class="local-chip"><i></i> FIREBASE CHECKING</span></div>
+<div class="topbar-auth"><span id="connectionStatus" class="local-chip"><i></i><span id="connectionStatusText">SIGN IN REQUIRED</span></span><button id="signOutButton" class="auth-signout hidden" type="button">Sign out</button></div>
     </header>
 
-    
-    <div class="hub-layout">
+    <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
+      <div class="eyebrow"><span class="eyebrow-line"></span> SECURE STORE ACCESS</div>
+      <h1 id="authTitle">Sign in to RetailFlow</h1>
+      <p>Use a store account created by your administrator. Public account registration is disabled.</p>
+      <form id="authForm" class="auth-form">
+        <label for="authEmail">Email<input id="authEmail" type="email" autocomplete="username" required maxlength="254"></label>
+        <label for="authPassword">Password<input id="authPassword" type="password" autocomplete="current-password" required maxlength="128"></label>
+        <p id="authMessage" class="auth-error" role="status" aria-live="polite"></p>
+        <button id="authSubmit" class="auth-submit" type="submit">Sign in</button>
+        <button id="authSignOutButton" class="auth-signout hidden" type="button">Sign out of this account</button>
+      </form>
+    </section>
+
+    <div id="hubLayout" class="hub-layout hidden">
       <aside class="hub-sidebar" aria-label="Main sections">
         <span class="sidebar-label">WORKSPACE</span>
         <button class="nav-tab active" data-view="dashboard" type="button"><span class="nav-icon">▦</span>Dashboard</button>

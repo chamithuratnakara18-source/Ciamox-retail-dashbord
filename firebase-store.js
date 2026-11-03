@@ -1,9 +1,10 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js';
 import {
-  addDoc, collection, doc, getDoc, getDocFromServer, getDocs, getFirestore,
-  onSnapshot, runTransaction, serverTimestamp, updateDoc, writeBatch,
+  collection, doc, getDoc, getDocFromServer, getDocs, getFirestore,
+  onSnapshot,
 } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
+import { firebaseApp } from './firebase-app.js';
+import { requireRetailUser } from './auth-guard.js';
 
 let database;
 let live;
@@ -13,9 +14,10 @@ function db() {
       [firebaseConfig.apiKey, firebaseConfig.appId].some(value => value.startsWith('PASTE_'))) {
     throw new Error('Add your Firebase web app configuration to firebase-config.js in both websites.');
   }
-  database ||= getFirestore(initializeApp(firebaseConfig));
+  database ||= getFirestore(firebaseApp);
   return database;
 }
+
 
 function productRef(barcode) {
   return doc(db(), 'products', encodeURIComponent(barcode));
@@ -27,23 +29,6 @@ function posItems(data) {
   return Array.isArray(data?.items) ? data.items.filter(item =>
     typeof item.barcode === 'string' && Number.isSafeInteger(item.quantity) && item.quantity > 0)
     .map(item => ({ barcode: item.barcode, quantity: item.quantity })) : [];
-}
-
-function validText(value, label, max = 200) {
-  if (typeof value !== 'string' || !value.trim() || value.trim().length > max) {
-    throw new Error(`${label} must be between 1 and ${max} characters.`);
-  }
-  return value.trim();
-}
-
-function positiveNumber(value, label, { whole = false, zero = false } = {}) {
-  const number = Number(value);
-  if (value === '' || value == null || !Number.isFinite(number) ||
-      number < (zero ? 0 : Number.EPSILON) || number > 1000000000 ||
-      (whole && !Number.isSafeInteger(number))) {
-    throw new Error(`Enter a valid ${label}.`);
-  }
-  return number;
 }
 
 function validDate(value, label) {
@@ -282,64 +267,6 @@ function summarize({ products, sales, receipts, expenses }, from = todayLocal(-2
   };
 }
 
-async function removeInventory(body) {
-  const barcode = validText(body.barcode, 'Barcode', 128);
-  const expectedName = validText(body.expectedName, 'Product name');
-  const expectedQuantity = positiveNumber(body.expectedQuantity, 'expected quantity', { whole: true, zero: true });
-  const ref = productRef(barcode);
-  const adjustmentRef = doc(collection(db(), 'receipts'));
-  return runTransaction(db(), async transaction => {
-    const product = (await transaction.get(ref)).data();
-    if (!product) throw new Error('This product has already been removed. Refresh inventory.');
-    const quantity = Number(product.quantity);
-    if (product.name !== expectedName || quantity !== expectedQuantity) {
-      throw new Error('This product changed since it was displayed. Refresh inventory before removing it.');
-    }
-    transaction.delete(ref);
-    transaction.set(adjustmentRef, {
-      type: 'inventory_removal', barcode, productName: product.name,
-      quantity: -quantity, unitCost: product.unitCost ?? null,
-      arrivalDate: todayLocal(), supplierName: product.supplierName || '',
-      createdAt: serverTimestamp(),
-    });
-    return { removed: { barcode, name: product.name, quantity } };
-  });
-}
-
-async function setSellingPrice(body) {
-  const barcode = validText(body.barcode, 'Barcode', 128);
-  const sellingPrice = positiveNumber(body.sellingPrice, 'selling price', { zero: true });
-  const expectedPrice = body.expectedPrice == null ? null
-    : positiveNumber(body.expectedPrice, 'previous selling price', { zero: true });
-  const ref = productRef(barcode);
-  return runTransaction(db(), async transaction => {
-    const product = (await transaction.get(ref)).data();
-    if (!product) throw new Error('This product is no longer in inventory. Refresh Finance.');
-    const currentPrice = product.originalPrice == null ? null : Number(product.originalPrice);
-    if (currentPrice !== expectedPrice) throw new Error('The selling price changed on another device. Refresh Finance.');
-    transaction.update(ref, { originalPrice: sellingPrice, updatedAt: serverTimestamp() });
-    return { product: shapeProduct({ ...product, originalPrice: sellingPrice }) };
-  });
-}
-
-async function saveMonthlyPlan(body) {
-  const plan = Object.fromEntries(monthlyFields.map(field => [field,
-    body[field] === '' || body[field] == null ? 0 : positiveNumber(body[field], field, { zero: true })]));
-  if (!monthlyFields.some(field => plan[field] > 0)) {
-    throw new Error('Enter at least one monthly cost. Leave the plan unsaved if you have not entered costs yet.');
-  }
-  const currentMonth = todayLocal().slice(0, 7);
-  const savedPlan = {
-    type: 'monthly_plan', ...plan,
-    updatedAt: serverTimestamp(),
-  };
-  const batch = writeBatch(db());
-  batch.set(doc(db(), 'expenses', 'monthly-plan'), savedPlan);
-  batch.set(doc(db(), 'expenses', `monthly-plan-${currentMonth}`), savedPlan);
-  await batch.commit();
-  return { plan: shapeMonthlyPlan({ type: 'monthly_plan', ...plan }) };
-}
-
 async function getFinance() {
   const data = await loadCollections();
   const totals = summarize(data).totals;
@@ -516,267 +443,68 @@ function inventoryAnalytics(data, requestedDays = 30) {
   };
 }
 
-async function assignInventoryCategory(body) {
-  const barcode = validText(body.barcode, 'Barcode', 80);
-  const category = validText(body.category, 'Category name', 80);
-  const ref = productRef(barcode);
-  const snapshot = await getDoc(ref);
-  if (!snapshot.exists()) throw new Error('This product is no longer in inventory. Refresh and try again.');
-  await updateDoc(ref, { category, updatedAt: serverTimestamp() });
-  return { product: shapeProduct({ ...snapshot.data(), category }) };
-}
-
 // Dashboard listeners keep the two independent websites in sync without polling.
 export function watchRetailFlow(onChange, onError) {
   if (live) return () => {};
+  let active = true;
   let resolveReady, rejectReady;
   const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
   live = { data: { products: null, sales: null, receipts: null, expenses: null }, ready, error: null };
   let settled = false;
   let unsubs = [];
-  try {
-    unsubs = Object.keys(live.data).map(name => onSnapshot(collection(db(), name), snapshot => {
-      live.data[name] = rows(snapshot);
-      if (Object.values(live.data).every(value => value !== null)) {
-        if (!settled) { settled = true; resolveReady(); }
-        onChange();
-      }
-    }, error => {
-      live.error = error;
-      if (!settled) { settled = true; rejectReady(error); }
-      onError(error);
-    }));
-  } catch (error) {
-    live = null;
-    if (!settled) { settled = true; resolveReady(); }
-    queueMicrotask(() => onError(error));
-  }
-  return () => { unsubs.forEach(stop => stop()); live = null; };
+  requireRetailUser().then(user => {
+    if (!active) return;
+    try {
+      unsubs = Object.keys(live.data).map(name => onSnapshot(collection(db(), name), snapshot => {
+        live.data[name] = rows(snapshot);
+        if (Object.values(live.data).every(value => value !== null)) {
+          if (!settled) { settled = true; resolveReady(); }
+          onChange();
+        }
+      }, error => {
+        live.error = error;
+        if (!settled) { settled = true; rejectReady(error); }
+        onError(error);
+      }));
+    } catch (error) {
+      live = null;
+      if (!settled) { settled = true; resolveReady(); }
+      queueMicrotask(() => onError(error));
+    }
+  }).catch(error => { if (active) onError(error); });
+  return () => { active = false; unsubs.forEach(stop => stop()); live = null; };
 }
 
 // One shared checkout for the store. A phone scan changes this document; every
 // open dashboard receives the new cart through the document listener.
 export function watchPos(onChange, onError) {
-  return onSnapshot(posRef(), snapshot => onChange(posItems(snapshot.data())), onError);
-}
-
-async function addPosScan(body) {
-  const barcode = validText(body.barcode, 'Barcode', 128);
-  const ref = productRef(barcode), cartRef = posRef();
-  return runTransaction(db(), async transaction => {
-    const product = (await transaction.get(ref)).data();
-    const cart = (await transaction.get(cartRef)).data();
-    if (!product) throw new Error('This barcode is not in inventory. Add it in Inbound first.');
-    const items = posItems(cart);
-    const current = items.find(item => item.barcode === barcode);
-    if (Number(product.quantity) <= (current?.quantity || 0)) {
-      throw new Error(`Only ${Number(product.quantity) || 0} ${product.name} in stock.`);
-    }
-    if (current) current.quantity++;
-    else {
-      if (items.length >= 100) throw new Error('The order has reached 100 different products.');
-      items.push({ barcode, quantity: 1 });
-    }
-    transaction.set(cartRef, { type: 'pos_order', items, updatedAt: serverTimestamp() });
-    return { product: shapeProduct(product), quantity: current?.quantity || 1 };
-  });
-}
-
-async function adjustPos(body) {
-  const barcode = validText(body.barcode, 'Barcode', 128);
-  const delta = Number(body.delta);
-  if (!Number.isSafeInteger(delta) || delta === 0 || delta < -1000000000 || delta > 1) {
-    throw new Error('Choose a valid order quantity change.');
-  }
-  const cartRef = posRef(), ref = productRef(barcode);
-  return runTransaction(db(), async transaction => {
-    const product = (await transaction.get(ref)).data();
-    const items = posItems((await transaction.get(cartRef)).data());
-    const item = items.find(row => row.barcode === barcode);
-    if (!item) throw new Error('This item is no longer in the order.');
-    const next = Math.max(0, item.quantity + delta);
-    if (delta > 0 && (!product || next > Number(product.quantity))) {
-      throw new Error(`Only ${Number(product?.quantity) || 0} ${product?.name || barcode} in stock.`);
-    }
-    if (next) item.quantity = next;
-    else items.splice(items.indexOf(item), 1);
-    transaction.set(cartRef, { type: 'pos_order', items, updatedAt: serverTimestamp() });
-    return { items };
-  });
-}
-
-async function clearPos() {
-  const cartRef = posRef();
-  return runTransaction(db(), async transaction => {
-    await transaction.get(cartRef);
-    transaction.set(cartRef, { type: 'pos_order', items: [], updatedAt: serverTimestamp() });
-    return { items: [] };
-  });
-}
-
-async function checkoutPos(body) {
-  const paymentMethod = validText(body.paymentMethod, 'Payment method', 12);
-  if (!['cash', 'card', 'qr'].includes(paymentMethod)) throw new Error('Choose Cash, Card, or QR.');
-  const cartRef = posRef(), saleRef = doc(collection(db(), 'sales'));
-  return runTransaction(db(), async transaction => {
-    const items = posItems((await transaction.get(cartRef)).data());
-    if (!items.length) throw new Error('The order is empty or was already checked out.');
-    const ordered = [...items].sort((a, b) => a.barcode.localeCompare(b.barcode));
-    const refs = ordered.map(item => productRef(item.barcode));
-    const snapshots = [];
-    for (const ref of refs) snapshots.push(await transaction.get(ref));
-    let totalCents = 0, costCents = 0;
-    const sold = ordered.map((item, index) => {
-      const product = snapshots[index].data();
-      if (!product) throw new Error(`${item.barcode} is no longer in inventory.`);
-      if (Number(product.quantity) < item.quantity) throw new Error(`Only ${product.quantity} ${product.name} in stock.`);
-      if (product.unitCost == null || !Number.isFinite(Number(product.unitCost))) {
-        throw new Error(`Purchase cost is missing for ${product.name}.`);
-      }
-      const price = product.originalPrice == null ? null : Number(product.originalPrice);
-      if (price == null || !Number.isFinite(price) || price < 0) {
-        throw new Error(`Set a selling price for ${product.name} in Finance before checkout.`);
-      }
-      totalCents += Math.round(price * 100) * item.quantity;
-      costCents += Math.round(Number(product.unitCost) * 100) * item.quantity;
-      return { barcode: item.barcode, name: product.name, quantity: item.quantity,
-        originalPrice: price, unitCost: Number(product.unitCost) };
-    });
-    if (!Number.isSafeInteger(totalCents) || !Number.isSafeInteger(costCents)) {
-      throw new Error('The order total is too large. Reduce its quantity.');
-    }
-    snapshots.forEach((snapshot, index) => transaction.update(snapshot.ref, {
-      quantity: Number(snapshot.data().quantity) - sold[index].quantity, updatedAt: serverTimestamp(),
-    }));
-    const totalOriginalPrice = totalCents / 100;
-    transaction.set(saleRef, {
-      items: sold, totalOriginalPrice, grossProfit: (totalCents - costCents) / 100,
-      day: todayLocal(), paymentMethod, source: 'pos', createdAt: serverTimestamp(),
-    });
-    transaction.set(cartRef, { type: 'pos_order', items: [], updatedAt: serverTimestamp() });
-    return { sale: { id: saleRef.id.slice(0, 8), totalOriginalPrice, paymentMethod } };
-  });
-}
-
-async function receive(body) {
-  const barcode = validText(body.barcode, 'Barcode', 128);
-  const name = validText(body.name, 'Product name');
-  const quantity = positiveNumber(body.quantity, 'quantity', { whole: true });
-  const unitCost = positiveNumber(body.unitCost, 'purchase cost', { zero: true });
-  const arrivalDate = todayLocal();
-  const supplierName = validText(body.supplierName, 'supplier name');
-  const manufactureDate = body.manufactureDate ? validDate(body.manufactureDate, 'manufacture date') : '';
-  const expiryDate = body.expiryDate ? validDate(body.expiryDate, 'expiry date') : '';
-  if (manufactureDate && expiryDate && expiryDate < manufactureDate) {
-    throw new Error('Expiry date must be on or after the manufacture date.');
-  }
-  const photoDataUrl = body.photoDataUrl || '';
-  if (typeof photoDataUrl !== 'string' || photoDataUrl.length > 100000 ||
-      (photoDataUrl && !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photoDataUrl))) {
-    throw new Error('Choose a smaller JPEG product photo.');
-  }
-  const ref = productRef(barcode);
-  const receiptRef = doc(collection(db(), 'receipts'));
-  return runTransaction(db(), async transaction => {
-    const existing = (await transaction.get(ref)).data();
-    const oldQuantity = Number(existing?.quantity) || 0;
-    const nextQuantity = oldQuantity + quantity;
-    if (!Number.isSafeInteger(nextQuantity)) throw new Error('The stock quantity is too large.');
-    const averageCost = existing?.unitCost == null || oldQuantity === 0
-      ? unitCost : ((Number(existing.unitCost) * oldQuantity) + unitCost * quantity) / nextQuantity;
-    const product = {
-      barcode, name, quantity: nextQuantity, originalPrice: existing?.originalPrice ?? null,
-      unitCost: averageCost, arrivalDate, supplierName,
-      manufactureDate: manufactureDate || existing?.manufactureDate || '',
-      expiryDate: expiryDate || existing?.expiryDate || '',
-      photoDataUrl: photoDataUrl || existing?.photoDataUrl || '', category: existing?.category || '',
-      updatedAt: serverTimestamp(),
-    };
-    transaction.set(ref, product);
-    transaction.set(receiptRef, {
-      barcode, productName: name, quantity, originalPrice: product.originalPrice,
-      unitCost, arrivalDate, supplierName, createdAt: serverTimestamp(),
-    });
-    return { product: shapeProduct(product), receipt: { id: receiptRef.id, quantity, supplierName, arrivalDate } };
-  });
-}
-
-async function sell(body) {
-  if (!Array.isArray(body.items) || !body.items.length || body.items.length > 100) {
-    throw new Error('Add between 1 and 100 products to the cart.');
-  }
-  const quantities = new Map();
-  const proposedPrices = new Map();
-  for (const item of body.items) {
-    const barcode = validText(item?.barcode, 'Barcode', 128);
-    const quantity = positiveNumber(item?.quantity, 'quantity', { whole: true });
-    quantities.set(barcode, (quantities.get(barcode) || 0) + quantity);
-    if (item?.originalPrice != null && item.originalPrice !== '') {
-      const price = positiveNumber(item.originalPrice, 'sale price', { zero: true });
-      if (proposedPrices.has(barcode) && proposedPrices.get(barcode) !== price) {
-        throw new Error(`Conflicting sale prices for ${barcode}.`);
-      }
-      proposedPrices.set(barcode, price);
-    }
-  }
-  const barcodes = [...quantities.keys()].sort();
-  const refs = barcodes.map(productRef);
-  const saleRef = doc(collection(db(), 'sales'));
-  return runTransaction(db(), async transaction => {
-    // Read every product before writing any, as Firestore transactions require.
-    const snapshots = [];
-    for (const ref of refs) snapshots.push(await transaction.get(ref));
-    let totalCents = 0, costCents = 0;
-    const items = snapshots.map((snapshot, index) => {
-      const product = snapshot.data();
-      const barcode = barcodes[index];
-      const quantity = quantities.get(barcode);
-      if (!product) throw new Error(`Barcode ${barcode} is not in inventory.`);
-      if (Number(product.quantity) < quantity) throw new Error(`Only ${product.quantity} ${product.name} in stock.`);
-      if (product.unitCost == null || !Number.isFinite(Number(product.unitCost))) {
-        throw new Error(`Purchase cost is missing for ${product.name}.`);
-      }
-      const price = product.originalPrice == null ? proposedPrices.get(barcode) : Number(product.originalPrice);
-      if (price == null || !Number.isFinite(price)) {
-        throw new Error(`Enter a sale price for ${product.name} before selling.`);
-      }
-      if (product.originalPrice != null && proposedPrices.has(barcode) && price !== proposedPrices.get(barcode)) {
-        throw new Error(`The sale price for ${product.name} was set on another device. Scan it again.`);
-      }
-      totalCents += Math.round(price * 100) * quantity;
-      costCents += Math.round(Number(product.unitCost) * 100) * quantity;
-      return { barcode, name: product.name, quantity,
-        originalPrice: price, unitCost: Number(product.unitCost) };
-    });
-    snapshots.forEach((snapshot, index) => {
-      transaction.update(snapshot.ref, {
-        quantity: Number(snapshot.data().quantity) - items[index].quantity,
-        originalPrice: items[index].originalPrice, updatedAt: serverTimestamp(),
-      });
-    });
-    const totalOriginalPrice = totalCents / 100;
-    transaction.set(saleRef, {
-      items, totalOriginalPrice, grossProfit: (totalCents - costCents) / 100,
-      day: todayLocal(), createdAt: serverTimestamp(),
-    });
-    return { sale: { id: saleRef.id.slice(0, 8), totalOriginalPrice } };
-  });
-}
-
-async function addExpense(body) {
-  const title = validText(body.title, 'Expense name');
-  const amount = positiveNumber(body.amount, 'amount');
-  const expenseDate = validDate(body.expenseDate, 'expense date');
-  const ref = await addDoc(collection(db(), 'expenses'), {
-    title, amount, expenseDate, createdAt: serverTimestamp(),
-  });
-  return { expense: { id: ref.id, title, amount, expenseDate } };
+  let active = true, stop = () => {};
+  requireRetailUser().then(() => {
+    if (active) stop = onSnapshot(posRef(), snapshot => onChange(posItems(snapshot.data())), onError);
+  }).catch(error => { if (active) onError(error); });
+  return () => { active = false; stop(); };
 }
 
 // Keep the existing screen contract while replacing the SQL HTTP API with Firestore.
 export async function api(path, options = {}) {
   const url = new URL(path, location.origin);
   const method = (options.method || 'GET').toUpperCase();
+  const user = await requireRetailUser();
+  const token = await user.getIdTokenResult();
+  const cashierCatalogRead = method === 'GET' && url.pathname === '/api/inventory' && token.claims.retailRole === 'cashier';
+  if (method !== 'GET' || cashierCatalogRead) {
+    const idToken = await user.getIdToken();
+    const response = await fetch(`${url.pathname}${url.search}`, {
+      method,
+      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: options.body || '{}',
+      credentials: 'same-origin',
+    });
+    let result = {};
+    try { result = await response.json(); } catch { /* response may be empty */ }
+    if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
+    return result;
+  }
   if (url.pathname === '/api/health' && method === 'GET') {
     await getDocFromServer(doc(db(), 'meta', 'connection'));
     return { ok: true };
@@ -808,17 +536,5 @@ export async function api(path, options = {}) {
     return { items: posItems(cart.data()), products: sortedProducts(rows(products)) };
   }
   if (url.pathname === '/api/finance' && method === 'GET') return getFinance();
-  const body = JSON.parse(options.body || '{}');
-  if (url.pathname === '/api/pos/scan' && method === 'POST') return addPosScan(body);
-  if (url.pathname === '/api/pos/adjust' && method === 'POST') return adjustPos(body);
-  if (url.pathname === '/api/pos/checkout' && method === 'POST') return checkoutPos(body);
-  if (url.pathname === '/api/pos' && method === 'DELETE') return clearPos();
-  if (url.pathname === '/api/inventory' && method === 'DELETE') return removeInventory(body);
-  if (url.pathname === '/api/inventory/category' && method === 'PATCH') return assignInventoryCategory(body);
-  if (url.pathname === '/api/finance/price' && method === 'PATCH') return setSellingPrice(body);
-  if (url.pathname === '/api/finance/plan' && method === 'PUT') return saveMonthlyPlan(body);
-  if (url.pathname === '/api/inventory' && method === 'POST') return receive(body);
-  if (url.pathname === '/api/sales' && method === 'POST') return sell(body);
-  if (url.pathname === '/api/expenses' && method === 'POST') return addExpense(body);
   throw new Error('This operation is not available.');
 }

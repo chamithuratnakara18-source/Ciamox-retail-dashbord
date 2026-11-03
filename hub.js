@@ -1,4 +1,5 @@
 import { api, watchPos, watchRetailFlow } from './firebase-store.js';
+import { auth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from './auth-guard.js';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
@@ -6,6 +7,14 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   const posScreen = document.getElementById('posScreen');
   const financeScreen = document.getElementById('financeScreen');
   const connectionStatus = document.getElementById('connectionStatus');
+  const connectionStatusText = document.getElementById('connectionStatusText');
+  const hubLayout = document.getElementById('hubLayout');
+  const authGate = document.getElementById('authGate');
+  const authForm = document.getElementById('authForm');
+  const authMessage = document.getElementById('authMessage');
+  const authSubmit = document.getElementById('authSubmit');
+  const signOutButton = document.getElementById('signOutButton');
+  const authSignOutButton = document.getElementById('authSignOutButton');
   const dashboardError = document.getElementById('dashboardError');
   const inventoryTableBody = document.getElementById('inventoryTableBody');
   const inventoryEmpty = document.getElementById('inventoryEmpty');
@@ -41,6 +50,11 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
   let alertFilter = 'all';
   let overviewData = null;
   let bestData = null;
+  let stopRetailListener = () => {};
+  let stopPosListener = () => {};
+  let listenersStarted = false;
+  let authCheck = 0;
+  let hadAuthenticatedSession = false;
   const overviewAnchorInput = document.getElementById('overviewAnchor');
   const bestAnchorInput = document.getElementById('bestSellingAnchor');
 
@@ -217,7 +231,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
 
   function setDatabaseStatus(online, message) {
     connectionStatus.classList.toggle('db-offline', !online);
-    connectionStatus.innerHTML = `<i></i> ${message}`;
+    connectionStatusText.textContent = message;
   }
 
   function svgNode(tag, attributes = {}) {
@@ -682,7 +696,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
       const card = document.createElement('button'); card.type = 'button'; card.className = 'pos-product';
       const available = Number(product.quantity) > 0;
       const priced = product.originalPrice != null && Number.isFinite(Number(product.originalPrice));
-      const costed = product.unitCost != null && Number.isFinite(Number(product.unitCost));
+      const costed = product.hasUnitCost === true || (product.unitCost != null && Number.isFinite(Number(product.unitCost)));
       card.disabled = posBusy || !available || !priced || !costed;
       card.setAttribute('aria-label', `Add ${product.name} to the order${card.disabled ? ' (unavailable)' : ''}`);
       card.append(productPicture(product, 'pos-product-image'));
@@ -1176,29 +1190,112 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js';
     }
   }
 
-  watchRetailFlow(() => {
-    if (currentView === 'dashboard') void refreshDashboard();
-    if (currentView === 'inventory') void refreshInventory();
-    if (currentView === 'pos') void refreshPosProducts();
-    if (currentView === 'finance' && !financePlanDirty && !document.activeElement?.classList.contains('finance-price-input')) void refreshFinance();
-  }, error => {
-    setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
-    dashboardError.textContent = `Firestore is unavailable: ${error.message}`;
-    dashboardError.classList.remove('hidden');
-  });
-  try {
-    watchPos(items => {
+  function stopLiveData() {
+    stopRetailListener(); stopRetailListener = () => {};
+    stopPosListener(); stopPosListener = () => {};
+    listenersStarted = false;
+  }
+
+  function startLiveData(role) {
+    if (listenersStarted) return;
+    listenersStarted = true;
+    const cashier = role === 'cashier';
+    document.querySelectorAll('[data-view="dashboard"], [data-view="inventory"], [data-view="finance"]').forEach(button => {
+      button.classList.toggle('hidden', cashier);
+    });
+    if (!cashier) {
+      stopRetailListener = watchRetailFlow(() => {
+        setDatabaseStatus(true, 'FIREBASE CONNECTED');
+        if (currentView === 'dashboard') void refreshDashboard();
+        if (currentView === 'inventory') void refreshInventory();
+        if (currentView === 'pos') void refreshPosProducts();
+        if (currentView === 'finance' && !financePlanDirty && !document.activeElement?.classList.contains('finance-price-input')) void refreshFinance();
+      }, error => {
+        setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
+        dashboardError.textContent = `Firestore is unavailable: ${error.message}`;
+        dashboardError.classList.remove('hidden');
+      });
+    }
+    stopPosListener = watchPos(items => {
       posItems = items;
+      setDatabaseStatus(true, 'FIREBASE CONNECTED');
       renderPosOrder();
       if (currentView === 'pos') document.getElementById('posConnectionLabel').textContent = 'Live POS order';
     }, error => {
+      setDatabaseStatus(false, 'FIREBASE DISCONNECTED');
       document.getElementById('posConnectionLabel').textContent = 'POS disconnected';
       showPosMessage(`Live order is unavailable: ${error.message}`, true);
     });
-  } catch (error) {
-    document.getElementById('posConnectionLabel').textContent = 'POS disconnected';
-    showPosMessage(`Live order is unavailable: ${error.message}`, true);
+    syncOverviewControls();
+    void setMainView(cashier ? 'pos' : 'dashboard');
   }
-  syncOverviewControls();
-  void setMainView('dashboard');
+
+  async function handleSignIn(event) {
+    event.preventDefault();
+    authMessage.textContent = '';
+    authSubmit.disabled = true;
+    authSubmit.textContent = 'Signing in…';
+    try {
+      await signInWithEmailAndPassword(auth, document.getElementById('authEmail').value.trim(), document.getElementById('authPassword').value);
+    } catch (error) {
+      authMessage.textContent = error?.code === 'auth/invalid-credential'
+        ? 'Email or password is incorrect.' : 'Could not sign in. Check your connection and account details.';
+    } finally {
+      authSubmit.disabled = false;
+      authSubmit.textContent = 'Sign in';
+    }
+  }
+  authForm.addEventListener('submit', handleSignIn);
+  const doSignOut = () => signOut(auth).catch(() => { authMessage.textContent = 'Could not sign out. Try again.'; });
+  signOutButton.addEventListener('click', doSignOut);
+  authSignOutButton.addEventListener('click', doSignOut);
+  onAuthStateChanged(auth, async user => {
+    const check = ++authCheck;
+    if (!user) {
+      stopLiveData();
+      if (hadAuthenticatedSession) { window.location.reload(); return; }
+      hubLayout.classList.add('hidden');
+      authGate.classList.remove('hidden');
+      authSignOutButton.classList.add('hidden');
+      signOutButton.classList.add('hidden');
+      authMessage.textContent = '';
+      connectionStatus.classList.add('db-offline');
+      connectionStatusText.textContent = 'SIGN IN REQUIRED';
+      return;
+    }
+    hadAuthenticatedSession = true;
+    authMessage.textContent = 'Checking store access…';
+    try {
+      const token = await user.getIdTokenResult(true);
+      if (check !== authCheck) return;
+      const role = token.claims.retailRole;
+      if (!['owner', 'admin', 'manager', 'cashier'].includes(role)) {
+        stopLiveData();
+        hubLayout.classList.add('hidden');
+        authGate.classList.remove('hidden');
+        authSignOutButton.classList.remove('hidden');
+        signOutButton.classList.add('hidden');
+        authMessage.textContent = 'Signed in, but this account has no RetailFlow role. Ask your administrator to grant access.';
+        connectionStatus.classList.add('db-offline');
+        connectionStatusText.textContent = 'ACCESS NOT GRANTED';
+        return;
+      }
+      authMessage.textContent = '';
+      authGate.classList.add('hidden');
+      hubLayout.classList.remove('hidden');
+      signOutButton.classList.remove('hidden');
+      authSignOutButton.classList.add('hidden');
+      setDatabaseStatus(false, 'FIREBASE CONNECTING');
+      connectionStatus.title = user.email || '';
+      connectionStatusText.textContent = `SIGNED IN · ${String(role).toUpperCase()}`;
+      startLiveData(role);
+    } catch {
+      if (check !== authCheck) return;
+      stopLiveData();
+      hubLayout.classList.add('hidden');
+      authGate.classList.remove('hidden');
+      authSignOutButton.classList.remove('hidden');
+      authMessage.textContent = 'Could not verify store access. Check your connection, then try signing in again.';
+    }
+  });
 })();
