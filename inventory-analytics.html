@@ -8,78 +8,92 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600&display=swap" rel="stylesheet">
 <style>
-/* Layout idea: one scrolling page, summary KPIs first, then four analysis panels, each with a chart over a table. */
-:root{--bg:#f4f3ef;--panel:#ffffff;--ink:#16202b;--muted:#5d6672;--line:#e0ded7;--soft:#eeede8;--accent:#185fa5;--font:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:light}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#11151a;--panel:#1a2027;--ink:#e8ecf0;--muted:#9aa5b1;--line:#2b333c;--soft:#222a33;--accent:#6aa6e8;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#11151a;--panel:#1a2027;--ink:#e8ecf0;--muted:#9aa5b1;--line:#2b333c;--soft:#222a33;--accent:#6aa6e8;color-scheme:dark}
+/* Dashboard-matched visual system; analytics data and chart behavior remain unchanged. */
+:root{--bg:#f3f4f3;--panel:#fff;--ink:#172630;--muted:#82919c;--line:#e2e6e6;--soft:#f7f8f8;--accent:#2bbd8d;--font:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:light}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5}
-.wrap{max-width:1120px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5}
+.wrap{max-width:1600px;margin:0 auto;padding:30px 34px 48px;display:flex;flex-direction:column;gap:18px}
 header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
-h1{font-size:24px;font-weight:600;margin:0;text-wrap:balance}
-h2{font-size:17px;font-weight:600;margin:0}
-.sub{font-size:13px;color:var(--muted);margin:2px 0 0}
-.nav{display:flex;gap:8px;flex-wrap:wrap}
+.eyebrow{display:flex;align-items:center;gap:11px;margin-bottom:10px;color:#8b9ba4;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase}
+.eyebrow i{width:28px;height:3px;border-radius:4px;background:#38c997}
+h1{font-size:42px;font-weight:800;letter-spacing:-.055em;line-height:1.08;margin:0;text-wrap:balance}
+h2{font:700 24px/1.2 Georgia,serif;margin:0;color:#172630}
+.sub{font-size:14px;color:var(--muted);margin:5px 0 0}
+.updated-pill{align-self:center;padding:9px 15px;border:1px solid var(--line);border-radius:25px;background:#fff;color:#778793;font-size:12px;white-space:nowrap}
+.analytics-toolbar{display:flex;align-items:center;gap:15px;flex-wrap:wrap;min-height:68px;padding:13px 18px;border:1px solid var(--line);border-radius:20px;background:#fff}
+.toolbar-label{font-size:14px;font-weight:700;color:#243640}
+.nav{display:flex;gap:7px;flex-wrap:wrap}
 button{font:inherit;color:var(--ink)}
-.chipbtn{font-size:13px;padding:6px 12px;border:1px solid var(--line);background:var(--panel);border-radius:8px;cursor:pointer}
-.chipbtn:hover{border-color:var(--muted)}
-.chipbtn.on{background:var(--soft);border-color:var(--muted)}
+.chipbtn{font-size:12px;font-weight:650;padding:8px 13px;border:1px solid var(--line);background:#fff;border-radius:22px;cursor:pointer;transition:background .15s,border-color .15s}
+.chipbtn:hover{border-color:#aebdc3;background:#f8faf9}
+.chipbtn.on{background:#14243b;border-color:#14243b;color:#fff}
 button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
-.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left-width:4px}
-.kpi span{font-size:12px;color:var(--muted);display:block}
-.kpi b{font-size:24px;font-weight:600;display:block;font-variant-numeric:tabular-nums}
-.kpi em{font-size:12px;font-style:normal;color:var(--muted)}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
-.card .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px}
-.ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
-select{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
-.tile{position:absolute;border-radius:6px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;line-height:1.2;color:#fff}
-.tile span{color:inherit}
-.tile.go{cursor:pointer}.tile.go:hover{filter:brightness(1.15)}
+.period-control{display:flex;align-items:center;gap:8px;margin-left:auto;color:#63747f;font-size:12px;font-weight:650}
+select{font:inherit;font-size:12px;font-weight:650;padding:9px 12px;border:1px solid #dfe5e7;border-radius:10px;background:#fff;color:#243640}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.kpi{min-width:0;min-height:138px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:19px 22px;box-shadow:0 8px 24px #17263008}
+.kpi span{font-size:14px;color:#40525e;display:block}
+.kpi b{font-size:36px;font-weight:750;letter-spacing:-.04em;line-height:1.2;display:block;margin:14px 0 8px;font-variant-numeric:tabular-nums}
+.kpi em{font-size:12px;font-style:normal;color:#33a766;font-weight:650}
+.card{min-width:0;background:#fff;border:1px solid var(--line);border-radius:22px;padding:20px 22px;box-shadow:0 9px 28px #17263008}
+.card .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px}
+.card .top .sub{font-size:12px}
+.analytics-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px}
+.ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.tile{position:absolute;border-radius:7px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;line-height:1.2;color:#fff}
+.tile span{color:inherit}.tile.go{cursor:pointer}.tile.go:hover{filter:brightness(1.15)}
 .tn{overflow-wrap:anywhere;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3}
 .rel{position:relative;width:100%}
-#back1{position:absolute;left:0;top:0;width:100%;background:rgba(0,0,0,.4);z-index:5;display:none;border-radius:8px}
-#pop1{position:absolute;left:50%;top:12px;transform:translateX(-50%);width:min(620px,94%);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;z-index:6;display:none;box-shadow:0 8px 24px rgba(0,0,0,.25)}
-table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
-th{font-weight:400;font-size:12px;color:var(--muted);text-align:right;padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:7px 6px;text-align:right;border-bottom:1px solid var(--line)}
-th:first-child,td:first-child{text-align:left}
-.tw{overflow-x:auto;margin-top:14px}
+#back1{position:absolute;left:0;top:0;width:100%;background:rgba(13,26,38,.42);z-index:5;display:none;border-radius:12px}
+#pop1{position:absolute;left:50%;top:12px;transform:translateX(-50%);width:min(620px,94%);background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px 18px;z-index:6;display:none;box-shadow:0 18px 54px #17263033}
+table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+th{font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#8797a1;text-align:right;padding:9px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 8px;text-align:right;border-bottom:1px solid #edf0f0;color:#40525e}
+th:first-child,td:first-child{text-align:left}.tw{overflow-x:auto;margin-top:13px}
 tr.go{cursor:pointer}tr.go:hover td{background:var(--soft)}
-.bd{display:inline-block;min-width:24px;text-align:center;border-radius:6px;padding:1px 9px;font-size:12px;color:#1f2a1a}
-.st{display:inline-block;border-radius:6px;padding:1px 9px;font-size:12px}
-.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
-.abcT{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px}
-.abcT div{border-radius:8px;padding:9px 12px;color:#1f2a1a;font-size:13px}
-.abcT b{display:block;font-size:15px;font-weight:600}
-#bc2{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;flex-wrap:wrap}
-.bk{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
-.bkb{background:var(--soft);border:2px solid transparent;border-radius:8px;padding:9px 12px;cursor:pointer;text-align:left}
-.bkb:hover{border-color:var(--line)}
-.bkb.on{border-color:var(--ink)}
-.bkb span{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
-.bkb i{width:10px;height:10px;border-radius:2px;display:inline-block}
-.bkb b{font-size:20px;font-weight:600;display:block}
-.bkb em{font-size:11px;font-style:normal;color:var(--muted)}
-.lg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:6px}
-.lg span{display:flex;align-items:center;gap:5px}.lg i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.bd{display:inline-block;min-width:28px;text-align:center;border-radius:14px;padding:3px 9px;font-size:11px;font-weight:700;color:#1f2a1a}
+.st{display:inline-block;border-radius:14px;padding:4px 9px;font-size:10px;font-weight:700}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.abcT{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px;margin-bottom:12px}
+.abcT div{border-radius:12px;padding:11px 13px;color:#1f2a1a;font-size:11px}
+.abcT b{display:block;font-size:14px;font-weight:700}
+#bc2{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;flex-wrap:wrap}
+.bk{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+.bkb{background:#f8faf9;border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;text-align:left}
+.bkb:hover{border-color:#bdc9cc}.bkb.on{border-color:#182943;box-shadow:inset 0 0 0 1px #182943;background:#f7f8fb}
+.bkb span{font-size:11px;color:#5d6e78;display:flex;align-items:center;gap:6px}.bkb i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.bkb b{font-size:19px;font-weight:700;display:block}.bkb em{font-size:10px;font-style:normal;color:#84939c}
+.lg{display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:#788994;margin-bottom:7px}
+.lg span{display:flex;align-items:center;gap:5px}.lg i{width:9px;height:9px;border-radius:50%;display:inline-block}
+@media(max-width:1050px){.wrap{padding:24px 22px 40px}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.analytics-grid{grid-template-columns:1fr}}
+@media(max-width:600px){.wrap{padding:18px 13px 30px;gap:13px}h1{font-size:32px}.kpis{gap:9px}.kpi{min-height:118px;padding:14px}.kpi b{font-size:27px;margin:10px 0 6px}.card{padding:15px 13px;border-radius:17px}.analytics-toolbar{padding:12px;gap:10px}.period-control{margin-left:0;width:100%;justify-content:space-between}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
+  <header class="page-header">
     <div>
-      <h1>Inventory control dashboard</h1>
-      <p class="sub">Loading live stock, sales and expiry records from Firebase.</p>
+      <div class="eyebrow"><i></i> STOCK CONTROL</div>
+      <h1>Inventory analytics</h1>
+      <p id="analyticsStatus" class="sub">Stock value, expiry risk and replenishment at a glance.</p>
     </div>
+    <span id="updatedStatus" class="updated-pill">Connecting to Firebase…</span>
+  </header>
+
+  <div class="analytics-toolbar">
+    <strong class="toolbar-label">Analytics view</strong>
     <nav class="nav" aria-label="Jump to section">
       <button class="chipbtn" data-t="s1">Categories</button>
       <button class="chipbtn" data-t="s2">ABC analysis</button>
       <button class="chipbtn" data-t="s3">Expiry</button>
       <button class="chipbtn" data-t="s4">Running out</button>
     </nav>
-  </header>
+    <label class="period-control" for="inventoryAnalyticsDays">Stockout window
+      <select id="inventoryAnalyticsDays" aria-label="Stockout sales period">
+        <option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option>
+      </select>
+    </label>
+  </div>
 
   <section class="kpis" id="kpis" aria-label="Key figures"></section>
 
@@ -88,17 +102,18 @@ tr.go{cursor:pointer}tr.go:hover td{background:var(--soft)}
       <div><h2>Stock value by category</h2><p class="sub">Darker means bigger. The percentage on a tile is the real share of stock value. Click a tile to open its products.</p></div>
       <div class="ctl"><span>Tile size</span><button class="chipbtn on" id="t1">Easy to read</button><button class="chipbtn" id="t2">True value</button></div>
     </div>
-    <div class="rel" id="w1" style="height:540px">
+    <div class="rel" id="w1" style="height:400px">
       <div id="tm1" style="position:absolute;left:0;top:0"></div>
       <div id="back1"></div><div id="pop1"></div>
     </div>
   </section>
 
+  <div class="analytics-grid">
   <section class="card" id="s2">
     <div class="top"><div><h2>ABC analysis</h2><p class="sub">Categories ranked by value. A holds the top 70% of value, B the next 20%, C the last 10%. Click a tile to see its products.</p></div></div>
     <div id="bc2"></div>
     <div class="abcT" id="abcT"></div>
-    <div class="rel" id="w2" style="height:440px">
+    <div class="rel" id="w2" style="height:360px">
       <div id="fA" style="position:absolute;background:#c6e5b3"></div><div id="fB" style="position:absolute;background:#fbf3a5"></div><div id="fC" style="position:absolute;background:#d9d6f7"></div>
       <div id="zA" style="position:absolute"></div><div id="zB" style="position:absolute"></div><div id="zC" style="position:absolute"></div>
       <canvas id="cv2" style="position:absolute;left:0;top:0;pointer-events:none" role="img" aria-label="Green A, yellow B and purple C zones, each holding tiles for its categories, plotted as cumulative value percent against percent of items">A, B and C zones with category tiles.</canvas>
@@ -111,15 +126,16 @@ tr.go{cursor:pointer}tr.go:hover td{background:var(--soft)}
       <div class="ctl"><label for="ecat">Category</label><select id="ecat"></select></div></div>
     <div class="bk" id="bk3"></div>
     <div class="lg"><span id="ecnt"></span></div>
-    <div class="rel" id="w3" style="height:480px"><canvas id="cv3" role="img" aria-label="Bar chart of days left before expiry for the products closest to expiring, colored by urgency">Products ranked by days left until expiry.</canvas></div>
+    <div class="rel" id="w3" style="height:390px"><canvas id="cv3" role="img" aria-label="Bar chart of days left before expiry for the products closest to expiring, colored by urgency">Products ranked by days left until expiry.</canvas></div>
     <div class="tw"><table><thead><tr><th>Product</th><th>Category</th><th>Expiry date</th><th>Days left</th><th>Qty</th><th>Value at risk</th><th>Status</th></tr></thead><tbody id="tb3"></tbody></table></div>
   </section>
+  </div>
 
   <section class="card" id="s4">
     <div class="top"><div><h2>Running out of stock</h2><p class="sub">Days of stock left is stock on hand divided by average daily sales. Movement class: A fast, B medium, C slow.</p></div>
       <div class="ctl"><span>Movement</span><button class="chipbtn on" data-c="ALL">All</button><button class="chipbtn" data-c="A">A fast</button><button class="chipbtn" data-c="B">B medium</button><button class="chipbtn" data-c="C">C slow</button></div></div>
     <div class="lg"><span><i style="background:#3B6D11"></i>A fast</span><span><i style="background:#BA7517"></i>B medium</span><span><i style="background:#534AB7"></i>C slow</span><span id="rcnt"></span></div>
-    <div class="rel" id="w4" style="height:420px"><canvas id="cv4" role="img" aria-label="Bar chart of days of stock left for each product, colored by movement class">Products ranked by days of stock left.</canvas></div>
+    <div class="rel" id="w4" style="height:360px"><canvas id="cv4" role="img" aria-label="Bar chart of days of stock left for each product, colored by movement class">Products ranked by days of stock left.</canvas></div>
     <div class="tw"><table><thead><tr><th>Product</th><th>Movement</th><th>Stock on hand</th><th>Sales per day</th><th>Days left</th><th>Reorder</th></tr></thead><tbody id="tb4"></tbody></table></div>
   </section>
 </div>
@@ -145,7 +161,9 @@ const EB=[{k:'exp',t:'Expired',c:'#8a1c1c',tx:'#fff'},{k:'b7',t:'Within 7 days',
 const ESL={exp:'Expired',b7:'Critical',b30:'Soon',b90:'Watch',ok:'OK'};
 const bkt=d=>d<0?'exp':(d<=7?'b7':(d<=30?'b30':(d<=90?'b90':'ok')));
 const ecol=k=>EB.find(b=>b.k===k);
-const status=document.querySelector('header .sub');
+const status=document.getElementById('analyticsStatus');
+const updatedStatus=document.getElementById('updatedStatus');
+let inventoryAnalyticsDays=30,loadRequest=0;
 let CATS=[], EXP=[], RUN=[], PRODUCTS=[], summaryData={};
 function classify(items){
  items.sort((a,b)=>b.v-a.v);
@@ -187,8 +205,6 @@ function tiles(el,items,W,H,o){
 }
 function renderKpis(){
  const total=Number(summaryData.knownStockValue)||0;
- const classified=classify(CATS.map(c=>({name:c.name,v:c.knownValue})));
- const aN=classified.filter(i=>i.cls==='A'&&i.v>0).length;
  const expired=EXP.filter(i=>i.k==='exp'),w7=EXP.filter(i=>i.k==='b7');
  const run=RUN.filter(r=>r.days<=7);
  const stockValue=summaryData.stockValue==null?'Incomplete':f$(total);
@@ -196,8 +212,7 @@ function renderKpis(){
   ['Stock value',stockValue,summaryData.missingCostProducts?summaryData.missingCostProducts+' stocked product costs missing':CATS.length+' categories','#185fa5'],
   ['Expired',expired.length+' products',f$(expired.reduce((a,b)=>a+b.val,0))+' at recorded cost','#8a1c1c'],
   ['Expiring within 7 days',w7.length+' products',f$(w7.reduce((a,b)=>a+b.val,0))+' at recorded cost','#d03b3b'],
-  ['Running out within 7 days',run.length+' products','Based on recent recorded sales','#ec835a'],
-  ['Class A categories',aN+' of '+CATS.length,'Top categories by known stock value','#3B6D11']];
+  ['Running out within 7 days',run.length+' products','Based on recent recorded sales','#ec835a']];
  document.getElementById('kpis').innerHTML=cards.map(x=>'<div class="kpi" style="border-left-color:'+x[3]+'"><span>'+x[0]+'</span><b>'+esc(x[1])+'</b><em>'+esc(x[2])+'</em></div>').join('');
  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>document.getElementById(b.dataset.t).scrollIntoView({behavior:'smooth',block:'start'}));
 }
@@ -306,22 +321,27 @@ function renderRunout(){
  draw();
 }
 async function loadInventoryDashboard(){
+ const request=++loadRequest;
  try{
   if(typeof Chart==='undefined')throw new Error('Chart library did not load. Check your internet connection and refresh.');
   const [analytics,inventory]=await Promise.all([
-   api('/api/inventory/analytics?days=30'),
+   api('/api/inventory/analytics?days='+inventoryAnalyticsDays),
    api('/api/inventory')
   ]);
+  if(request!==loadRequest)return;
   summaryData=analytics.summary||{};PRODUCTS=inventory.products||[];
   CATS=(analytics.categories||[]).map(c=>({name:c.name,knownValue:Number(c.knownValue)||0,productCount:Number(c.productCount)||0,units:Number(c.units)||0,complete:c.complete!==false}));
   EXP=(analytics.expiryItems||[]).map(i=>({name:i.name,cat:i.category||'Uncategorized',days:Number(i.daysLeft)||0,date:i.expiryDate,qty:Number(i.quantity)||0,val:i.valueAtRisk==null?null:Number(i.valueAtRisk),k:bkt(Number(i.daysLeft)||0)}));
   RUN=(analytics.stockoutItems||[]).filter(i=>i.daysLeft!=null&&Number.isFinite(Number(i.daysLeft))).map(i=>({name:i.name,cls:i.movementClass||'C',stock:Number(i.quantity)||0,sold:Number(i.unitsSold)||0,daily:Number(i.unitsPerDay)||0,days:Number(i.daysLeft)}));
-  status.textContent='Live Firebase inventory · Updated '+new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})+(summaryData.missingCostProducts?' · '+summaryData.missingCostProducts+' product costs missing':'');
+  status.textContent='Live Firebase inventory'+(summaryData.missingCostProducts?' · '+summaryData.missingCostProducts+' product costs missing':'');
+  updatedStatus.textContent='Updated '+new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  updatedStatus.style.color='';
   renderKpis();renderCategoryTreemap();renderAbc();renderExpiry();renderRunout();
-  const missing=document.getElementById('kpis');
-  if(!PRODUCTS.length){missing.insertAdjacentHTML('afterend','<p class="sub">No inventory products found yet. Add products in Inbound to populate these charts.</p>');}
- }catch(error){status.textContent='Analytics unavailable: '+error.message;status.style.color='#a33';}
+  document.getElementById('inventoryAnalyticsEmpty')?.remove();
+  if(!PRODUCTS.length){const empty=document.createElement('section');empty.id='inventoryAnalyticsEmpty';empty.className='card';empty.innerHTML='<h2>No inventory yet</h2><p class="sub">Add products in Inbound to populate this analytics dashboard.</p>';document.getElementById('kpis').after(empty);}
+ }catch(error){if(request!==loadRequest)return;status.textContent='Analytics unavailable: '+error.message;updatedStatus.textContent='Firebase disconnected';updatedStatus.style.color='#c6533b';}
 }
+document.getElementById('inventoryAnalyticsDays').addEventListener('change',event=>{inventoryAnalyticsDays=Number(event.currentTarget.value);loadInventoryDashboard();});
 loadInventoryDashboard();
 new ResizeObserver(()=>parent.postMessage({type:'inventory-analytics-height',height:document.documentElement.scrollHeight},location.origin)).observe(document.body);
 window.addEventListener('message',event=>{if(event.origin===location.origin&&event.data?.type==='inventory-analytics-refresh')location.reload();});
