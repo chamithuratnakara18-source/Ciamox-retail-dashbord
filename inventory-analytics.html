@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventory Control Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one scrolling page, summary KPIs first, then four analysis panels, each with a chart over a table. */
+:root{--bg:#f4f3ef;--panel:#ffffff;--ink:#16202b;--muted:#5d6672;--line:#e0ded7;--soft:#eeede8;--accent:#185fa5;--font:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#11151a;--panel:#1a2027;--ink:#e8ecf0;--muted:#9aa5b1;--line:#2b333c;--soft:#222a33;--accent:#6aa6e8;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#11151a;--panel:#1a2027;--ink:#e8ecf0;--muted:#9aa5b1;--line:#2b333c;--soft:#222a33;--accent:#6aa6e8;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+h1{font-size:24px;font-weight:600;margin:0;text-wrap:balance}
+h2{font-size:17px;font-weight:600;margin:0}
+.sub{font-size:13px;color:var(--muted);margin:2px 0 0}
+.nav{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;color:var(--ink)}
+.chipbtn{font-size:13px;padding:6px 12px;border:1px solid var(--line);background:var(--panel);border-radius:8px;cursor:pointer}
+.chipbtn:hover{border-color:var(--muted)}
+.chipbtn.on{background:var(--soft);border-color:var(--muted)}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left-width:4px}
+.kpi span{font-size:12px;color:var(--muted);display:block}
+.kpi b{font-size:24px;font-weight:600;display:block;font-variant-numeric:tabular-nums}
+.kpi em{font-size:12px;font-style:normal;color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px}
+.ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+select{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+.tile{position:absolute;border-radius:6px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;line-height:1.2;color:#fff}
+.tile span{color:inherit}
+.tile.go{cursor:pointer}.tile.go:hover{filter:brightness(1.15)}
+.tn{overflow-wrap:anywhere;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3}
+.rel{position:relative;width:100%}
+#back1{position:absolute;left:0;top:0;width:100%;background:rgba(0,0,0,.4);z-index:5;display:none;border-radius:8px}
+#pop1{position:absolute;left:50%;top:12px;transform:translateX(-50%);width:min(620px,94%);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;z-index:6;display:none;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th{font-weight:400;font-size:12px;color:var(--muted);text-align:right;padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 6px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+.tw{overflow-x:auto;margin-top:14px}
+tr.go{cursor:pointer}tr.go:hover td{background:var(--soft)}
+.bd{display:inline-block;min-width:24px;text-align:center;border-radius:6px;padding:1px 9px;font-size:12px;color:#1f2a1a}
+.st{display:inline-block;border-radius:6px;padding:1px 9px;font-size:12px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+.abcT{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px}
+.abcT div{border-radius:8px;padding:9px 12px;color:#1f2a1a;font-size:13px}
+.abcT b{display:block;font-size:15px;font-weight:600}
+#bc2{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;flex-wrap:wrap}
+.bk{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.bkb{background:var(--soft);border:2px solid transparent;border-radius:8px;padding:9px 12px;cursor:pointer;text-align:left}
+.bkb:hover{border-color:var(--line)}
+.bkb.on{border-color:var(--ink)}
+.bkb span{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.bkb i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.bkb b{font-size:20px;font-weight:600;display:block}
+.bkb em{font-size:11px;font-style:normal;color:var(--muted)}
+.lg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:6px}
+.lg span{display:flex;align-items:center;gap:5px}.lg i{width:10px;height:10px;border-radius:2px;display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Inventory control dashboard</h1>
+      <p class="sub">Loading live stock, sales and expiry records from Firebase.</p>
+    </div>
+    <nav class="nav" aria-label="Jump to section">
+      <button class="chipbtn" data-t="s1">Categories</button>
+      <button class="chipbtn" data-t="s2">ABC analysis</button>
+      <button class="chipbtn" data-t="s3">Expiry</button>
+      <button class="chipbtn" data-t="s4">Running out</button>
+    </nav>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Key figures"></section>
+
+  <section class="card" id="s1">
+    <div class="top">
+      <div><h2>Stock value by category</h2><p class="sub">Darker means bigger. The percentage on a tile is the real share of stock value. Click a tile to open its products.</p></div>
+      <div class="ctl"><span>Tile size</span><button class="chipbtn on" id="t1">Easy to read</button><button class="chipbtn" id="t2">True value</button></div>
+    </div>
+    <div class="rel" id="w1" style="height:540px">
+      <div id="tm1" style="position:absolute;left:0;top:0"></div>
+      <div id="back1"></div><div id="pop1"></div>
+    </div>
+  </section>
+
+  <section class="card" id="s2">
+    <div class="top"><div><h2>ABC analysis</h2><p class="sub">Categories ranked by value. A holds the top 70% of value, B the next 20%, C the last 10%. Click a tile to see its products.</p></div></div>
+    <div id="bc2"></div>
+    <div class="abcT" id="abcT"></div>
+    <div class="rel" id="w2" style="height:440px">
+      <div id="fA" style="position:absolute;background:#c6e5b3"></div><div id="fB" style="position:absolute;background:#fbf3a5"></div><div id="fC" style="position:absolute;background:#d9d6f7"></div>
+      <div id="zA" style="position:absolute"></div><div id="zB" style="position:absolute"></div><div id="zC" style="position:absolute"></div>
+      <canvas id="cv2" style="position:absolute;left:0;top:0;pointer-events:none" role="img" aria-label="Green A, yellow B and purple C zones, each holding tiles for its categories, plotted as cumulative value percent against percent of items">A, B and C zones with category tiles.</canvas>
+    </div>
+    <div class="tw"><table><thead id="th2"></thead><tbody id="tb2"></tbody></table></div>
+  </section>
+
+  <section class="card" id="s3">
+    <div class="top"><div><h2>Closest to expiry</h2><p class="sub">Days are counted from today. Click a box to filter by urgency.</p></div>
+      <div class="ctl"><label for="ecat">Category</label><select id="ecat"></select></div></div>
+    <div class="bk" id="bk3"></div>
+    <div class="lg"><span id="ecnt"></span></div>
+    <div class="rel" id="w3" style="height:480px"><canvas id="cv3" role="img" aria-label="Bar chart of days left before expiry for the products closest to expiring, colored by urgency">Products ranked by days left until expiry.</canvas></div>
+    <div class="tw"><table><thead><tr><th>Product</th><th>Category</th><th>Expiry date</th><th>Days left</th><th>Qty</th><th>Value at risk</th><th>Status</th></tr></thead><tbody id="tb3"></tbody></table></div>
+  </section>
+
+  <section class="card" id="s4">
+    <div class="top"><div><h2>Running out of stock</h2><p class="sub">Days of stock left is stock on hand divided by average daily sales. Movement class: A fast, B medium, C slow.</p></div>
+      <div class="ctl"><span>Movement</span><button class="chipbtn on" data-c="ALL">All</button><button class="chipbtn" data-c="A">A fast</button><button class="chipbtn" data-c="B">B medium</button><button class="chipbtn" data-c="C">C slow</button></div></div>
+    <div class="lg"><span><i style="background:#3B6D11"></i>A fast</span><span><i style="background:#BA7517"></i>B medium</span><span><i style="background:#534AB7"></i>C slow</span><span id="rcnt"></span></div>
+    <div class="rel" id="w4" style="height:420px"><canvas id="cv4" role="img" aria-label="Bar chart of days of stock left for each product, colored by movement class">Products ranked by days of stock left.</canvas></div>
+    <div class="tw"><table><thead><tr><th>Product</th><th>Movement</th><th>Stock on hand</th><th>Sales per day</th><th>Days left</th><th>Reorder</th></tr></thead><tbody id="tb4"></tbody></table></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script type="module">
+import { api } from './firebase-store.js';
+const Chart=window.Chart;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+Chart.defaults.color=css('--muted');Chart.defaults.font.family=css('--font');Chart.defaults.font.size=12;
+const GRID='rgba(128,128,128,0.2)';
+const f$=v=>v==null||!Number.isFinite(Number(v))?'—':'$'+Math.round(Number(v)).toLocaleString();
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const RAMP={blue:['#042c53','#0a3a6c','#0c447c','#185fa5','#1f6bbd','#2a78d6','#3382d9'],
+ A:['#173404','#27500A','#3B6D11','#4f8318','#639922','#97C459','#C0DD97'],
+ B:['#412402','#633806','#854F0B','#BA7517','#EF9F27','#FAC775','#FAEEDA'],
+ C:['#26215C','#3C3489','#534AB7','#6a60cc','#7F77DD','#AFA9EC','#CECBF6']};
+const TX={blue:['#fff','#fff','#fff','#fff','#fff','#fff','#fff'],A:['#fff','#fff','#fff','#fff','#fff','#fff','#173404'],
+ B:['#fff','#fff','#fff','#fff','#412402','#412402','#412402'],C:['#fff','#fff','#fff','#fff','#fff','#26215C','#26215C']};
+const ZC={A:'#c6e5b3',B:'#fbf3a5',C:'#d9d6f7'};
+const EB=[{k:'exp',t:'Expired',c:'#8a1c1c',tx:'#fff'},{k:'b7',t:'Within 7 days',c:'#d03b3b',tx:'#fff'},
+ {k:'b30',t:'8 to 30 days',c:'#ec835a',tx:'#fff'},{k:'b90',t:'31 to 90 days',c:'#fab219',tx:'#412402'},{k:'ok',t:'Over 90 days',c:'#0ca30c',tx:'#fff'}];
+const ESL={exp:'Expired',b7:'Critical',b30:'Soon',b90:'Watch',ok:'OK'};
+const bkt=d=>d<0?'exp':(d<=7?'b7':(d<=30?'b30':(d<=90?'b90':'ok')));
+const ecol=k=>EB.find(b=>b.k===k);
+const status=document.querySelector('header .sub');
+let CATS=[], EXP=[], RUN=[], PRODUCTS=[], summaryData={};
+function classify(items){
+ items.sort((a,b)=>b.v-a.v);
+ const total=items.reduce((a,b)=>a+(Number(b.v)||0),0);let cum=0;
+ items.forEach((it,i)=>{it.rank=i;it.share=total?it.v/total*100:0;const before=cum;cum+=it.share;it.cum=cum;it.cls=before<70?'A':(before<90?'B':'C');});
+ return items;
+}
+function products(name){
+ return classify(PRODUCTS.filter(p=>(p.category||'Uncategorized')===name).map(p=>{
+  const units=Math.max(0,Number(p.quantity)||0),price=p.unitCost==null?0:Number(p.unitCost)||0;
+  return {name:p.name,units,price,v:units*price,barcode:p.barcode,supplier:p.supplierName||''};
+ }));
+}
+function squarify(items,x,y,w,h,out){
+ let rem=items.slice();
+ const worst=(row,s)=>{const sum=row.reduce((a,b)=>a+b.a,0);const mx=Math.max(...row.map(r=>r.a)),mn=Math.min(...row.map(r=>r.a));return mn<=0?Infinity:Math.max(s*s*mx/(sum*sum),sum*sum/(s*s*mn));};
+ while(rem.length){
+  const s=Math.min(w,h);let row=[rem[0]],i=1;
+  while(i<rem.length){const nr=row.concat(rem[i]);if(worst(nr,s)<=worst(row,s)){row=nr;i++;}else break;}
+  const sum=row.reduce((a,b)=>a+b.a,0);
+  if(w>=h){const cw=sum/h;let yy=y;row.forEach(r=>{const hh=r.a/cw;out.push({it:r.it,i:r.i,x,y:yy,w:cw,h:hh});yy+=hh;});x+=cw;w-=cw;}
+  else{const rh=sum/w;let xx=x;row.forEach(r=>{const ww=r.a/rh;out.push({it:r.it,i:r.i,x:xx,y,w:ww,h:rh});xx+=ww;});y+=rh;h-=rh;}
+  rem=rem.slice(row.length);
+ }
+}
+function tiles(el,items,W,H,o){
+ el.style.width=W+'px';el.style.height=H+'px';
+ const valid=items.filter(it=>Number(it.v)>0);
+ if(!valid.length||W<10){el.innerHTML='';return;}
+ const wt=valid.map(it=>o.mode==='read'?Math.pow(it.v,0.55):it.v),sw=wt.reduce((a,b)=>a+b,0),k=W*H/sw;
+ const out=[];squarify(valid.map((it,i)=>({it,i,a:wt[i]*k})),0,0,W,H,out);
+ el.innerHTML=out.map(t=>{
+  const it=t.it,ci=Math.min(6,Math.floor(t.i*7/valid.length)),w=t.w-3,h=t.h-3;
+  const big=w>=110&&h>=70,mid=w>=70&&h>=44,fs=big?15:(mid?13:11),pad=big?'8px 10px':(mid?'6px 8px':'3px 5px');
+  let inner='';
+  if(w>=30&&h>=20){inner='<span class="tn" style="font-size:'+fs+'px">'+esc(it.name)+'</span>';if(mid)inner+='<span style="font-size:'+(fs-1)+'px">'+Math.round(it.share)+'%</span>';}
+  return '<div class="tile'+(o.click?' go':'')+'" data-n="'+esc(it.name)+'" title="'+esc(it.name)+': '+f$(it.v)+' ('+it.share.toFixed(1)+'%)" style="left:'+(t.x+1.5)+'px;top:'+(t.y+1.5)+'px;width:'+w+'px;height:'+h+'px;padding:'+pad+';background:'+RAMP[o.ramp][ci]+';color:'+TX[o.ramp][ci]+'">'+inner+'</div>';
+ }).join('');
+}
+function renderKpis(){
+ const total=Number(summaryData.knownStockValue)||0;
+ const classified=classify(CATS.map(c=>({name:c.name,v:c.knownValue})));
+ const aN=classified.filter(i=>i.cls==='A'&&i.v>0).length;
+ const expired=EXP.filter(i=>i.k==='exp'),w7=EXP.filter(i=>i.k==='b7');
+ const run=RUN.filter(r=>r.days<=7);
+ const stockValue=summaryData.stockValue==null?'Incomplete':f$(total);
+ const cards=[
+  ['Stock value',stockValue,summaryData.missingCostProducts?summaryData.missingCostProducts+' stocked product costs missing':CATS.length+' categories','#185fa5'],
+  ['Expired',expired.length+' products',f$(expired.reduce((a,b)=>a+b.val,0))+' at recorded cost','#8a1c1c'],
+  ['Expiring within 7 days',w7.length+' products',f$(w7.reduce((a,b)=>a+b.val,0))+' at recorded cost','#d03b3b'],
+  ['Running out within 7 days',run.length+' products','Based on recent recorded sales','#ec835a'],
+  ['Class A categories',aN+' of '+CATS.length,'Top categories by known stock value','#3B6D11']];
+ document.getElementById('kpis').innerHTML=cards.map(x=>'<div class="kpi" style="border-left-color:'+x[3]+'"><span>'+x[0]+'</span><b>'+esc(x[1])+'</b><em>'+esc(x[2])+'</em></div>').join('');
+ document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>document.getElementById(b.dataset.t).scrollIntoView({behavior:'smooth',block:'start'}));
+}
+function renderCategoryTreemap(){
+ const items=classify(CATS.map(c=>({name:c.name,v:c.knownValue,productCount:c.productCount})));
+ const w1=document.getElementById('w1'),tm1=document.getElementById('tm1'),back=document.getElementById('back1'),pop=document.getElementById('pop1');
+ const H=540;let mode='read';
+ const render=()=>{
+  if(!items.some(item=>item.v>0)){tm1.style.width='100%';tm1.style.height=H+'px';tm1.innerHTML='<div style="display:grid;place-items:center;height:100%;color:var(--muted);text-align:center">Add purchase costs to inventory products to show stock value by category.</div>';return;}
+  tiles(tm1,items,w1.clientWidth,H,{ramp:'blue',click:true,mode});
+ };
+ function close(){pop.style.display='none';back.style.display='none';w1.style.height=H+'px';back.style.height=H+'px';}
+ function open(name){
+  const c=items.find(i=>i.name===name),ps=products(name);
+  const rows=ps.map((p,i)=>'<tr><td><span class="dot" style="background:'+RAMP.blue[Math.min(6,Math.floor(i*7/Math.max(1,ps.length)))]+'"></span>'+esc(p.name)+'</td><td>'+p.units.toLocaleString()+'</td><td>'+(p.price?('$'+p.price.toFixed(2)):'—')+'</td><td>'+f$(p.v)+'</td><td>'+p.share.toFixed(1)+'%</td></tr>').join('');
+  pop.innerHTML='<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><h2>'+esc(c.name)+'</h2><p class="sub">'+ps.length+' products · '+f$(c.v)+' · '+c.share.toFixed(1)+'% of known stock value</p></div><button class="chipbtn" id="x1">Close</button></div><div id="mini1" style="position:relative;margin-top:10px"></div><div class="tw" style="margin-top:8px"><table><thead><tr><th>Product</th><th>Stock</th><th>Unit cost</th><th>Value</th><th>Share</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  back.style.display='block';pop.style.display='block';
+  tiles(document.getElementById('mini1'),ps,pop.clientWidth-34,200,{ramp:'blue',click:false,mode:'true'});
+  const h=Math.max(H,pop.offsetHeight+28);w1.style.height=h+'px';back.style.height=h+'px';document.getElementById('x1').onclick=close;
+ }
+ tm1.onclick=e=>{const t=e.target.closest('.tile.go');if(t)open(t.dataset.n);};
+ back.onclick=close;document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
+ const b1=document.getElementById('t1'),b2=document.getElementById('t2');
+ b1.onclick=()=>{mode='read';b1.classList.add('on');b2.classList.remove('on');render();};
+ b2.onclick=()=>{mode='true';b2.classList.add('on');b1.classList.remove('on');render();};
+ back.style.height=H+'px';render();new ResizeObserver(render).observe(w1);
+}
+function renderAbc(){
+ const totalKnown=CATS.reduce((sum,category)=>sum+category.knownValue,0);
+ if(!totalKnown){
+  document.getElementById('bc2').textContent='ABC analysis needs recorded purchase costs.';
+  document.getElementById('abcT').innerHTML='<div><b>Waiting for cost data</b>Enter purchase costs for stocked products.</div>';
+  document.getElementById('w2').style.display='none';
+  document.getElementById('th2').innerHTML='<tr><th>Category</th><th>Value</th><th>Share</th><th>Cumulative</th><th>Class</th><th>Products</th></tr>';
+  document.getElementById('tb2').innerHTML='<tr><td colspan="6">No category can be classified until purchase costs are available.</td></tr>';
+  return;
+ }
+ document.getElementById('w2').style.display='';
+ const zones={a:10,b:30};let zi={A:[],B:[],C:[]};let st={level:0,items:[],cat:''};
+ const w2=document.getElementById('w2');
+ const plug={id:'zones',afterDraw(ch){
+  const {ctx,chartArea:ca,scales:{x,y}}=ch,xa=x.getPixelForValue(zones.a),xb=x.getPixelForValue(zones.b);
+  ctx.save();ctx.fillStyle='#1f2a1a';ctx.font='600 15px '+css('--font');ctx.textAlign='center';
+  [[ca.left,xa,'A'],[xa,xb,'B'],[xb,ca.right,'C']].forEach(z=>ctx.fillText(z[2],(z[0]+z[1])/2,ca.bottom-10));
+  ctx.strokeStyle='#1f2a1a';ctx.setLineDash([3,3]);ctx.lineWidth=1;
+  [[70,xa],[90,xb]].forEach(l=>{const yy=y.getPixelForValue(l[0]);ctx.beginPath();ctx.moveTo(ca.left,yy);ctx.lineTo(l[1],yy);ctx.lineTo(l[1],ca.bottom);ctx.stroke();});ctx.restore();
+ },afterRender(ch){
+  const ca=ch.chartArea,x=ch.scales.x,xa=x.getPixelForValue(zones.a),xb=x.getPixelForValue(zones.b),H=Math.round((ca.bottom-ca.top)*0.55),topT=ca.bottom-34-H;
+  [['A',ca.left,xa],['B',xa,xb],['C',xb,ca.right]].forEach(z=>{
+   const f=document.getElementById('f'+z[0]);f.style.left=z[1]+'px';f.style.width=(z[2]-z[1])+'px';f.style.top=ca.top+'px';f.style.height=(ca.bottom-ca.top)+'px';
+   const t=document.getElementById('z'+z[0]);t.style.left=(z[1]+6)+'px';t.style.top=topT+'px';tiles(t,zi[z[0]],Math.max(0,Math.round(z[2]-z[1]-12)),H,{ramp:z[0],click:!st.level,mode:'read'});
+  });
+ }};
+ const chart=new Chart(document.getElementById('cv2'),{type:'line',plugins:[plug],data:{datasets:[]},options:{animation:false,events:[],responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},
+  scales:{x:{type:'linear',min:0,max:100,grid:{display:false},border:{display:false},title:{display:true,text:'% of items'},ticks:{stepSize:10}},y:{min:0,max:100,grid:{display:false},border:{display:false},title:{display:true,text:'Value (%)'},ticks:{stepSize:10}}}}});
+ function show(items,level,cat){
+  st={level,items,cat};classify(items);const n=items.length||1,cnt={A:0,B:0,C:0},val={A:0,B:0,C:0};items.forEach(it=>{cnt[it.cls]++;val[it.cls]+=it.share;});
+  zones.a=cnt.A/n*100;zones.b=(cnt.A+cnt.B)/n*100;zi={A:items.filter(i=>i.cls==='A'),B:items.filter(i=>i.cls==='B'),C:items.filter(i=>i.cls==='C')};chart.update();
+  document.getElementById('bc2').innerHTML=level?'<button class="chipbtn" id="bk2">Back to categories</button><span class="sub" style="margin:0">All categories</span><span>›</span><b style="font-weight:600">'+esc(cat)+'</b>':'<b style="font-weight:600">All categories</b><span class="sub" style="margin:0">'+items.length+' categories</span>';
+  if(level)document.getElementById('bk2').onclick=()=>show(CATS.map(c=>({name:c.name,v:c.knownValue})),0,'');
+  document.getElementById('abcT').innerHTML=['A','B','C'].map(k=>'<div style="background:'+ZC[k]+'"><b>Class '+k+'</b>'+cnt[k]+' items ('+Math.round(cnt[k]/n*100)+'%) hold '+Math.round(val[k])+'% of value</div>').join('');
+  document.getElementById('th2').innerHTML=level?'<tr><th>Product</th><th>Stock</th><th>Unit cost</th><th>Value</th><th>Share</th><th>Cumulative</th><th>Class</th></tr>':'<tr><th>Category</th><th>Value</th><th>Share</th><th>Cumulative</th><th>Class</th><th>Products</th></tr>';
+  document.getElementById('tb2').innerHTML=items.map(it=>{
+   const b='<span class="bd" style="background:'+ZC[it.cls]+'">'+it.cls+'</span>';
+   if(level)return '<tr><td>'+esc(it.name)+'</td><td>'+it.units.toLocaleString()+'</td><td>'+(it.price?'$'+it.price.toFixed(2):'—')+'</td><td>'+f$(it.v)+'</td><td>'+it.share.toFixed(1)+'%</td><td>'+it.cum.toFixed(1)+'%</td><td>'+b+'</td></tr>';
+   return '<tr class="go" data-n="'+esc(it.name)+'"><td>'+esc(it.name)+'</td><td>'+f$(it.v)+'</td><td>'+it.share.toFixed(1)+'%</td><td>'+it.cum.toFixed(1)+'%</td><td>'+b+'</td><td>'+it.productCount+' &rsaquo;</td></tr>';
+  }).join('');
+ }
+ function open(name){if(st.level)return;const c=CATS.find(x=>x.name===name);if(c)show(products(name),1,name);}
+ document.getElementById('tb2').onclick=e=>{const tr=e.target.closest('tr.go');if(tr)open(tr.dataset.n);};
+ w2.onclick=e=>{const t=e.target.closest('.tile.go');if(t)open(t.dataset.n);};
+ show(CATS.map(c=>({name:c.name,v:c.knownValue,productCount:c.productCount})),0,'');
+}
+function renderExpiry(){
+ let fb='all',fc='all';const sel=document.getElementById('ecat');
+ sel.innerHTML='<option value="all">All categories</option>'+Array.from(new Set(EXP.map(i=>i.cat))).sort().map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
+ sel.onchange=()=>{fc=sel.value;draw();};
+ const lab=d=>d<0?'expired '+(-d)+'d ago':(d===0?'today':d+' days');
+ const line={id:'today',afterDatasetsDraw(c){const x=c.scales.x,a=c.chartArea,px=x.getPixelForValue(0),ctx=c.ctx;ctx.save();ctx.strokeStyle='#d03b3b';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(px,a.top);ctx.lineTo(px,a.bottom);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#d03b3b';ctx.font='600 11px '+css('--font');ctx.textAlign='left';ctx.fillText('Today',px+4,a.top+10);ctx.restore();}};
+ const chart=new Chart(document.getElementById('cv3'),{type:'bar',plugins:[line],data:{labels:[],datasets:[{data:[],backgroundColor:[],borderRadius:4,barThickness:18}]},
+  options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const it=c.chart.$items[c.dataIndex];return it.date+' · '+lab(it.days)+' · '+f$(it.val)+' at risk';}}}},
+   scales:{x:{grid:{color:GRID},border:{display:false},title:{display:true,text:'Days until expiry (left of Today = already expired)'}},y:{grid:{display:false},border:{display:false}}}}});
+ function draw(){
+  const cnt={},risk={};EB.forEach(b=>{cnt[b.k]=0;risk[b.k]=0;});EXP.filter(i=>fc==='all'||i.cat===fc).forEach(i=>{cnt[i.k]++;risk[i.k]+=i.val;});
+  const bk=document.getElementById('bk3');bk.innerHTML=EB.map(b=>'<button class="bkb'+(fb===b.k?' on':'')+'" data-k="'+b.k+'"><span><i style="background:'+b.c+'"></i>'+b.t+'</span><b>'+cnt[b.k]+'</b><em>'+f$(risk[b.k])+' value</em></button>').join('');
+  bk.querySelectorAll('.bkb').forEach(e=>e.onclick=()=>{fb=fb===e.dataset.k?'all':e.dataset.k;draw();});
+  const list=EXP.filter(i=>(fb==='all'||i.k===fb)&&(fc==='all'||i.cat===fc)).sort((a,b)=>a.days-b.days),top=list.slice(0,15);
+  document.getElementById('ecnt').textContent='Showing '+top.length+' of '+list.length+' products, soonest first';
+  chart.$items=top;chart.data.labels=top.map(i=>i.name+' · '+lab(i.days));chart.data.datasets[0].data=top.map(i=>i.days);chart.data.datasets[0].backgroundColor=top.map(i=>ecol(i.k).c);
+  chart.options.scales.x.min=Math.min(0,...top.map(i=>i.days))-3;document.getElementById('w3').style.height=(Math.max(top.length,3)*30+90)+'px';chart.update();chart.resize();
+  document.getElementById('tb3').innerHTML=top.map(i=>{const b=ecol(i.k);return '<tr><td>'+esc(i.name)+'</td><td>'+esc(i.cat)+'</td><td>'+i.date+'</td><td>'+i.days+'</td><td>'+i.qty+'</td><td>'+f$(i.val)+'</td><td><span class="st" style="background:'+b.c+';color:'+b.tx+'">'+ESL[i.k]+'</span></td></tr>';}).join('');
+ }
+ draw();
+}
+function renderRunout(){
+ let f='ALL';const chart=new Chart(document.getElementById('cv4'),{type:'bar',data:{labels:[],datasets:[{data:[],backgroundColor:[],borderRadius:4,barThickness:18}]},
+  options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const r=c.chart.$items[c.dataIndex];return r.stock+' in stock, sold '+r.sold+' in selected period, '+r.days+' days left';}}}},
+   scales:{x:{grid:{color:GRID},border:{display:false},title:{display:true,text:'Days of stock left'}},y:{grid:{display:false},border:{display:false}}}}});
+ function draw(){
+  const list=RUN.filter(r=>f==='ALL'||r.cls===f).sort((a,b)=>a.days-b.days);
+  chart.$items=list;chart.data.labels=list.map(r=>r.name+' ('+r.cls+') · '+r.days+' days');chart.data.datasets[0].data=list.map(r=>r.days);chart.data.datasets[0].backgroundColor=list.map(r=>({A:'#3B6D11',B:'#BA7517',C:'#534AB7'}[r.cls]||'#534AB7'));
+  document.getElementById('rcnt').textContent=list.length+' products, fewest days first';document.getElementById('w4').style.height=(Math.max(list.length,3)*30+90)+'px';chart.update();chart.resize();
+  document.getElementById('tb4').innerHTML=list.map(r=>{const urgent=r.days<=7,plan=r.days<=14;return '<tr><td>'+esc(r.name)+'</td><td>'+({A:'A fast',B:'B medium',C:'C slow'}[r.cls]||'Unclassified')+'</td><td>'+r.stock+'</td><td>'+r.daily.toFixed(2)+'</td><td>'+r.days.toFixed(1)+'</td><td><span class="st" style="background:'+(urgent?'#d03b3b':(plan?'#fab219':'#0ca30c'))+';color:'+(!urgent&&plan?'#412402':'#fff')+'">'+(urgent?'Reorder now':(plan?'Plan reorder':'Healthy'))+'</span></td></tr>';}).join('');
+ }
+ document.querySelectorAll('#s4 .ctl button').forEach(b=>b.onclick=()=>{f=b.dataset.c;document.querySelectorAll('#s4 .ctl button').forEach(x=>x.classList.toggle('on',x===b));draw();});
+ draw();
+}
+async function loadInventoryDashboard(){
+ try{
+  if(typeof Chart==='undefined')throw new Error('Chart library did not load. Check your internet connection and refresh.');
+  const [analytics,inventory]=await Promise.all([
+   api('/api/inventory/analytics?days=30'),
+   api('/api/inventory')
+  ]);
+  summaryData=analytics.summary||{};PRODUCTS=inventory.products||[];
+  CATS=(analytics.categories||[]).map(c=>({name:c.name,knownValue:Number(c.knownValue)||0,productCount:Number(c.productCount)||0,units:Number(c.units)||0,complete:c.complete!==false}));
+  EXP=(analytics.expiryItems||[]).map(i=>({name:i.name,cat:i.category||'Uncategorized',days:Number(i.daysLeft)||0,date:i.expiryDate,qty:Number(i.quantity)||0,val:i.valueAtRisk==null?null:Number(i.valueAtRisk),k:bkt(Number(i.daysLeft)||0)}));
+  RUN=(analytics.stockoutItems||[]).filter(i=>i.daysLeft!=null&&Number.isFinite(Number(i.daysLeft))).map(i=>({name:i.name,cls:i.movementClass||'C',stock:Number(i.quantity)||0,sold:Number(i.unitsSold)||0,daily:Number(i.unitsPerDay)||0,days:Number(i.daysLeft)}));
+  status.textContent='Live Firebase inventory · Updated '+new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})+(summaryData.missingCostProducts?' · '+summaryData.missingCostProducts+' product costs missing':'');
+  renderKpis();renderCategoryTreemap();renderAbc();renderExpiry();renderRunout();
+  const missing=document.getElementById('kpis');
+  if(!PRODUCTS.length){missing.insertAdjacentHTML('afterend','<p class="sub">No inventory products found yet. Add products in Inbound to populate these charts.</p>');}
+ }catch(error){status.textContent='Analytics unavailable: '+error.message;status.style.color='#a33';}
+}
+loadInventoryDashboard();
+new ResizeObserver(()=>parent.postMessage({type:'inventory-analytics-height',height:document.documentElement.scrollHeight},location.origin)).observe(document.body);
+window.addEventListener('message',event=>{if(event.origin===location.origin&&event.data?.type==='inventory-analytics-refresh')location.reload();});
+</script>
+</body>
+</html>

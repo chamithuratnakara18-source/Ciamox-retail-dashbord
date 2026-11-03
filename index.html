@@ -30,7 +30,7 @@
 .inventory-delete{border:1px solid #e9b9b4;border-radius:7px;background:#fff;color:#a93e34;padding:7px 10px;font-size:10px;font-weight:700}
 .inventory-delete:hover{background:#fff1ef}.inventory-delete:disabled{opacity:.5;cursor:wait}
 .inventory-action-message{margin:0;padding:10px 18px;color:#335d4b;font-size:11px}.inventory-action-message.error{color:#a93e34}
-.inventory-tabs{display:flex;gap:8px;margin:0 0 16px;border-bottom:1px solid #e1e8e8;padding-bottom:10px}.inventory-view-tab{border:1px solid #dfe7e7;border-radius:9px;background:#fff;color:#596970;padding:9px 14px;font-size:12px;font-weight:700}.inventory-view-tab.active{background:#172936;border-color:#172936;color:#fff}.inventory-view{display:none}.inventory-view.active{display:block}.inventory-action-button{border:0;border-radius:9px;background:#1eaa79;color:#fff;padding:9px 13px;font-size:12px;font-weight:700}.inventory-action-button:hover{background:#168b63}.inventory-category-list{display:flex;gap:8px;flex-wrap:wrap;padding:17px}.inventory-category-chip{border:1px solid #dfe7e7;border-radius:20px;background:#f8faf9;padding:7px 11px;color:#34434a;font-size:11px}.inventory-analytics-card{display:grid;grid-template-columns:minmax(200px,300px) 1fr;align-items:center;gap:26px;padding:22px}.inventory-meter{width:100%;max-width:270px;margin:auto}.inventory-meter svg{display:block;width:100%;height:auto}.inventory-analytics-copy h2{margin:0 0 7px;font:700 20px Georgia,serif;color:#172630}.inventory-analytics-copy p{margin:0;color:#84919b;font-size:12px;line-height:1.55}.inventory-analytics-empty{margin-top:14px;padding:11px 13px;border:1px dashed #d8e2e2;border-radius:9px;color:#75838a;font-size:11px}
+.inventory-tabs{display:flex;gap:8px;margin:0 0 16px;border-bottom:1px solid #e1e8e8;padding-bottom:10px}.inventory-view-tab{border:1px solid #dfe7e7;border-radius:9px;background:#fff;color:#596970;padding:9px 14px;font-size:12px;font-weight:700}.inventory-view-tab.active{background:#172936;border-color:#172936;color:#fff}.inventory-view{display:none}.inventory-view.active{display:block}.inventory-analytics-frame{display:block;width:100%;height:900px;border:0;overflow:hidden;background:transparent}.inventory-action-button{border:0;border-radius:9px;background:#1eaa79;color:#fff;padding:9px 13px;font-size:12px;font-weight:700}.inventory-action-button:hover{background:#168b63}.inventory-category-list{display:flex;gap:8px;flex-wrap:wrap;padding:17px}.inventory-category-chip{border:1px solid #dfe7e7;border-radius:20px;background:#f8faf9;padding:7px 11px;color:#34434a;font-size:11px}.inventory-analytics-card{display:grid;grid-template-columns:minmax(200px,300px) 1fr;align-items:center;gap:26px;padding:22px}.inventory-meter{width:100%;max-width:270px;margin:auto}.inventory-meter svg{display:block;width:100%;height:auto}.inventory-analytics-copy h2{margin:0 0 7px;font:700 20px Georgia,serif;color:#172630}.inventory-analytics-copy p{margin:0;color:#84919b;font-size:12px;line-height:1.55}.inventory-analytics-empty{margin-top:14px;padding:11px 13px;border:1px dashed #d8e2e2;border-radius:9px;color:#75838a;font-size:11px}
 .finance-screen{padding:34px 0 55px}.finance-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
 .finance-summary-grid article{display:grid;gap:8px;padding:18px;border:1px solid #e2e9e7;border-radius:13px;background:#fff}
 .finance-summary-grid span{color:#75838b;font-size:10px;font-weight:700}.finance-summary-grid strong{color:#22343d;font-size:20px;overflow-wrap:anywhere}
@@ -171,28 +171,6 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
 @media(max-width:760px){#inventoryCategoryProducts.inventory-category-products{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:440px){#inventoryCategoryProducts.inventory-category-products{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#inventoryCategoryProducts .inventory-category-product-details{gap:6px;padding:9px}.inventory-category-facts{gap:7px 5px}#inventoryCategoryProducts .inventory-category-facts span{font-size:9px}#inventoryCategoryProducts .inventory-category-facts strong{font-size:10px}}
 </style>
-<style>
-.inventory-analytics{display:grid;gap:12px}
-.inventory-analytics-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin:2px 0 0}
-.inventory-analytics-heading h2{margin:0;color:#1d2b34;font:800 21px/1.2 Manrope,sans-serif;letter-spacing:-.04em}
-.inventory-analytics-heading p,.inventory-analytics-panel-heading p{margin:4px 0 0;color:#829099;font-size:11px;line-height:1.5}
-.inventory-analytics-period{display:grid;gap:5px;color:#63727b;font-size:10px;font-weight:700}
-.inventory-analytics-period select{min-width:145px;height:36px;padding:0 10px;border:1px solid #dfe6e9;border-radius:8px;background:#fff;color:#25343c;font-size:11px}
-.inventory-analytics-status{margin:0;color:#829099;font-size:10px;min-height:15px}
-.inventory-analytics-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.inventory-analytics-kpi{min-width:0;padding:13px 15px;border:1px solid #e5eaed;border-top:3px solid #29b783;border-radius:12px;background:#fff;box-shadow:0 5px 16px #20324005}
-.inventory-analytics-kpi:nth-child(2){border-top-color:#517cdb}.inventory-analytics-kpi:nth-child(3){border-top-color:#e87518}.inventory-analytics-kpi:nth-child(4){border-top-color:#25343c}
-.inventory-analytics-kpi span{display:block;color:#697780;font-size:10px;font-weight:650}.inventory-analytics-kpi strong{display:block;margin-top:9px;color:#1c2b34;font:800 22px/1.1 Manrope,sans-serif;letter-spacing:-.04em;overflow-wrap:anywhere}.inventory-analytics-kpi small{display:block;margin-top:5px;color:#96a1a8;font-size:9px;line-height:1.4}
-.inventory-analytics-panel{min-width:0;padding:16px;border:1px solid #e5eaed;border-radius:13px;background:#fff;box-shadow:0 6px 20px #20324005}
-.inventory-analytics-panel-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.inventory-analytics-panel-heading h3{margin:0;color:#23343d;font:800 15px/1.3 Manrope,sans-serif;letter-spacing:-.025em}
-.inventory-analytics-legend{display:flex;gap:12px;flex-wrap:wrap;color:#71808a;font-size:9px}.inventory-analytics-legend span{display:flex;align-items:center;gap:5px}.inventory-analytics-legend i{width:8px;height:8px;border-radius:50%;background:#27a97a}.inventory-analytics-legend .movement-out{background:#527cdb}.inventory-analytics-legend .movement-remove{background:#e87518}
-.inventory-analytics-chart-wrap{width:100%;overflow-x:auto}.inventory-analytics-chart-wrap svg{display:block;width:100%;min-width:530px;height:auto;min-height:190px}.inventory-analytics-note{margin:8px 0 0;color:#8b979e;font-size:9px;line-height:1.5}.inventory-analytics-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.inventory-category-value-list{display:grid;gap:10px;margin:8px 0}.inventory-category-value-row{display:grid;grid-template-columns:minmax(85px,1fr) minmax(80px,2fr) auto;align-items:center;gap:9px;min-width:0}.inventory-category-value-name{overflow:hidden;color:#44535c;font-size:10px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.inventory-category-value-track{height:8px;overflow:hidden;border-radius:8px;background:#edf1f2}.inventory-category-value-fill{height:100%;min-width:2px;border-radius:8px;background:#288d69}.inventory-category-value-amount{color:#53616a;font-size:9px;font-variant-numeric:tabular-nums;white-space:nowrap}
-.inventory-analytics-table-wrap{width:100%;overflow-x:auto}.inventory-analytics-table{width:100%;min-width:460px;border-collapse:collapse}.inventory-analytics-table th,.inventory-analytics-table td{padding:9px 7px;border-bottom:1px solid #edf0f2;text-align:left;white-space:nowrap}.inventory-analytics-table th{background:#fbfcfc;color:#8b979e;font-size:8px;letter-spacing:.05em;text-transform:uppercase}.inventory-analytics-table td{color:#52616a;font-size:9px}.inventory-analytics-table td strong{color:#2f3e47;font-size:9px}.inventory-analytics-table tr:last-child td{border-bottom:0}
-.inventory-abc-badge,.inventory-risk-badge,.inventory-reorder-badge{display:inline-block;border-radius:12px;padding:3px 7px;font-size:8px;font-weight:750;line-height:1.2}.inventory-abc-a{background:#eaf4e2;color:#3b6d11}.inventory-abc-b{background:#fbf2d8;color:#956013}.inventory-abc-c{background:#efedfb;color:#534ab7}.inventory-risk-expired{background:#fae9e8;color:#a93e34}.inventory-risk-soon{background:#fff0e7;color:#b65929}.inventory-risk-watch{background:#fbf4db;color:#8a6819}.inventory-risk-ok{background:#e8f5ed;color:#32704c}.inventory-risk-summary{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 10px}.inventory-risk-summary span{padding:6px 9px;border:1px solid #e9edef;border-radius:8px;color:#67757d;font-size:9px}.inventory-risk-summary b{color:#263740}.inventory-reorder-now{background:#fff0ed;color:#b34c36}.inventory-reorder-plan{background:#fbf4db;color:#8a6819}.inventory-reorder-healthy{background:#e8f5ed;color:#32704c}.inventory-reorder-none{background:#edf1f3;color:#66757f}.inventory-analytics-empty{padding:18px;border:1px dashed #d6e0e2;border-radius:10px;background:#fff;color:#7f8b93;text-align:center;font-size:11px}
-@media(max-width:850px){.inventory-analytics-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.inventory-analytics-grid{grid-template-columns:1fr}}
-@media(max-width:520px){.inventory-analytics-heading h2{font-size:19px}.inventory-analytics-panel{padding:12px}.inventory-analytics-kpi{padding:11px}.inventory-analytics-kpi strong{font-size:19px}.inventory-analytics-chart-wrap svg{min-width:460px;min-height:165px}.inventory-category-value-row{grid-template-columns:minmax(75px,1fr) minmax(55px,1.5fr) auto;gap:6px}}
-</style>
 </head>
 <body>
   <div class="app-shell">
@@ -270,47 +248,7 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
         </section>
         </section>
         <section class="inventory-view" data-inventory-view="analytics">
-          <div class="inventory-analytics">
-            <header class="inventory-analytics-heading">
-              <div><h2>Inventory analytics</h2><p>Stock value, movement, expiry risk and sales velocity from your Firebase records.</p></div>
-              <label class="inventory-analytics-period">Movement period
-                <select id="inventoryAnalyticsDays" aria-label="Inventory analytics movement period">
-                  <option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option>
-                </select>
-              </label>
-            </header>
-            <p id="inventoryAnalyticsStatus" class="inventory-analytics-status" role="status">Loading inventory analytics…</p>
-            <div id="inventoryAnalyticsKpis" class="inventory-analytics-kpis" aria-label="Inventory summary"></div>
-            <section class="inventory-analytics-panel inventory-movement-panel">
-              <div class="inventory-analytics-panel-heading"><div><h3>Stock movement</h3><p>Received stock and recorded POS sales</p></div><div class="inventory-analytics-legend"><span><i class="movement-in"></i>Received</span><span><i class="movement-out"></i>Sold</span><span><i class="movement-remove"></i>Removed</span></div></div>
-              <div class="inventory-analytics-chart-wrap"><svg id="inventoryMovementChart" viewBox="0 0 900 250" role="img" aria-label="Inventory received, sold and removed during the selected period"></svg></div>
-              <p id="inventoryMovementSummary" class="inventory-analytics-note"></p>
-            </section>
-            <div class="inventory-analytics-grid">
-              <section class="inventory-analytics-panel">
-                <div class="inventory-analytics-panel-heading"><div><h3>Stock value by category</h3><p>Current units × recorded purchase cost</p></div></div>
-                <div id="inventoryCategoryValueList" class="inventory-category-value-list"></div>
-                <p id="inventoryCategoryValueNote" class="inventory-analytics-note"></p>
-              </section>
-              <section class="inventory-analytics-panel">
-                <div class="inventory-analytics-panel-heading"><div><h3>ABC analysis</h3><p>Categories ranked by known stock value: A to 70%, B to 90%, then C</p></div></div>
-                <div class="inventory-analytics-table-wrap"><table class="inventory-analytics-table"><thead><tr><th>Category</th><th>Products</th><th>Stock value</th><th>Share</th><th>Class</th></tr></thead><tbody id="inventoryAbcTableBody"></tbody></table></div>
-                <p id="inventoryAbcNote" class="inventory-analytics-note"></p>
-              </section>
-              <section class="inventory-analytics-panel">
-                <div class="inventory-analytics-panel-heading"><div><h3>Closest to expiry</h3><p>Products with an expiry date in inventory</p></div></div>
-                <div id="inventoryExpirySummary" class="inventory-risk-summary"></div>
-                <div class="inventory-analytics-table-wrap"><table class="inventory-analytics-table"><thead><tr><th>Product</th><th>Category</th><th>Expiry date</th><th>Time left</th><th>Units</th><th>Cost at risk</th></tr></thead><tbody id="inventoryExpiryTableBody"></tbody></table></div>
-              </section>
-              <section class="inventory-analytics-panel">
-                <div class="inventory-analytics-panel-heading"><div><h3>Running out of stock</h3><p>Days remaining estimated from average daily sales in the selected period</p></div></div>
-                <div class="inventory-analytics-chart-wrap inventory-runout-chart-wrap"><svg id="inventoryRunoutChart" viewBox="0 0 900 250" role="img" aria-label="Estimated days of stock remaining for products with recent sales"></svg></div>
-                <div class="inventory-analytics-table-wrap"><table class="inventory-analytics-table"><thead><tr><th>Product</th><th>Movement</th><th>Units in stock</th><th>Units sold</th><th>Days left</th><th>Action</th></tr></thead><tbody id="inventoryRunoutTableBody"></tbody></table></div>
-                <p id="inventoryRunoutNote" class="inventory-analytics-note"></p>
-              </section>
-            </div>
-            <p id="inventoryAnalyticsEmpty" class="inventory-analytics-empty hidden">No inventory products found yet. Add products in Inbound to see analytics.</p>
-          </div>
+          <iframe id="inventoryAnalyticsFrame" class="inventory-analytics-frame" title="Inventory analytics dashboard" src="about:blank" loading="lazy"></iframe>
         </section>
         <section class="inventory-view" data-inventory-view="categories">
           <section class="inventory-category-page">
@@ -430,6 +368,6 @@ body:has(#dashboardScreen:not(.hidden)){background:#f3f3f3}
   
   
   
-  <script type="module" src="./hub.js?v=category-cards-20261102-3"></script>
+  <script type="module" src="./hub.js?v=inventory-html-20261103-1"></script>
 </body>
 </html>
