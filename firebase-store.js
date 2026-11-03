@@ -4,7 +4,6 @@ import {
 } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 import { firebaseApp } from './firebase-app.js';
-import { requireRetailUser } from './auth-guard.js';
 
 let database;
 let live;
@@ -452,51 +451,41 @@ export function watchRetailFlow(onChange, onError) {
   live = { data: { products: null, sales: null, receipts: null, expenses: null }, ready, error: null };
   let settled = false;
   let unsubs = [];
-  requireRetailUser().then(user => {
-    if (!active) return;
-    try {
-      unsubs = Object.keys(live.data).map(name => onSnapshot(collection(db(), name), snapshot => {
-        live.data[name] = rows(snapshot);
-        if (Object.values(live.data).every(value => value !== null)) {
-          if (!settled) { settled = true; resolveReady(); }
-          onChange();
-        }
-      }, error => {
-        live.error = error;
-        if (!settled) { settled = true; rejectReady(error); }
-        onError(error);
-      }));
-    } catch (error) {
-      live = null;
-      if (!settled) { settled = true; resolveReady(); }
-      queueMicrotask(() => onError(error));
-    }
-  }).catch(error => { if (active) onError(error); });
+  try {
+    unsubs = Object.keys(live.data).map(name => onSnapshot(collection(db(), name), snapshot => {
+      live.data[name] = rows(snapshot);
+      if (Object.values(live.data).every(value => value !== null)) {
+        if (!settled) { settled = true; resolveReady(); }
+        onChange();
+      }
+    }, error => {
+      live.error = error;
+      if (!settled) { settled = true; rejectReady(error); }
+      onError(error);
+    }));
+  } catch (error) {
+    live = null;
+    if (!settled) { settled = true; resolveReady(); }
+    queueMicrotask(() => onError(error));
+  }
   return () => { active = false; unsubs.forEach(stop => stop()); live = null; };
 }
 
 // One shared checkout for the store. A phone scan changes this document; every
 // open dashboard receives the new cart through the document listener.
 export function watchPos(onChange, onError) {
-  let active = true, stop = () => {};
-  requireRetailUser().then(() => {
-    if (active) stop = onSnapshot(posRef(), snapshot => onChange(posItems(snapshot.data())), onError);
-  }).catch(error => { if (active) onError(error); });
-  return () => { active = false; stop(); };
+  const stop = onSnapshot(posRef(), snapshot => onChange(posItems(snapshot.data())), onError);
+  return stop;
 }
 
 // Keep the existing screen contract while replacing the SQL HTTP API with Firestore.
 export async function api(path, options = {}) {
   const url = new URL(path, location.origin);
   const method = (options.method || 'GET').toUpperCase();
-  const user = await requireRetailUser();
-  const token = await user.getIdTokenResult();
-  const cashierCatalogRead = method === 'GET' && url.pathname === '/api/inventory' && token.claims.retailRole === 'cashier';
-  if (method !== 'GET' || cashierCatalogRead) {
-    const idToken = await user.getIdToken();
+  if (method !== 'GET') {
     const response = await fetch(`${url.pathname}${url.search}`, {
       method,
-      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: options.body || '{}',
       credentials: 'same-origin',
     });

@@ -1,36 +1,27 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedInStaff() {
-      return request.auth != null
-        && request.auth.token.retailRole in ['owner', 'admin', 'manager', 'cashier'];
-    }
-    function managementStaff() {
-      return request.auth != null
-        && request.auth.token.retailRole in ['owner', 'admin', 'manager'];
-    }
-
-    // Browser clients may read store records after sign-in. Every write goes
-    // through the authenticated server API, where roles and business rules are enforced.
+    // Password-free preview mode: reads are public so the current UI works
+    // without a sign-in. Keep browser writes denied; the API remains the write path.
+    // Restore staff role checks before exposing this project publicly.
     match /products/{document} {
-      allow read: if managementStaff();
+      allow read: if true;
       allow write: if false;
     }
     match /sales/{document} {
-      allow read: if managementStaff();
+      allow read: if true;
       allow write: if false;
     }
     match /receipts/{document} {
-      allow read: if managementStaff()
-        || (signedInStaff() && request.auth.token.retailRole == 'cashier' && document == 'pos-active');
+      allow read: if true;
       allow write: if false;
     }
     match /expenses/{document} {
-      allow read: if managementStaff();
+      allow read: if true;
       allow write: if false;
     }
     match /meta/connection {
-      allow read: if managementStaff();
+      allow read: if true;
       allow write: if false;
     }
 
