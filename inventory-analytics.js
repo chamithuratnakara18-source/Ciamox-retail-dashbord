@@ -65,11 +65,11 @@ function renderKpis(){
  const run=RUN.filter(r=>r.days<=7);
  const stockValue=summaryData.stockValue==null?'Incomplete':f$(total);
  const cards=[
-  ['Stock value',stockValue,summaryData.missingCostProducts?summaryData.missingCostProducts+' stocked product costs missing':CATS.length+(CATS.length===1?' category':' categories'),'#185fa5'],
-  ['Expired',expired.length+' products',f$(expired.reduce((a,b)=>a+b.val,0))+' at recorded cost','#8a1c1c'],
-  ['Expiring within 7 days',w7.length+' products',f$(w7.reduce((a,b)=>a+b.val,0))+' at recorded cost','#d03b3b'],
-  ['Running out within 7 days',run.length+' products','Based on recent recorded sales','#ec835a']];
- document.getElementById('kpis').innerHTML=cards.map(x=>'<div class="kpi" style="border-left-color:'+x[3]+'"><span>'+x[0]+'</span><b>'+esc(x[1])+'</b><em>'+esc(x[2])+'</em></div>').join('');
+  ['Stock value',stockValue,summaryData.missingCostProducts?summaryData.missingCostProducts+' stocked product costs missing':CATS.length+(CATS.length===1?' category':' categories')],
+  ['Expired',expired.length+' products',f$(expired.reduce((a,b)=>a+b.val,0))+' at recorded cost'],
+  ['Expiring within 7 days',w7.length+' products',f$(w7.reduce((a,b)=>a+b.val,0))+' at recorded cost'],
+  ['Running out within 7 days',run.length+' products','Based on recent recorded sales']];
+ document.getElementById('kpis').innerHTML=cards.map(x=>'<div class="kpi"><span>'+x[0]+'</span><b>'+esc(x[1])+'</b><em>'+esc(x[2])+'</em></div>').join('');
  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>document.getElementById(b.dataset.t).scrollIntoView({behavior:'smooth',block:'start'}));
 }
 function renderCategoryTreemap(){
