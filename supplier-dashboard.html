@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Supplier Management Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <style>
 :root{--bg:#f4f3ef;--surface-0:#f4f3ef;--surface-1:#eeede8;--surface-2:#ffffff;--border:#e0ded7;--border-strong:#cfcdc4;--border-stronger:#9a9890;--text-primary:#16202b;--text-secondary:#5d6672;--text-muted:#898781;--bg-accent:#dbe9f8;--radius:8px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color-scheme:light}
 @media (prefers-color-scheme: dark){:root{--bg:#11151a;--surface-0:#11151a;--surface-1:#222a33;--surface-2:#1a2027;--border:#2b333c;--border-strong:#3a444f;--border-stronger:#6b7785;--text-primary:#e8ecf0;--text-secondary:#9aa5b1;--text-muted:#7c8794;--bg-accent:#1d3550;color-scheme:dark}}
@@ -50,6 +51,10 @@ tr.r.on td{background:var(--bg-accent)}
 .dg span.l{font-size:12px;color:var(--text-secondary);display:block}
 .dg p{margin:0;font-size:14px}
 .tw{overflow-x:auto}
+.supplier-map{width:100%;height:330px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface-1)}
+.leaflet-container{font-family:var(--font);color:var(--text-primary)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface-2);color:var(--text-primary)}
+.leaflet-control-attribution{font-size:10px}
 </style>
 </head>
 <body>
@@ -70,7 +75,7 @@ tr.r.on td{background:var(--bg-accent)}
     <div><p class="hd">Where our suppliers are</p><p class="sb">Supplier dots use the longitude and latitude saved with supplier data.</p></div>
     <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text-secondary)"><span>Color by</span><button class="ch on" id="m1" type="button">Lead time</button><button class="ch" id="m2" type="button">Quality</button><button class="ch" id="openSupplierForm" type="button">Add supplier data</button></div>
   </div>
-  <svg id="map" viewBox="0 0 680 330" width="100%" role="img" aria-label="Map of recorded supplier locations"><title>Supplier locations</title><desc>Supplier map markers use saved longitude and latitude.</desc></svg>
+  <div id="map" class="supplier-map" role="region" aria-label="OpenStreetMap showing saved supplier coordinates"></div>
   <div class="lg" id="mlg"><span>Suppliers without coordinates do not appear on the map.</span></div>
 </div>
 
@@ -109,9 +114,8 @@ tr.r.on td{background:var(--bg-accent)}
 </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="./supplier-dashboard.js?v=supplier-profile-20261103-4"></script>
+<script src="./supplier-dashboard.js?v=supplier-profile-20261103-5"></script>
 </body>
 </html>

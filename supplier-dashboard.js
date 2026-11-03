@@ -18,8 +18,9 @@ const supplierFormPanel=document.getElementById('supplierFormPanel');
 const supplierFormMessage=document.getElementById('supplierFormMessage');
 const supplierSaveButton=document.getElementById('saveSupplierButton');
 let scatter=null;
-let mapSvg=null,landLayer=null,dotLayer=null,labelLayer=null,projection=null,geoPath=null;
-let worldFeatures=null;
+let map=null,markerLayer=null,mapHasFitted=false;
+const osmTileUrl='https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const osmAttribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
 
 function gauge(value,min,max,color,aria){
  if(numeric(value)==null)return '';
@@ -125,36 +126,42 @@ function locationOf(s){
  return lat!=null&&lon!=null&&lat>=-90&&lat<=90&&lon>=-180&&lon<=180?[lon,lat]:null;
 }
 function drawMap(rows){
+ if(!map||!markerLayer)return;
+ markerLayer.clearLayers();
  const located=rows.filter(s=>locationOf(s));
- const dots=dotLayer.selectAll('g.m').data(located,d=>d.key).join(
-  enter=>{const g=enter.append('g').attr('class','m').style('cursor','pointer');g.append('circle').attr('class','ring').attr('r',11).attr('fill','none').attr('stroke','var(--text-primary)').attr('stroke-width',2);g.append('circle').attr('class','dot').attr('r',6).attr('stroke','var(--surface-2)').attr('stroke-width',1.5);g.append('title');return g;},
-  update=>update,
-  exit=>exit.remove());
- dots.attr('transform',s=>{const point=projection(locationOf(s));return 'translate('+point[0]+','+point[1]+')';})
-  .on('click',(event,s)=>{st.sel=s.key;draw();});
- dots.select('.dot').attr('fill',s=>{const value=st.color==='lead'?numeric(s.leadTimeDays):numeric(s.qualityScore);return (st.color==='lead'?lband(value):qband(value)).c;});
- dots.select('.ring').attr('opacity',s=>s.key===st.sel?1:0);
- dots.select('title').text(s=>s.name+' · '+([s.city,s.country].filter(Boolean).join(', ')||'location recorded')+' · '+(st.color==='lead'?(s.leadTimeDays==null?'lead time not tracked':s.leadTimeDays+' days'):(s.qualityScore==null?'quality not tracked':s.qualityScore+' / 100')));
- labelLayer.selectAll('*').remove();
- const selected=located.find(s=>s.key===st.sel);
- if(selected){const point=projection(locationOf(selected));const text=selected.name;const width=Math.min(210,text.length*6.6+16),x=Math.min(Math.max(point[0]-width/2,4),676-width),y=point[1]>40?point[1]-40:point[1]+18;
-  labelLayer.append('rect').attr('x',x).attr('y',y).attr('width',width).attr('height',22).attr('rx',6).attr('fill','var(--surface-2)').attr('stroke','var(--border-strong)').attr('stroke-width',0.5);
-  labelLayer.append('text').attr('x',x+width/2).attr('y',y+15).attr('text-anchor','middle').attr('font-size',12).attr('fill','var(--text-primary)').text(text);
+ for(const supplier of located){
+  const [longitude,latitude]=locationOf(supplier);
+  const metric=st.color==='lead'?numeric(supplier.leadTimeDays):numeric(supplier.qualityScore);
+  const color=(st.color==='lead'?lband(metric):qband(metric)).c;
+  const marker=L.circleMarker([latitude,longitude],{
+   radius:supplier.key===st.sel?9:6,color:'#ffffff',weight:2,fillColor:color,fillOpacity:0.95,supplierKey:supplier.key,
+  }).addTo(markerLayer);
+  const location=[supplier.city,supplier.country].filter(Boolean).join(', ')||'Location recorded';
+  const metricText=st.color==='lead'
+   ?(supplier.leadTimeDays==null?'Lead time not tracked':fmtNumber(supplier.leadTimeDays)+' days')
+   :(supplier.qualityScore==null?'Quality not tracked':fmtNumber(supplier.qualityScore)+' / 100 quality');
+  marker.bindTooltip(esc(supplier.name));
+  marker.bindPopup('<strong>'+esc(supplier.name)+'</strong><br>'+esc(location)+'<br>'+esc(metricText));
+  marker.on('click',()=>{
+   st.sel=supplier.key;draw();
+   markerLayer.eachLayer(layer=>{if(layer.options.supplierKey===supplier.key)layer.openPopup();});
+  });
+ }
+ if(located.length&&!mapHasFitted){
+  map.fitBounds(L.latLngBounds(located.map(s=>{const [longitude,latitude]=locationOf(s);return [latitude,longitude];})).pad(0.18),{maxZoom:5});
+  mapHasFitted=true;
  }
  const legend=document.getElementById('mlg');
  if(st.color==='lead')legend.innerHTML='<span><i style="background:#0ca30c"></i>Up to 7 days</span><span><i style="background:#fab219"></i>8 to 21 days</span><span><i style="background:#d03b3b"></i>Over 21 days</span><span>No coordinates: '+(S.length-located.length)+' suppliers</span>';
  else legend.innerHTML='<span><i style="background:#0ca30c"></i>Excellent, 95 and above</span><span><i style="background:#fab219"></i>Acceptable, 85 to 94</span><span><i style="background:#d03b3b"></i>Poor, below 85</span><span>No coordinates: '+(S.length-located.length)+' suppliers</span>';
 }
 function initMap(){
- if(typeof d3==='undefined'||typeof topojson==='undefined'){document.getElementById('mlg').textContent='Map libraries are unavailable. Supplier list is still available.';return;}
- mapSvg=d3.select('#map');landLayer=mapSvg.append('g');dotLayer=mapSvg.append('g');labelLayer=mapSvg.append('g');
- d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world=>{
-  worldFeatures=topojson.feature(world,world.objects.countries).features;
-  const land=topojson.feature(world,world.objects.countries);
-  projection=d3.geoNaturalEarth1().fitSize([680,330],land);geoPath=d3.geoPath(projection);
-  landLayer.selectAll('path').data(worldFeatures).join('path').attr('d',geoPath).attr('fill','var(--surface-1)').attr('stroke','var(--border-strong)').attr('stroke-width',0.5);
-  drawMap(filteredSuppliers());
- }).catch(()=>{document.getElementById('mlg').textContent='Map background could not be loaded. Supplier records remain available below.';});
+ if(typeof L==='undefined'){document.getElementById('mlg').textContent='OpenStreetMap could not be loaded. Supplier records remain available below.';return;}
+ map=L.map('map',{scrollWheelZoom:false}).setView([20,0],2);
+ L.tileLayer(osmTileUrl,{maxZoom:19,attribution:osmAttribution}).addTo(map);
+ markerLayer=L.layerGroup().addTo(map);
+ window.setTimeout(()=>map.invalidateSize(),0);
+ drawMap(filteredSuppliers());
 }
 function initScatter(){
  if(typeof Chart==='undefined')return;
@@ -181,7 +188,7 @@ function draw(){
  const rows=filteredSuppliers();
  if(!rows.some(s=>s.key===st.sel))st.sel=rows[0]?.key||null;
  drawKpis(rows);
- if(projection)drawMap(rows);
+ if(map)drawMap(rows);
  const selected=rows.find(s=>s.key===st.sel)||null;
  drawDetails(selected);
  drawTable(rows);
