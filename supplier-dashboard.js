@@ -1,6 +1,7 @@
 let S=[];
 let supplierCategories=[];
 let selectedSupplierName='';
+let supplierDeleteBusy=false;
 const st={q:'',cat:'all',type:'all',sel:null,sort:'leadTimeDays',dir:1,color:'lead'};
 const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const numeric=value=>value==null||value===''?null:(Number.isFinite(Number(value))?Number(value):null);
@@ -85,6 +86,14 @@ function drawKpis(rows){
   '<div class="k kg"><div><span class="l">Average quality</span><b>'+(averageQuality==null?'Not tracked':fmtNumber(averageQuality)+' / 100')+'</b><i>'+(best?'Best: '+esc(best.name):'Enter supplier quality scores to calculate')+'</i></div>'+(averageQuality==null?'':gauge(averageQuality,60,100,qualityColor,'Average supplier quality '+fmtNumber(averageQuality)+' out of 100'))+'</div>';
 }
 function tinyGauge(value,min,max,color,center,aria){return '<div class="cg">'+smallGauge(value,min,max,color,center,aria)+'<div><span class="pill" style="background:'+color+';color:'+(color==='#fab219'?'#412402':'#fff')+'">'+(value==null?'Not tracked':value<=7?'Up to 7 days':value>=95?'Excellent':'Recorded')+'</span><small>'+esc(aria)+'</small></div></div>';}
+function requestDeleteSupplier(s,button){
+ if(supplierDeleteBusy)return;
+ if(!window.confirm('Remove '+s.name+' from the Suppliers dashboard? Product and receipt history will be kept. A new scanned delivery restores this supplier.'))return;
+ if(window.parent===window){supplierFormMessage.textContent='Open this page from the RetailFlow Suppliers tab to delete suppliers.';return;}
+ supplierDeleteBusy=true;
+ if(button){button.disabled=true;button.textContent='Deleting…';}
+ window.parent.postMessage({type:'supplier-delete',data:{name:s.name}},location.origin);
+}
 function drawDetails(s){
  const detail=document.getElementById('det');
  if(!s){detail.innerHTML='<p class="hd">No supplier selected</p><p class="sb" style="margin:0">No supplier matches these filters. Clear the search or choose another category.</p>';return;}
@@ -98,7 +107,8 @@ function drawDetails(s){
   ['Current stock',fmtInteger(s.currentStock)+' units'],['Inbound units',fmtInteger(s.inboundUnits)+' units'],['Inbound receipts',fmtInteger(s.inboundRecords)],
   ['Recorded inbound cost',s.costedInboundUnits?fmtMoney(s.recordedInboundCost):'No recorded unit costs'],['Last arrival',s.lastArrivalDate||'—']
  ];
- detail.innerHTML='<p class="hd">'+esc(s.name)+'</p><p class="sb" style="margin-bottom:0">'+fmtInteger(s.productCount)+' products · '+fmtInteger(s.currentStock)+' units in stock</p><div class="dg">'+fields.map(([label,value])=>'<div><span class="l">'+esc(label)+'</span><p>'+esc(value)+'</p></div>').join('')+'</div>';
+ detail.innerHTML='<div class="top"><div><p class="hd">'+esc(s.name)+'</p><p class="sb" style="margin-bottom:0">'+fmtInteger(s.productCount)+' products · '+fmtInteger(s.currentStock)+' units in stock</p></div><button class="ch delete-supplier" type="button" data-delete-supplier>Delete supplier</button></div><div class="dg">'+fields.map(([label,value])=>'<div><span class="l">'+esc(label)+'</span><p>'+esc(value)+'</p></div>').join('')+'</div>';
+ detail.querySelector('[data-delete-supplier]').addEventListener('click',event=>requestDeleteSupplier(s,event.currentTarget));
 }
 function sortValue(s,key){return key==='name'?String(s.name||'').toLocaleLowerCase():key==='lastArrivalDate'?String(s[key]||''):numeric(s[key]);}
 function drawTable(rows){
@@ -110,16 +120,21 @@ function drawTable(rows){
   return cmp*st.dir||String(a.name).localeCompare(String(b.name));
  });
  document.getElementById('cnt').textContent='Showing '+rows.length+' of '+S.length+' suppliers, sorted by '+(st.sort==='leadTimeDays'?'lead time':st.sort==='qualityScore'?'quality':'name');
- if(!sorted.length){listBody.innerHTML='<tr class="r"><td colspan="6" style="color:var(--text-secondary)">No suppliers match.</td></tr>';return;}
+ if(!sorted.length){listBody.innerHTML='<tr class="r"><td colspan="7" style="color:var(--text-secondary)">No suppliers match.</td></tr>';return;}
  listBody.innerHTML=sorted.map(s=>{
   const location=[s.city,s.country].filter(Boolean).join(', ')||'Not recorded';
   const cats=(s.categories||[]).slice(0,3).map(value=>'<span class="tag">'+esc(value)+'</span>').join('')||'—';
   const lead=lband(numeric(s.leadTimeDays)),quality=qband(numeric(s.qualityScore));
   const leadHtml=tinyGauge(numeric(s.leadTimeDays),0,40,lead.c,numeric(s.leadTimeDays)==null?'—':fmtNumber(s.leadTimeDays)+'d',numeric(s.leadTimeDays)==null?'Lead time not tracked':fmtNumber(s.leadTimeDays)+' days');
   const qualityHtml=tinyGauge(numeric(s.qualityScore),60,100,quality.c,numeric(s.qualityScore)==null?'—':fmtNumber(s.qualityScore),numeric(s.qualityScore)==null?'Quality not tracked':fmtNumber(s.qualityScore)+' / 100 · '+(s.defectRate==null?'defect rate not tracked':fmtNumber(s.defectRate)+'% defects'));
-  return '<tr class="r'+(s.key===st.sel?' on':'')+'" data-key="'+esc(s.key)+'"><td><b style="font-weight:600">'+esc(s.name)+'</b></td><td>'+esc(location)+'</td><td>'+cats+'</td><td>'+esc(s.supplierType||'Not recorded')+'</td><td>'+leadHtml+'</td><td>'+qualityHtml+'</td></tr>';
+  return '<tr class="r'+(s.key===st.sel?' on':'')+'" data-key="'+esc(s.key)+'"><td><b style="font-weight:600">'+esc(s.name)+'</b></td><td>'+esc(location)+'</td><td>'+cats+'</td><td>'+esc(s.supplierType||'Not recorded')+'</td><td>'+leadHtml+'</td><td>'+qualityHtml+'</td><td><button class="ch delete-supplier" type="button" data-delete-supplier>Delete</button></td></tr>';
  }).join('');
- listBody.querySelectorAll('tr[data-key]').forEach(row=>row.addEventListener('click',()=>{st.sel=row.dataset.key;draw();}));
+ listBody.querySelectorAll('tr[data-key]').forEach(row=>{
+  row.addEventListener('click',()=>{st.sel=row.dataset.key;draw();});
+  row.querySelector('[data-delete-supplier]').addEventListener('click',event=>{
+   event.stopPropagation();requestDeleteSupplier(sorted.find(s=>s.key===row.dataset.key),event.currentTarget);
+  });
+ });
 }
 function locationOf(s){
  const lat=numeric(s.latitude),lon=numeric(s.longitude);
@@ -261,7 +276,24 @@ window.addEventListener('message',event=>{
  if(event.data?.type==='supplier-save-result'){
   supplierSaveButton.disabled=false;supplierSaveButton.textContent='Save supplier data';
   if(event.data.ok){mergeSavedSupplier(event.data.supplier);supplierFormMessage.textContent='Supplier data saved to RetailFlow.';}
-  else supplierFormMessage.textContent=event.data.message||'Supplier data could not be saved.';
+  else {supplierFormMessage.textContent=event.data.message||'Supplier data could not be saved.';status.textContent='Supplier save failed: '+supplierFormMessage.textContent;}
+ }
+ if(event.data?.type==='supplier-delete-result'){
+  supplierDeleteBusy=false;
+  if(event.data.ok){
+   const deletedName=event.data.supplier?.name||'';
+   const key=deletedName.normalize('NFC').trim().toLocaleLowerCase();
+   S=S.filter(s=>s.key!==key);
+   if(st.sel===key)st.sel=null;
+   selectedSupplierName='';
+   updateControls();draw();
+   supplierFormMessage.textContent='Supplier removed. Product and receipt history was kept.';
+   status.textContent='Supplier '+deletedName+' removed from this dashboard; product and receipt history is retained.';
+  }else{
+   supplierFormMessage.textContent=event.data.message||'Supplier could not be deleted.';
+   status.textContent='Supplier delete failed: '+supplierFormMessage.textContent;
+   draw();
+  }
  }
 });
 window.addEventListener('resize',sendHeight);

@@ -351,6 +351,9 @@ function supplierAnalytics(data) {
   const suppliers = new Map();
   const supplierKey = value => typeof value === 'string'
     ? value.normalize('NFC').trim().toLocaleLowerCase() : '';
+  const archivedSuppliers = new Set((data.suppliers || [])
+    .filter(profile => profile?.archived === true)
+    .map(profile => supplierKey(profile.name)));
   const getSupplier = value => {
     const name = typeof value === 'string' ? value.trim() : '';
     if (!name) return null;
@@ -412,6 +415,7 @@ function supplierAnalytics(data) {
     supplier.items.set(itemKey, item);
   }
   for (const profile of data.suppliers || []) {
+    if (profile?.archived === true) continue;
     // A profile adds metadata to a supplier already recorded by the scanner.
     // Profile-only records must not introduce placeholder suppliers into the UI.
     const supplier = suppliers.get(supplierKey(profile?.name));
@@ -425,7 +429,7 @@ function supplierAnalytics(data) {
     supplier.qualityScore = profile.qualityScore == null ? null : Number(profile.qualityScore);
     supplier.defectRate = profile.defectRate == null ? null : Number(profile.defectRate);
   }
-  const list = [...suppliers.values()].map(supplier => ({
+  const list = [...suppliers.values()].filter(supplier => !archivedSuppliers.has(supplier.key)).map(supplier => ({
     key: supplier.key,
     name: supplier.name,
     city: supplier.city,

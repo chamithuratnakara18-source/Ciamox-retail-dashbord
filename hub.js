@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-profile-20261103-6';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-profile-20261103-7';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
@@ -228,6 +228,8 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-pro
       supplierDashboardFrame.style.height = `${Math.max(700, Number(message.height) || 0)}px`;
     } else if (message?.type === 'supplier-save') {
       void saveSupplierDataFromFrame(message.data);
+    } else if (message?.type === 'supplier-delete') {
+      void deleteSupplierFromFrame(message.data);
     }
   });
   document.querySelectorAll('[data-inventory-tab]').forEach(button => button.addEventListener('click', () => {
@@ -324,7 +326,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-pro
     if (view === 'finance') await refreshFinance();
     if (view === 'orders') await refreshOrderAnalytics();
     if (view === 'suppliers') {
-      if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html?v=supplier-profile-20261103-6';
+      if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html?v=supplier-profile-20261103-7';
       await refreshSupplierDashboard();
     }
   }
@@ -945,6 +947,24 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-pro
       if (supplierDashboardFrame?.contentWindow) {
         supplierDashboardFrame.contentWindow.postMessage({ type: 'supplier-save-result', ok: false, message: error.message }, location.origin);
       }
+    } finally {
+      supplierSaveBusy = false;
+    }
+  }
+
+  async function deleteSupplierFromFrame(data) {
+    if (supplierSaveBusy) return;
+    supplierSaveBusy = true;
+    try {
+      const result = await api('/api/suppliers', { method: 'DELETE', body: JSON.stringify(data || {}) });
+      setDatabaseStatus(true, 'FIREBASE CONNECTED');
+      supplierDashboardFrame?.contentWindow?.postMessage({
+        type: 'supplier-delete-result', ok: true, supplier: result.supplier,
+      }, location.origin);
+    } catch (error) {
+      supplierDashboardFrame?.contentWindow?.postMessage({
+        type: 'supplier-delete-result', ok: false, message: error.message,
+      }, location.origin);
     } finally {
       supplierSaveBusy = false;
     }

@@ -55,6 +55,8 @@ tr.r.on td{background:var(--bg-accent)}
 .leaflet-container{font-family:var(--font);color:var(--text-primary)}
 .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface-2);color:var(--text-primary)}
 .leaflet-control-attribution{font-size:10px}
+.delete-supplier{border-color:#d78982;color:#a82f24}
+.delete-supplier:hover{background:#fff0ee}
 </style>
 </head>
 <body>
@@ -103,7 +105,7 @@ tr.r.on td{background:var(--bg-accent)}
 <div class="card">
   <p class="hd">Supplier list</p>
   <p class="sb" id="cnt"></p>
-  <div class="tw"><table><thead><tr><th class="s" data-s="name">Supplier</th><th>Location</th><th>Categories</th><th>Product type</th><th class="s" data-s="leadTimeDays">Lead time</th><th class="s" data-s="qualityScore">Product quality</th></tr></thead><tbody id="tb"></tbody></table></div>
+  <div class="tw"><table><thead><tr><th class="s" data-s="name">Supplier</th><th>Location</th><th>Categories</th><th>Product type</th><th class="s" data-s="leadTimeDays">Lead time</th><th class="s" data-s="qualityScore">Product quality</th><th>Action</th></tr></thead><tbody id="tb"></tbody></table></div>
   <p class="sb" style="margin:10px 0 0">Lead time, quality, and defect values are shown only when entered for a supplier. A saved latitude and longitude place that supplier on the map.</p>
 </div>
 
@@ -116,6 +118,6 @@ tr.r.on td{background:var(--bg-accent)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="./supplier-dashboard.js?v=supplier-profile-20261103-6"></script>
+<script src="./supplier-dashboard.js?v=supplier-profile-20261103-7"></script>
 </body>
 </html>
