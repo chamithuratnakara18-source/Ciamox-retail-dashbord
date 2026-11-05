@@ -57,12 +57,114 @@ tr.r.on td{background:var(--bg-accent)}
 .leaflet-control-attribution{font-size:10px}
 .delete-supplier{border-color:#d78982;color:#a82f24}
 .delete-supplier:hover{background:#fff0ee}
+/* Match the Store Hub dashboard visual style; supplier behavior stays in supplier-dashboard.js. */
+:root{--bg:#f5f7f8;--surface-0:#f5f7f8;--surface-1:#f3f6f7;--surface-2:#fff;--border:#e5eaed;--border-strong:#dfe6e9;--border-stronger:#aab6bd;--text-primary:#1b2732;--text-secondary:#71808a;--text-muted:#94a0a7;--bg-accent:#e8f7f0;--radius:10px;--font:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:light}
+body{background:radial-gradient(ellipse at 90% 3%,#e6f6ef 0,transparent 34%),#f5f7f8;color:#1b2732;font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px}
+.page{width:100%;max-width:1320px;margin:0 auto;padding:24px 0 40px}
+h1{margin:8px 0 6px;color:#182630;font:800 32px/1.1 Manrope,'DM Sans',system-ui,sans-serif;letter-spacing:-.06em}
+.intro{margin:0 0 18px;color:#84919b;font-size:12px;line-height:1.55}
+.k{min-width:0;padding:17px 18px;border:1px solid #e8ecee;border-top:3px solid #28b783;border-radius:14px;background:#fff;box-shadow:0 8px 24px #20324007}
+#kp>.k:nth-child(1){border-top-color:#f47a27}#kp>.k:nth-child(2){border-top-color:#24a97b}#kp>.k:nth-child(3){border-top-color:#527cdb}#kp>.k:nth-child(4){border-top-color:#25343c}
+.k span.l{color:#55636c;font-size:11px;font-weight:650}
+.k b{margin-top:12px;color:#182630;font:800 clamp(21px,2vw,28px)/1.1 Manrope,'DM Sans',system-ui,sans-serif;letter-spacing:-.05em}
+.k i{display:block;margin-top:8px;color:#94a0a7;font-size:9px;line-height:1.4}
+.kg{align-items:center;gap:8px}.kg svg{width:70px;max-width:32%;color:#28b783}
+.fr{gap:9px;margin:0 0 14px;padding:12px;border:1px solid #e6ebee;border-radius:13px;background:#fff;box-shadow:0 6px 18px #20324005}
+input[type=text],select{height:40px;padding:0 12px;border:1px solid #e2e8eb;border-radius:8px;background:#fff;color:#25343c;font-size:11px;outline:none}
+input[type=text]:focus,select:focus{border-color:#28b783;box-shadow:0 0 0 3px #28b7831a}
+.fr input{min-width:200px}.fr select{min-width:155px}
+button{border-color:#e3e8eb;border-radius:9px;background:#fff;color:#34424a;font-size:10px;font-weight:700;transition:background .15s,border-color .15s,transform .15s}
+button:hover{border-color:#cbd7d7;background:#f5f7f8}
+.ch{padding:7px 11px;font-size:10px}.ch.on{border-color:#172936;background:#172936;color:#fff}
+#openSupplierForm,.workflow-primary{border-color:#1fa876;background:#1fa876;color:#fff;box-shadow:0 4px 12px #1fa87622}
+#openSupplierForm:hover,.workflow-primary:hover{border-color:#168d63;background:#168d63}
+.card{margin-bottom:14px;padding:17px 19px;border:1px solid #e6ebee;border-radius:16px;background:#fff;box-shadow:0 8px 24px #20324007}
+.hd{color:#182630;font:800 17px/1.25 Manrope,'DM Sans',system-ui,sans-serif;letter-spacing:-.035em}
+.sb{color:#84919b;font-size:10px;line-height:1.5}
+.top{align-items:center;gap:12px}
+.supplier-map{height:330px;margin-top:12px;border:1px solid #e6ebee;border-radius:12px;background:#f3f6f7}
+.lg{gap:12px;color:#84919b;font-size:10px}
+.dg{gap:14px 18px}.dg span.l{color:#84919b;font-size:9px;font-weight:650}.dg p{margin-top:3px;color:#25343c;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.tw{border:1px solid #edf0f2;border-radius:10px}
+table{min-width:760px;font-size:11px}
+th{padding:11px 12px;border-bottom:1px solid #e8ecee;background:#fbfcfc;color:#89969e;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+td{padding:12px;border-bottom:1px solid #eff2f3;color:#53616a;font-size:10px}
+tr.r:hover td{background:#f7faf9}tr.r.on td{background:#e8f7f0}
+.tag{border-color:#e5eaed;background:#f5f7f8;color:#53616a}
+.pill{border-radius:20px;padding:4px 9px;font-size:9px;font-weight:700}
+.cg{min-width:125px}.cg svg{width:52px}.cg small{font-size:9px;white-space:normal}
+.delete-supplier{border-color:#f0d6d2;background:#fff;color:#b35331}.delete-supplier:hover{border-color:#e7b9b1;background:#fff2ee}
+#supplierFormPanel[hidden]{display:none!important}
+#supplierFormPanel form{margin-top:12px}
+#supplierFormPanel label{color:#53616a!important;font-size:10px!important;font-weight:650}
+#supplierFormPanel input{width:100%;min-width:0;height:40px}
+#saveSupplierButton{min-height:38px;padding:9px 14px;border:0;border-radius:9px;background:#1fa876;color:#fff;box-shadow:0 4px 12px #1fa87622}
+#saveSupplierButton:hover{background:#168d63}
+#saveSupplierButton:disabled{opacity:.6;cursor:wait}
+#supplierFormMessage{font-size:10px}
+#det .delete-supplier{padding:8px 12px}
+#sc{font-family:'DM Sans',system-ui,sans-serif}
+@media(max-width:760px){.page{padding:20px 0 30px}h1{font-size:28px}.card{padding:15px}.top{align-items:flex-start}.supplier-map{height:280px}.fr{align-items:stretch}.fr input{flex-basis:100%;min-width:0}.fr select{flex:1;min-width:0}#types{width:100%}}
+@media(max-width:480px){.page{padding-top:15px}h1{font-size:25px}.k{padding:13px}.k b{font-size:20px}.k i{font-size:8px}.card{padding:13px;border-radius:13px}.supplier-map{height:245px}.top>div:last-child{width:100%;flex-wrap:wrap}.hd{font-size:15px}#sc{min-height:220px}}
+/* Supplier screen aligned with Store Hub dashboard; selectors and data behavior are unchanged. */
+body{background:transparent;color:#1b2732}
+.page{width:100%;max-width:1320px;margin:0 auto;padding:25px 0 42px}
+.supplier-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:0 0 18px}
+.supplier-eyebrow{display:flex;align-items:center;gap:8px;color:#929da6;font-size:9px;font-weight:800;letter-spacing:.16em}
+.supplier-eyebrow span{width:17px;height:2px;border-radius:2px;background:#47c697}
+.supplier-heading h1{margin:10px 0 6px;color:#182630;font:800 32px/1.1 Manrope,'DM Sans',system-ui,sans-serif;letter-spacing:-.06em}
+.intro{max-width:760px;margin:0;color:#84919b;font-size:12px;line-height:1.55}
+#kp{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:12px!important;margin:0 0 14px!important}
+.k{min-height:142px;padding:17px 18px;border:1px solid #e5eaed;border-radius:17px;background:#fff;box-shadow:0 8px 20px #17232b09}
+.k span.l{color:#55636c;font-size:13px;font-weight:600}
+.k b{margin-top:17px;color:#182630;font:800 clamp(22px,2.2vw,28px)/1.1 Manrope,'DM Sans',system-ui,sans-serif;letter-spacing:-.05em}
+.k i{display:block;margin-top:9px;color:#84919b;font-size:10px;line-height:1.45}
+.kg{justify-content:space-between;gap:5px}.kg svg{width:64px;max-width:31%;color:#28b783}
+.fr{gap:9px;margin:0 0 14px;padding:11px;border:1px solid #e6ebee;border-radius:15px;background:#fff;box-shadow:0 6px 18px #20324005}
+input[type=text],select{height:40px;padding:0 12px;border:1px solid #e2e8eb;border-radius:9px;background:#fff;color:#25343c;font-size:12px}
+.fr input{min-width:200px}.fr select{min-width:155px}
+button{border-color:#e3e8eb;border-radius:10px;background:#fff;color:#34424a;font-size:11px;font-weight:650;transition:background .15s,border-color .15s,transform .15s}
+button:hover{border-color:#cbd7d7;background:#f5f7f8}
+.ch{padding:7px 11px;font-size:10px}.ch.on{border-color:#172936;background:#172936;color:#fff}
+#openSupplierForm,#saveSupplierButton{border-color:#1fa876;background:#1fa876;color:#fff;box-shadow:0 4px 12px #1fa87622}
+#openSupplierForm:hover,#saveSupplierButton:hover{border-color:#168d63;background:#168d63}
+.card{margin-bottom:14px;padding:18px 20px;border:1px solid #e6ebee;border-radius:18px;background:#fff;box-shadow:0 8px 20px #17232b09}
+.hd{color:#182630;font:800 20px/1.2 Manrope,'DM Sans',system-ui,sans-serif;letter-spacing:-.04em}
+.sb{color:#84919b;font-size:11px;line-height:1.5}
+.top{align-items:center;gap:12px}
+.supplier-map{height:360px;margin-top:13px;border:1px solid #e6ebee;border-radius:14px;background:#f3f6f7}
+.lg{gap:12px;color:#84919b;font-size:10px}
+.dg{gap:16px 20px}.dg span.l{color:#84919b;font-size:10px;font-weight:650}.dg p{margin-top:4px;color:#25343c;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.tw{border:1px solid #edf0f2;border-radius:12px}
+table{min-width:760px;font-size:11px}
+th{padding:12px;border-bottom:1px solid #e8ecee;background:#fbfcfc;color:#89969e;font-size:9px;font-weight:700;letter-spacing:.05em}
+td{padding:13px 12px;border-bottom:1px solid #eff2f3;color:#53616a;font-size:11px}
+tr.r:hover td{background:#f7faf9}tr.r.on td{background:#e8f7f0}
+.tag{border-color:#e5eaed;background:#f5f7f8;color:#53616a}
+.pill{border-radius:20px;padding:4px 9px;font-size:9px;font-weight:700}
+.cg{min-width:125px}.cg svg{width:52px}.cg small{font-size:9px;white-space:normal}
+.delete-supplier{border-color:#f0d6d2;background:#fff;color:#b35331}.delete-supplier:hover{border-color:#e7b9b1;background:#fff2ee}
+#supplierFormPanel form{margin-top:14px}
+#supplierFormPanel label{color:#53616a!important;font-size:11px!important;font-weight:650}
+#supplierFormPanel input{width:100%;min-width:0;height:42px}
+#saveSupplierButton{min-height:40px;padding:9px 15px;border:0;border-radius:10px}
+#saveSupplierButton:disabled{opacity:.6;cursor:wait}
+#supplierFormMessage{font-size:11px}
+#det .delete-supplier{padding:8px 12px}
+#sc{font-family:'DM Sans',system-ui,sans-serif}
+@media(max-width:760px){.page{padding:20px 0 30px}.supplier-heading h1{font-size:28px}#kp{grid-template-columns:repeat(2,minmax(0,1fr))!important}.k{min-height:128px;padding:15px}.card{padding:16px}.top{align-items:flex-start}.supplier-map{height:300px}.fr{align-items:stretch}.fr input{flex-basis:100%;min-width:0}.fr select{flex:1;min-width:0}#types{width:100%}}
+@media(max-width:480px){.page{padding-top:16px}.supplier-heading h1{font-size:25px}.k{min-height:120px;padding:13px}.k b{font-size:20px}.k i{font-size:9px}.card{padding:14px;border-radius:14px}.supplier-map{height:255px}.top>div:last-child{width:100%;flex-wrap:wrap}.hd{font-size:16px}#sc{min-height:220px}}
 </style>
 </head>
 <body>
 <div class="page">
-<h1>Supplier management dashboard</h1>
-<p class="intro" id="supplierStatus">Loading live supplier, product, and receipt data from RetailFlow…</p>
+<header class="supplier-heading">
+  <div>
+    <div class="supplier-eyebrow"><span></span> SUPPLIER OPERATIONS</div>
+    <h1>Suppliers</h1>
+    <p class="intro" id="supplierStatus">Loading live supplier, product, and receipt data from RetailFlow…</p>
+  </div>
+</header>
 
 <div id="kp" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px"></div>
 

@@ -18,6 +18,8 @@ const supplierForm=document.getElementById('supplierForm');
 const supplierFormPanel=document.getElementById('supplierFormPanel');
 const supplierFormMessage=document.getElementById('supplierFormMessage');
 const supplierSaveButton=document.getElementById('saveSupplierButton');
+const supplierDraftKey='retailflow.supplier-form-draft.v1';
+const supplierDraftFields=['supplierName','supplierType','supplierCity','supplierCountry','supplierLatitude','supplierLongitude','supplierLeadTime','supplierQuality','supplierDefectRate'];
 let scatter=null;
 let map=null,markerLayer=null,mapHasFitted=false;
 const osmTileUrl='https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -211,6 +213,27 @@ function draw(){
  sendHeight();
 }
 function sendHeight(){if(window.parent!==window)window.parent.postMessage({type:'supplier-dashboard-height',height:Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)},location.origin);}
+function saveSupplierDraft(){
+ try{
+  const values=Object.fromEntries(supplierDraftFields.map(id=>[id,document.getElementById(id).value]));
+  if(supplierDraftFields.some(id=>values[id].trim()))localStorage.setItem(supplierDraftKey,JSON.stringify({savedAt:Date.now(),values}));
+  else localStorage.removeItem(supplierDraftKey);
+ }catch(error){/* Storage may be unavailable; the form remains usable in memory. */}
+}
+function restoreSupplierDraft(){
+ try{
+  const raw=localStorage.getItem(supplierDraftKey);
+  if(!raw)return;
+  const draft=JSON.parse(raw);
+  if(!draft?.savedAt||Date.now()-draft.savedAt>7*24*60*60*1000){localStorage.removeItem(supplierDraftKey);return;}
+  const values=draft.values||{};
+  supplierDraftFields.forEach(id=>{if(typeof values[id]==='string')document.getElementById(id).value=values[id];});
+  if(supplierDraftFields.some(id=>String(values[id]||'').trim())){
+   supplierFormPanel.hidden=false;
+   supplierFormMessage.textContent='Unsaved draft restored from this browser.';
+  }
+ }catch(error){/* Ignore an unreadable or unavailable draft. */}
+}
 function fillFormFromSupplier(name){
  const supplier=S.find(s=>s.name.toLocaleLowerCase()===name.trim().toLocaleLowerCase());
  if(!supplier)return;
@@ -222,6 +245,7 @@ function fillFormFromSupplier(name){
  document.getElementById('supplierLeadTime').value=supplier.leadTimeDays??'';
  document.getElementById('supplierQuality').value=supplier.qualityScore??'';
  document.getElementById('supplierDefectRate').value=supplier.defectRate??'';
+ saveSupplierDraft();
 }
 function mergeSavedSupplier(profile){
  const key=String(profile.name||'').trim().toLocaleLowerCase();
@@ -250,6 +274,11 @@ document.getElementById('m2').addEventListener('click',()=>{st.color='quality';d
 document.getElementById('openSupplierForm').addEventListener('click',()=>{supplierFormPanel.hidden=false;supplierFormPanel.scrollIntoView({behavior:'smooth',block:'nearest'});document.getElementById('supplierName').focus();});
 document.getElementById('closeSupplierForm').addEventListener('click',()=>{supplierFormPanel.hidden=true;});
 document.getElementById('supplierName').addEventListener('change',event=>fillFormFromSupplier(event.target.value));
+supplierDraftFields.forEach(id=>{
+ const field=document.getElementById(id);
+ field.addEventListener('input',saveSupplierDraft);
+ field.addEventListener('change',saveSupplierDraft);
+});
 supplierForm.addEventListener('submit',event=>{
  event.preventDefault();supplierFormMessage.textContent='';
  const raw={name:document.getElementById('supplierName').value.trim(),supplierType:document.getElementById('supplierType').value.trim(),city:document.getElementById('supplierCity').value.trim(),country:document.getElementById('supplierCountry').value.trim(),latitude:document.getElementById('supplierLatitude').value.trim(),longitude:document.getElementById('supplierLongitude').value.trim(),leadTimeDays:document.getElementById('supplierLeadTime').value.trim(),qualityScore:document.getElementById('supplierQuality').value.trim(),defectRate:document.getElementById('supplierDefectRate').value.trim()};
@@ -268,6 +297,7 @@ supplierForm.addEventListener('submit',event=>{
   window.parent.postMessage({type:'supplier-save',data:{...raw,latitude,longitude,leadTimeDays,qualityScore,defectRate}},location.origin);
  }catch(error){supplierFormMessage.textContent=error.message;}
 });
+restoreSupplierDraft();
 initMap();initScatter();draw();
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==window.parent)return;
@@ -275,7 +305,7 @@ window.addEventListener('message',event=>{
  if(event.data?.type==='supplier-error')status.textContent=S.length?'RetailFlow connection unavailable · showing the last loaded supplier data':'Supplier data is unavailable. Check the RetailFlow connection and try again.';
  if(event.data?.type==='supplier-save-result'){
   supplierSaveButton.disabled=false;supplierSaveButton.textContent='Save supplier data';
-  if(event.data.ok){mergeSavedSupplier(event.data.supplier);supplierFormMessage.textContent='Supplier data saved to RetailFlow.';}
+  if(event.data.ok){try{localStorage.removeItem(supplierDraftKey);}catch(error){}mergeSavedSupplier(event.data.supplier);supplierFormMessage.textContent='Supplier data saved to RetailFlow.';}
   else {supplierFormMessage.textContent=event.data.message||'Supplier data could not be saved.';status.textContent='Supplier save failed: '+supplierFormMessage.textContent;}
  }
  if(event.data?.type==='supplier-delete-result'){
