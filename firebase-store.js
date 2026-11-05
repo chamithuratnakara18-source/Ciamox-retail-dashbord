@@ -731,37 +731,35 @@ async function loadCollections() {
   return Object.fromEntries(names.map((name, index) => [name, rows(snapshots[index])]));
 }
 
-async function loadSupplierProfilesFromBackend() {
-  const response = await fetch('/api/suppliers', { method: 'GET', cache: 'no-store', credentials: 'same-origin' });
-  let result;
-  try { result = await response.json(); }
-  catch { throw new Error('The supplier profile API returned an invalid response.'); }
-  if (!response.ok) throw new Error(result.error || `Supplier profile request failed (${response.status}).`);
-  return Array.isArray(result.suppliers) ? result.suppliers : [];
-}
-
 async function loadSupplierCollections() {
   if (live) {
     await live.ready;
     if (live.error) throw live.error;
-    const suppliers = await loadSupplierProfilesFromBackend();
     return {
       products: live.data.products,
       receipts: live.data.receipts,
-      suppliers,
-      supplierProfileError: '',
+      suppliers: live.data.suppliers || [],
+      supplierProfileError: live.supplierProfileError?.message || '',
     };
   }
-  const [productsSnapshot, receiptsSnapshot, suppliers] = await Promise.all([
+  const [productsSnapshot, receiptsSnapshot] = await Promise.all([
     getDocs(collection(db(), 'products')),
     getDocs(collection(db(), 'receipts')),
-    loadSupplierProfilesFromBackend(),
   ]);
+  let suppliers = [];
+  let supplierProfileError = '';
+  try {
+    suppliers = rows(await getDocs(collection(db(), 'suppliers')));
+  } catch (error) {
+    // Profile fields enrich the supplier list, but inventory and receipts are
+    // the source of supplier names. A denied profile read must not hide them.
+    supplierProfileError = error?.message || 'Saved supplier details could not be loaded.';
+  }
   return {
     products: rows(productsSnapshot),
     receipts: rows(receiptsSnapshot),
     suppliers,
-    supplierProfileError: '',
+    supplierProfileError,
   };
 }
 
