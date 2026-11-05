@@ -90,7 +90,7 @@ function drawKpis(rows){
 function tinyGauge(value,min,max,color,center,aria){return '<div class="cg">'+smallGauge(value,min,max,color,center,aria)+'<div><span class="pill" style="background:'+color+';color:'+(color==='#fab219'?'#412402':'#fff')+'">'+(value==null?'Not tracked':value<=7?'Up to 7 days':value>=95?'Excellent':'Recorded')+'</span><small>'+esc(aria)+'</small></div></div>';}
 function requestDeleteSupplier(s,button){
  if(supplierDeleteBusy)return;
- if(!window.confirm('Remove '+s.name+' from the Suppliers dashboard? Product and receipt history will be kept. A new scanned delivery restores this supplier.'))return;
+ if(!window.confirm('Delete '+s.name+'? Its supplier name will be cleared from linked inventory and receipt records. Product stock and receipt entries will remain.'))return;
  if(window.parent===window){supplierFormMessage.textContent='Open this page from the RetailFlow Suppliers tab to delete suppliers.';return;}
  supplierDeleteBusy=true;
  if(button){button.disabled=true;button.textContent='Deleting…';}
@@ -317,8 +317,12 @@ window.addEventListener('message',event=>{
    if(st.sel===key)st.sel=null;
    selectedSupplierName='';
    updateControls();draw();
-   supplierFormMessage.textContent='Supplier removed. Product and receipt history was kept.';
-   status.textContent='Supplier '+deletedName+' removed from this dashboard; product and receipt history is retained.';
+   const products=Number(event.data.clearedProductLinks)||0;
+   const receipts=Number(event.data.clearedReceiptLinks)||0;
+   const productLabel=products===1?'product':'products';
+   const receiptLabel=receipts===1?'receipt':'receipts';
+   supplierFormMessage.textContent='Supplier deleted. Cleared from '+products+' '+productLabel+' and '+receipts+' '+receiptLabel+'.';
+   status.textContent='Supplier '+deletedName+' deleted; linked supplier names were cleared. Product stock and receipt entries remain.';
   }else{
    supplierFormMessage.textContent=event.data.message||'Supplier could not be deleted.';
    status.textContent='Supplier delete failed: '+supplierFormMessage.textContent;

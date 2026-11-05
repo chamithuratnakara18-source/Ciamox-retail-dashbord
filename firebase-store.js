@@ -364,11 +364,10 @@ function supplierAnalytics(data) {
   const archivedSuppliers = new Set((data.suppliers || [])
     .filter(profile => profile?.archived === true)
     .map(profile => supplierKey(profile.name)));
-  // Current inventory is the source of truth for active supplier names. An old
-  // archived profile must not hide a supplier still assigned to an inventory item.
-  const inventorySupplierKeys = new Set((data.products || [])
-    .map(product => supplierKey(productSupplierName(product)))
-    .filter(Boolean));
+  // Supplier names can be discovered from inventory, but an explicit delete
+  // archives that supplier and must keep it hidden even while old products or
+  // receipts still retain the historical supplier name. A new inbound receipt
+  // reactivates the archived profile on the backend.
   const getSupplier = value => {
     const name = typeof value === 'string' ? value.trim() : '';
     if (!name) return null;
@@ -445,7 +444,7 @@ function supplierAnalytics(data) {
     supplier.defectRate = profile.defectRate == null ? null : Number(profile.defectRate);
   }
   const list = [...suppliers.values()].filter(supplier =>
-    !archivedSuppliers.has(supplier.key) || inventorySupplierKeys.has(supplier.key)).map(supplier => ({
+    !archivedSuppliers.has(supplier.key)).map(supplier => ({
     key: supplier.key,
     name: supplier.name,
     city: supplier.city,
@@ -732,32 +731,48 @@ async function loadCollections() {
 }
 
 async function loadSupplierCollections() {
+  let products;
+  let receipts;
+  let fallbackProfiles = [];
+  let supplierProfileError = '';
   if (live) {
     await live.ready;
     if (live.error) throw live.error;
-    return {
-      products: live.data.products,
-      receipts: live.data.receipts,
-      suppliers: live.data.suppliers || [],
-      supplierProfileError: live.supplierProfileError?.message || '',
-    };
+    products = live.data.products;
+    receipts = live.data.receipts;
+    fallbackProfiles = live.data.suppliers || [];
+    supplierProfileError = live.supplierProfileError?.message || '';
+  } else {
+    const [productsSnapshot, receiptsSnapshot] = await Promise.all([
+      getDocs(collection(db(), 'products')),
+      getDocs(collection(db(), 'receipts')),
+    ]);
+    products = rows(productsSnapshot);
+    receipts = rows(receiptsSnapshot);
   }
-  const [productsSnapshot, receiptsSnapshot] = await Promise.all([
-    getDocs(collection(db(), 'products')),
-    getDocs(collection(db(), 'receipts')),
-  ]);
-  let suppliers = [];
-  let supplierProfileError = '';
+
+  // Load archive markers through the Admin-backed function. Browser Firestore
+  // rules may allow inventory reads while denying supplier profile reads; that
+  // must not make deleted suppliers reappear after refresh.
+  let suppliers = fallbackProfiles;
   try {
-    suppliers = rows(await getDocs(collection(db(), 'suppliers')));
+    const response = await fetch('/api/suppliers', {
+      method: 'GET', cache: 'no-store', credentials: 'same-origin',
+    });
+    let result;
+    try { result = await response.json(); }
+    catch { throw new Error('The supplier profile API returned an invalid response.'); }
+    if (!response.ok) throw new Error(result.error || `Supplier profile request failed (${response.status}).`);
+    suppliers = Array.isArray(result.suppliers) ? result.suppliers : [];
+    supplierProfileError = '';
   } catch (error) {
     // Profile fields enrich the supplier list, but inventory and receipts are
-    // the source of supplier names. A denied profile read must not hide them.
-    supplierProfileError = error?.message || 'Saved supplier details could not be loaded.';
+    // the source of supplier names. Keep inventory visible if profiles fail.
+    supplierProfileError ||= error?.message || 'Saved supplier details could not be loaded.';
   }
   return {
-    products: rows(productsSnapshot),
-    receipts: rows(receiptsSnapshot),
+    products,
+    receipts,
     suppliers,
     supplierProfileError,
   };

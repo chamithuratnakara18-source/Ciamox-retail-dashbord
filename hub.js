@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-inventory-source-20261105-4';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-inventory-source-20261105-6';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
@@ -326,7 +326,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-inv
     if (view === 'finance') await refreshFinance();
     if (view === 'orders') await refreshOrderAnalytics();
     if (view === 'suppliers') {
-      if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html?v=supplier-profile-20261103-7';
+      if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html?v=supplier-delete-linked-data-20261105-1';
       await refreshSupplierDashboard();
     }
   }
@@ -960,6 +960,8 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-inv
       setDatabaseStatus(true, 'FIREBASE CONNECTED');
       supplierDashboardFrame?.contentWindow?.postMessage({
         type: 'supplier-delete-result', ok: true, supplier: result.supplier,
+        clearedProductLinks: result.clearedProductLinks,
+        clearedReceiptLinks: result.clearedReceiptLinks,
       }, location.origin);
     } catch (error) {
       supplierDashboardFrame?.contentWindow?.postMessage({
