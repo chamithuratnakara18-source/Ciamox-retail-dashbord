@@ -357,6 +357,11 @@ function supplierAnalytics(data) {
   const archivedSuppliers = new Set((data.suppliers || [])
     .filter(profile => profile?.archived === true)
     .map(profile => supplierKey(profile.name)));
+  // Current inventory is the source of truth for active supplier names. An old
+  // archived profile must not hide a supplier still assigned to an inventory item.
+  const inventorySupplierKeys = new Set((data.products || [])
+    .map(product => supplierKey(product?.supplierName))
+    .filter(Boolean));
   const getSupplier = value => {
     const name = typeof value === 'string' ? value.trim() : '';
     if (!name) return null;
@@ -432,7 +437,8 @@ function supplierAnalytics(data) {
     supplier.qualityScore = profile.qualityScore == null ? null : Number(profile.qualityScore);
     supplier.defectRate = profile.defectRate == null ? null : Number(profile.defectRate);
   }
-  const list = [...suppliers.values()].filter(supplier => !archivedSuppliers.has(supplier.key)).map(supplier => ({
+  const list = [...suppliers.values()].filter(supplier =>
+    !archivedSuppliers.has(supplier.key) || inventorySupplierKeys.has(supplier.key)).map(supplier => ({
     key: supplier.key,
     name: supplier.name,
     city: supplier.city,
