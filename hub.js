@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-inventory-source-20261105-2';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-inventory-source-20261105-3';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');

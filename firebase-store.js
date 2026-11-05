@@ -108,13 +108,20 @@ function inventoryAnalyticsRange(period, requestedAnchor = todayLocal()) {
   return { from, to: to > today ? today : to };
 }
 
+function productSupplierName(data) {
+  for (const value of [data?.supplierName, data?.supplier, data?.vendorName, data?.vendor]) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
 function shapeProduct(data) {
   if (!data) return null;
   return {
     barcode: data.barcode, name: data.name, quantity: Number(data.quantity) || 0,
     originalPrice: data.originalPrice == null ? null : Number(data.originalPrice),
     unitCost: data.unitCost == null ? null : Number(data.unitCost),
-    arrivalDate: data.arrivalDate || '', supplierName: data.supplierName || '', category: data.category || '',
+    arrivalDate: data.arrivalDate || '', supplierName: productSupplierName(data), category: data.category || '',
     manufactureDate: data.manufactureDate || '', expiryDate: data.expiryDate || '',
     photoDataUrl: data.photoDataUrl || '',
     updatedAt: data.updatedAt,
@@ -360,7 +367,7 @@ function supplierAnalytics(data) {
   // Current inventory is the source of truth for active supplier names. An old
   // archived profile must not hide a supplier still assigned to an inventory item.
   const inventorySupplierKeys = new Set((data.products || [])
-    .map(product => supplierKey(product?.supplierName))
+    .map(product => supplierKey(productSupplierName(product)))
     .filter(Boolean));
   const getSupplier = value => {
     const name = typeof value === 'string' ? value.trim() : '';
@@ -377,7 +384,7 @@ function supplierAnalytics(data) {
   };
   const unassignedProducts = [];
   for (const product of sortedProducts(data.products)) {
-    const supplier = getSupplier(product.supplierName);
+    const supplier = getSupplier(productSupplierName(product));
     if (!supplier) { unassignedProducts.push(product); continue; }
     const itemKey = product.barcode || product.name.toLocaleLowerCase();
     const item = supplier.items.get(itemKey) || {
@@ -400,7 +407,7 @@ function supplierAnalytics(data) {
     const quantity = Number(receipt.quantity);
     if (receipt.type === 'inventory_removal' || receipt.type === 'pos_order' ||
         !Number.isFinite(quantity) || quantity <= 0) continue;
-    const supplier = getSupplier(receipt.supplierName);
+    const supplier = getSupplier(productSupplierName(receipt));
     if (!supplier) continue;
     supplier.inboundRecords++;
     supplier.inboundUnits += quantity;
