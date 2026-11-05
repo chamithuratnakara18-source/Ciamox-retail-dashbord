@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supplier Management Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{--bg:#f4f3ef;--surface-0:#f4f3ef;--surface-1:#eeede8;--surface-2:#ffffff;--border:#e0ded7;--border-strong:#cfcdc4;--border-stronger:#9a9890;--text-primary:#16202b;--text-secondary:#5d6672;--text-muted:#898781;--bg-accent:#dbe9f8;--radius:8px;--font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color-scheme:light}
+@media (prefers-color-scheme: dark){:root{--bg:#11151a;--surface-0:#11151a;--surface-1:#222a33;--surface-2:#1a2027;--border:#2b333c;--border-strong:#3a444f;--border-stronger:#6b7785;--text-primary:#e8ecf0;--text-secondary:#9aa5b1;--text-muted:#7c8794;--bg-accent:#1d3550;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text-primary);font-family:var(--font);font-size:15px;line-height:1.5}
+.page{max-width:1080px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;font-weight:600;margin:0 0 2px}
+.intro{font-size:13px;color:var(--text-secondary);margin:0 0 16px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+input,select,button{font:inherit;color:var(--text-primary)}
+input[type=text],select{height:36px;padding:0 10px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface-2)}
+button{border:1px solid var(--border-strong);background:transparent;border-radius:var(--radius);cursor:pointer;padding:6px 12px}
+button:hover{background:var(--surface-1)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #2a78d6;outline-offset:2px}
+.k{background:var(--surface-1);border-radius:var(--radius);padding:10px 12px}
+.k span.l{font-size:12px;color:var(--text-secondary);display:block}
+.k b{font-size:22px;font-weight:600;display:block}
+.k i{font-size:12px;font-style:normal;color:var(--text-secondary)}
+.kg{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.kg svg{width:84px;flex:none}
+.card{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.hd{font-size:15px;font-weight:600;margin:0}
+.sb{font-size:12px;color:var(--text-secondary);margin:2px 0 8px}
+.fr{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.fr input{flex:1;min-width:160px}
+.fr select{min-width:140px}
+.ch{font-size:12px;padding:4px 11px;height:auto}
+.ch.on{background:var(--surface-1);border-color:var(--border-stronger)}
+.top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.lg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-top:6px}
+.lg span{display:flex;align-items:center;gap:5px}.lg i{width:10px;height:10px;border-radius:50%;display:inline-block}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-weight:400;font-size:12px;color:var(--text-secondary);text-align:left;padding:6px;border-bottom:1px solid var(--border-strong);white-space:nowrap}
+th.s{cursor:pointer}th.s:hover{color:var(--text-primary)}
+td{padding:8px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr.r{cursor:pointer}tr.r:hover td{background:var(--surface-1)}
+tr.r.on td{background:var(--bg-accent)}
+.tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;background:var(--surface-1);border:1px solid var(--border);margin:1px 3px 1px 0;white-space:nowrap}
+.pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:6px;white-space:nowrap}
+.cg{display:flex;align-items:center;gap:8px;min-width:140px}
+.cg svg{width:62px;flex:none;display:block}
+.cg small{display:block;font-size:11px;color:var(--text-secondary);margin-top:3px;white-space:nowrap}
+.dg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 18px;margin-top:12px}
+.dg span.l{font-size:12px;color:var(--text-secondary);display:block}
+.dg p{margin:0;font-size:14px}
+.tw{overflow-x:auto}
+.supplier-map{width:100%;height:330px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface-1)}
+.leaflet-container{font-family:var(--font);color:var(--text-primary)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface-2);color:var(--text-primary)}
+.leaflet-control-attribution{font-size:10px}
+.delete-supplier{border-color:#d78982;color:#a82f24}
+.delete-supplier:hover{background:#fff0ee}
+/* Match the Store Hub dashboard visual style; supplier behavior stays in supplier-dashboard.js. */
+:root{--bg:#f5f7f8;--surface-0:#f5f7f8;--surface-1:#f3f6f7;--surface-2:#fff;--border:#e5eaed;--border-strong:#dfe6e9;--border-stronger:#aab6bd;--text-primary:#1b2732;--text-secondary:#71808a;--text-muted:#94a0a7;--bg-accent:#e8f7f0;--radius:10px;--font:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:light}
+body{background:radial-gradient(ellipse at 90% 3%,#e6f6ef 0,transparent 34%),#f5f7f8;color:#1b2732;font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px}
+.page{width:100%;max-width:1320px;margin:0 auto;padding:24px 0 40px}
+h1{margin:8px 0 6px;color:#182630;font:800 32px/1.1 Manrope,'DM Sans',system-ui,sans-serif;letter-spacing:-.06em}
+.intro{margin:0 0 18px;color:#84919b;font-size:12px;line-height:1.55}
+.k{min-width:0;padding:17px 18px;border:1px solid #e8ecee;border-top:3px solid #28b783;border-radius:14px;background:#fff;box-shadow:0 8px 24px #20324007}
+#kp>.k:nth-child(1){border-top-color:#f47a27}#kp>.k:nth-child(2){border-top-color:#24a97b}#kp>.k:nth-child(3){border-top-color:#527cdb}#kp>.k:nth-child(4){border-top-color:#25343c}
+.k span.l{color:#55636c;font-size:11px;font-weight:650}
+.k b{margin-top:12px;color:#182630;font:800 clamp(21px,2vw,28px)/1.1 Manrope,'DM Sans',system-ui,sans-serif;letter-spacing:-.05em}
+.k i{display:block;margin-top:8px;color:#94a0a7;font-size:9px;line-height:1.4}
+.kg{align-items:center;gap:8px}.kg svg{width:70px;max-width:32%;color:#28b783}
+.fr{gap:9px;margin:0 0 14px;padding:12px;border:1px solid #e6ebee;border-radius:13px;background:#fff;box-shadow:0 6px 18px #20324005}
+input[type=text],select{height:40px;padding:0 12px;border:1px solid #e2e8eb;border-radius:8px;background:#fff;color:#25343c;font-size:11px;outline:none}
+input[type=text]:focus,select:focus{border-color:#28b783;box-shadow:0 0 0 3px #28b7831a}
+.fr input{min-width:200px}.fr select{min-width:155px}
+button{border-color:#e3e8eb;border-radius:9px;background:#fff;color:#34424a;font-size:10px;font-weight:700;transition:background .15s,border-color .15s,transform .15s}
+button:hover{border-color:#cbd7d7;background:#f5f7f8}
+.ch{padding:7px 11px;font-size:10px}.ch.on{border-color:#172936;background:#172936;color:#fff}
+#openSupplierForm,.workflow-primary{border-color:#1fa876;background:#1fa876;color:#fff;box-shadow:0 4px 12px #1fa87622}
+#openSupplierForm:hover,.workflow-primary:hover{border-color:#168d63;background:#168d63}
+.card{margin-bottom:14px;padding:17px 19px;border:1px solid #e6ebee;border-radius:16px;background:#fff;box-shadow:0 8px 24px #20324007}
+.hd{color:#182630;font:800 17px/1.25 Manrope,'DM Sans',system-ui,sans-serif;letter-spacing:-.035em}
+.sb{color:#84919b;font-size:10px;line-height:1.5}
+.top{align-items:center;gap:12px}
+.supplier-map{height:330px;margin-top:12px;border:1px solid #e6ebee;border-radius:12px;background:#f3f6f7}
+.lg{gap:12px;color:#84919b;font-size:10px}
+.dg{gap:14px 18px}.dg span.l{color:#84919b;font-size:9px;font-weight:650}.dg p{margin-top:3px;color:#25343c;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.tw{border:1px solid #edf0f2;border-radius:10px}
+table{min-width:760px;font-size:11px}
+th{padding:11px 12px;border-bottom:1px solid #e8ecee;background:#fbfcfc;color:#89969e;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+td{padding:12px;border-bottom:1px solid #eff2f3;color:#53616a;font-size:10px}
+tr.r:hover td{background:#f7faf9}tr.r.on td{background:#e8f7f0}
+.tag{border-color:#e5eaed;background:#f5f7f8;color:#53616a}
+.pill{border-radius:20px;padding:4px 9px;font-size:9px;font-weight:700}
+.cg{min-width:125px}.cg svg{width:52px}.cg small{font-size:9px;white-space:normal}
+.delete-supplier{border-color:#f0d6d2;background:#fff;color:#b35331}.delete-supplier:hover{border-color:#e7b9b1;background:#fff2ee}
+#supplierFormPanel[hidden]{display:none!important}
+#supplierFormPanel form{margin-top:12px}
+#supplierFormPanel label{color:#53616a!important;font-size:10px!important;font-weight:650}
+#supplierFormPanel input{width:100%;min-width:0;height:40px}
+#saveSupplierButton{min-height:38px;padding:9px 14px;border:0;border-radius:9px;background:#1fa876;color:#fff;box-shadow:0 4px 12px #1fa87622}
+#saveSupplierButton:hover{background:#168d63}
+#saveSupplierButton:disabled{opacity:.6;cursor:wait}
+#supplierFormMessage{font-size:10px}
+#det .delete-supplier{padding:8px 12px}
+#sc{font-family:'DM Sans',system-ui,sans-serif}
+@media(max-width:760px){.page{padding:20px 0 30px}h1{font-size:28px}.card{padding:15px}.top{align-items:flex-start}.supplier-map{height:280px}.fr{align-items:stretch}.fr input{flex-basis:100%;min-width:0}.fr select{flex:1;min-width:0}#types{width:100%}}
+@media(max-width:480px){.page{padding-top:15px}h1{font-size:25px}.k{padding:13px}.k b{font-size:20px}.k i{font-size:8px}.card{padding:13px;border-radius:13px}.supplier-map{height:245px}.top>div:last-child{width:100%;flex-wrap:wrap}.hd{font-size:15px}#sc{min-height:220px}}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Supplier management dashboard</h1>
+<p class="intro" id="supplierStatus">Loading live supplier, product, and receipt data from RetailFlow…</p>
+
+<div id="kp" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px"></div>
+
+<div class="fr">
+  <input id="q" type="text" placeholder="Search supplier, city or product" aria-label="Search suppliers, cities, and products">
+  <select id="cat" aria-label="Product category"></select>
+  <span id="types" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+</div>
+
+<div class="card">
+  <div class="top">
+    <div><p class="hd">Where our suppliers are</p><p class="sb">Supplier dots use the longitude and latitude saved with supplier data.</p></div>
+    <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text-secondary)"><span>Color by</span><button class="ch on" id="m1" type="button">Lead time</button><button class="ch" id="m2" type="button">Quality</button><button class="ch" id="openSupplierForm" type="button">Add supplier data</button></div>
+  </div>
+  <div id="map" class="supplier-map" role="region" aria-label="OpenStreetMap showing saved supplier coordinates"></div>
+  <div class="lg" id="mlg"><span>Suppliers without coordinates do not appear on the map.</span></div>
+</div>
+
+<div class="card" id="supplierFormPanel" hidden>
+  <div class="top"><div><p class="hd">Add supplier data</p><p class="sb">Match the supplier name used by the scanner. Coordinates place the supplier on the map.</p></div><button class="ch" id="closeSupplierForm" type="button">Close</button></div>
+  <form id="supplierForm">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin:10px 0">
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Supplier name<input id="supplierName" type="text" maxlength="120" required list="supplierNames" autocomplete="organization" placeholder="Same name as scanner"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Supplier type<input id="supplierType" type="text" maxlength="80" placeholder="For example: finished goods"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">City<input id="supplierCity" type="text" maxlength="120" placeholder="City"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Country<input id="supplierCountry" type="text" maxlength="120" placeholder="Country"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Latitude<input id="supplierLatitude" type="text" inputmode="decimal" placeholder="-90 to 90"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Longitude<input id="supplierLongitude" type="text" inputmode="decimal" placeholder="-180 to 180"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Lead time (days)<input id="supplierLeadTime" type="text" inputmode="decimal" placeholder="Optional"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Quality score (0–100)<input id="supplierQuality" type="text" inputmode="decimal" placeholder="Optional"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--text-secondary)">Defect rate (%)<input id="supplierDefectRate" type="text" inputmode="decimal" placeholder="Optional"></label>
+    </div>
+    <datalist id="supplierNames"></datalist>
+    <div class="fr" style="margin-bottom:0"><button class="ch on" id="saveSupplierButton" type="submit">Save supplier data</button><span id="supplierFormMessage" class="sb" role="status" style="margin:0"></span></div>
+  </form>
+</div>
+
+<div class="card" id="det"></div>
+
+<div class="card">
+  <p class="hd">Supplier list</p>
+  <p class="sb" id="cnt"></p>
+  <div class="tw"><table><thead><tr><th class="s" data-s="name">Supplier</th><th>Location</th><th>Categories</th><th>Product type</th><th class="s" data-s="leadTimeDays">Lead time</th><th class="s" data-s="qualityScore">Product quality</th><th>Action</th></tr></thead><tbody id="tb"></tbody></table></div>
+  <p class="sb" style="margin:10px 0 0">Lead time, quality, and defect values are shown only when entered for a supplier. A saved latitude and longitude place that supplier on the map.</p>
+</div>
+
+<div class="card">
+  <p class="hd">Lead time against quality</p>
+  <p class="sb">Suppliers in the top left deliver fast and with few defects. Click a dot to select it.</p>
+  <div style="position:relative;width:100%;height:320px"><canvas id="sc" role="img" aria-label="Scatter chart of supplier lead time in days against product quality score">Each dot is a supplier plotted by lead time and quality score.</canvas></div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="./supplier-dashboard.js?v=supplier-profile-20261103-7"></script>
+</body>
+</html>
