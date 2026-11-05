@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?preview-no-auth-20261105-1';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?supplier-profile-api-20261105-1';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
