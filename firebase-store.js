@@ -4,30 +4,9 @@ import {
 } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 import { firebaseApp } from './firebase-app.js';
-import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js';
+import { getAuth } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js';
 
 const auth = getAuth(firebaseApp);
-const authButton = document.createElement('button');
-authButton.type = 'button';
-authButton.className = 'secondary-button';
-authButton.style.cssText = 'font-size:12px;padding:8px 12px;white-space:nowrap';
-authButton.textContent = 'Sign in for edits';
-authButton.title = 'Sign in with an approved Google account to change store data';
-(document.querySelector('.topbar-auth') || document.body).append(authButton);
-onAuthStateChanged(auth, user => {
-  authButton.textContent = user ? `Sign out (${user.email || 'account'})` : 'Sign in for edits';
-});
-authButton.addEventListener('click', async () => {
-  authButton.disabled = true;
-  try {
-    if (auth.currentUser) await signOut(auth);
-    else await signInWithPopup(auth, new GoogleAuthProvider());
-  } catch (error) {
-    window.alert(error.code === 'auth/unauthorized-domain'
-      ? 'Add this site to Firebase Authentication authorized domains.'
-      : error.message || 'Google sign-in failed.');
-  } finally { authButton.disabled = false; }
-});
 
 let database;
 let live;
@@ -948,11 +927,12 @@ export async function api(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
   if (method !== 'GET') {
     await auth.authStateReady();
-    if (!auth.currentUser) throw new Error('Sign in for edits with an approved Google account first.');
-    const idToken = await auth.currentUser.getIdToken();
+    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+    const headers = { 'Content-Type': 'application/json' };
+    if (idToken) headers.Authorization = `Bearer ${idToken}`;
     const response = await fetch(`${url.pathname}${url.search}`, {
       method,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      headers,
       body: options.body || '{}',
       credentials: 'same-origin',
     });
