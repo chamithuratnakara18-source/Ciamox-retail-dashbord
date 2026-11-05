@@ -419,9 +419,9 @@ function supplierAnalytics(data) {
   }
   for (const profile of data.suppliers || []) {
     if (profile?.archived === true) continue;
-    // A profile adds metadata to a supplier already recorded by the scanner.
-    // Profile-only records must not introduce placeholder suppliers into the UI.
-    const supplier = suppliers.get(supplierKey(profile?.name));
+    // Keep saved supplier profiles visible after reload, even before the scanner
+    // has recorded a product or receipt for that supplier.
+    const supplier = suppliers.get(supplierKey(profile?.name)) || getSupplier(profile?.name);
     if (!supplier) continue;
     supplier.city = profile.city || '';
     supplier.country = profile.country || '';
