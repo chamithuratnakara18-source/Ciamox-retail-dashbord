@@ -7,6 +7,8 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?preview-no-a
   const financeScreen = document.getElementById('financeScreen');
   const ordersScreen = document.getElementById('ordersScreen');
   const suppliersScreen = document.getElementById('suppliersScreen');
+  const aiCounterScreen = document.getElementById('aiCounterScreen');
+  const aiCounterFrame = document.getElementById('aiCounterFrame');
   const connectionStatus = document.getElementById('connectionStatus');
   const connectionStatusText = document.getElementById('connectionStatusText');
   const hubLayout = document.getElementById('hubLayout');
@@ -319,6 +321,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?preview-no-a
     financeScreen.classList.toggle('hidden', view !== 'finance');
     ordersScreen.classList.toggle('hidden', view !== 'orders');
     suppliersScreen.classList.toggle('hidden', view !== 'suppliers');
+    aiCounterScreen.classList.toggle('hidden', view !== 'ai-counter');
     document.querySelectorAll('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
     if (view === 'dashboard') await refreshDashboard();
     if (view === 'inventory') await refreshInventory();
@@ -328,6 +331,11 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?preview-no-a
     if (view === 'suppliers') {
       if (supplierDashboardFrame?.getAttribute('src') === 'about:blank') supplierDashboardFrame.src = './supplier-dashboard.html?v=supplier-profile-20261103-7';
       await refreshSupplierDashboard();
+    }
+    if (view === 'ai-counter' && aiCounterFrame?.getAttribute('src') === 'about:blank') {
+      aiCounterFrame.src = './ai-counter.html?v=ai-counter-firebase-20261106-1';
+    } else if (view === 'ai-counter') {
+      aiCounterFrame?.contentWindow?.postMessage({ type: 'retailflow:refresh-inventory' }, location.origin);
     }
   }
 
