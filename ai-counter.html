@@ -92,6 +92,8 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
           <button class="btn ghost" id="calBtn" disabled>Counter is empty — recalibrate</button>
           <button class="btn ghost" id="rescanBtn" disabled>Rescan item</button>
         </div>
+        <p id="cameraHelp" class="mute" role="status" style="margin:8px 0 0">Press Start camera to trigger your browser’s camera permission prompt.</p>
+        <p class="mute" style="margin:4px 0 0">If this embedded view is blocked, <a href="./ai-counter.html" target="_blank" rel="noopener">open the camera directly</a>.</p>
         <div id="candBox"></div>
         <div class="row">
           <label class="mute"><input type="checkbox" id="autoAdd"> Auto-add when very sure</label>
@@ -177,15 +179,6 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
   <div class="row" style="justify-content:flex-end;margin-top:14px">
     <button class="btn ghost" id="payCancel">Cancel</button>
     <button class="btn acc" id="payDone">Complete sale</button>
-  </div>
-</dialog>
-<dialog id="permDlg">
-  <h3 style="margin:0 0 8px">Allow camera access?</h3>
-  <p class="mute" style="margin:0 0 6px">AI Counter needs your camera to recognise products on the counter. Video stays on this device and is never uploaded.</p>
-  <p class="mute" id="permHelp" style="margin:0"></p>
-  <div class="row" style="justify-content:flex-end;margin-top:14px">
-    <button class="btn ghost" id="permNo">Not now</button>
-    <button class="btn acc" id="permYes">Allow camera</button>
   </div>
 </dialog>
 <div class="toast" id="toast"></div>
@@ -292,11 +285,29 @@ async function openCamera(video, deviceId) {
   const base = { width: { ideal: 1280 }, height: { ideal: 720 } };
   const tries = [deviceId ? { ...base, deviceId: { exact: deviceId } } : { ...base, facingMode: { ideal: 'environment' } }, true];
   let err;
-  for (const v of tries) { try { const s = await navigator.mediaDevices.getUserMedia({ video: v, audio: false }); video.srcObject = s; await video.play(); return s; } catch (e) { err = e; } }
+  for (const v of tries) {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: v, audio: false });
+      video.srcObject = stream;
+      await video.play();
+      if (!video.videoWidth) await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Camera opened but no video frames arrived. Check the lens or close other camera apps.')), 5000);
+        video.addEventListener('loadedmetadata', () => { clearTimeout(timer); resolve(); }, { once: true });
+        video.addEventListener('error', () => { clearTimeout(timer); reject(new Error('The camera opened but the video stream failed.')); }, { once: true });
+      });
+      return stream;
+    } catch (e) {
+      stream?.getTracks().forEach(track => track.stop());
+      video.srcObject = null;
+      err = e;
+      if (['NotAllowedError', 'PermissionDeniedError', 'NotReadableError', 'TrackStartError'].includes(e?.name)) throw e;
+    }
+  }
   throw err;
 }
 function cameraErrorMessage(error) {
-  if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') return 'Camera permission was denied. Use the lock/site-settings icon by the address bar, set Camera to Allow, then reload this page.';
+  if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') return 'The browser or embedded-frame policy blocked camera access. Open AI Detection Cam directly in a new tab, allow Camera for that URL, then reload.';
   if (error?.name === 'NotFoundError' || error?.name === 'DevicesNotFoundError') return 'No camera was found. Connect or enable a camera, then try again.';
   if (error?.name === 'NotReadableError' || error?.name === 'TrackStartError') return 'The camera is busy or blocked by another app. Close apps using it and try again.';
   if (error?.name === 'SecurityError' || !window.isSecureContext) return 'Camera access requires HTTPS. Open this app using its secure Vercel address.';
@@ -469,49 +480,30 @@ $('payDone').onclick = async () => {
 };
 
 /* ---------- counter camera controls ---------- */
-async function askCameraPermission(video, deviceId) {
-  // Call getUserMedia directly inside the user's Allow-camera click so the browser/device prompt is triggered reliably.
-  let state = 'prompt';
-  try { state = (await navigator.permissions.query({ name: 'camera' })).state; } catch { /* Safari: unknown */ }
-  $('permHelp').textContent = state === 'denied' ? 'This site is currently blocked. Allow Camera in the browser’s site settings first, then try again.' : '';
-  $('permYes').textContent = state === 'denied' ? 'Try again' : 'Allow camera';
-  return new Promise(resolve => {
-    const d = $('permDlg');
-    let settled = false;
-    const finish = value => { if (settled) return; settled = true; resolve(value); };
-    $('permYes').onclick = async () => {
-      $('permYes').disabled = true;
-      try {
-        const stream = await openCamera(video, deviceId);
-        d.close(); finish(stream);
-      } catch (error) {
-        d.close(); finish(null); toast(cameraErrorMessage(error));
-      } finally { $('permYes').disabled = false; }
-    };
-    $('permNo').onclick = () => { d.close(); finish(null); };
-    d.oncancel = () => finish(null);
-    d.showModal();
-  });
-}
 async function startCounterCam() {
-  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) { toast('The camera needs a secure (HTTPS) page.'); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    const message = 'Camera access is unavailable here. Open the secure HTTPS site in a current browser.';
+    $('cameraHelp').textContent = message; setState('Camera unavailable'); toast(message); return;
+  }
   $('camBtn').disabled = true;
+  $('cameraHelp').textContent = 'Waiting for browser camera permission…'; setState('Requesting camera…');
   try {
-    counter.stream = await askCameraPermission($('vidC'), $('camSel').value || null);
-    if (!counter.stream) return;
+    // This call runs directly from the Start-camera button click, so the browser can show its native permission prompt.
+    counter.stream = await openCamera($('vidC'), $('camSel').value || null);
     $('vidE').srcObject = counter.stream; $('vidE').play().catch(() => {});
     await listCameras();
     counter.baseline = null; counter.armed = true; counter.emptySince = 0;
     $('camBtn').textContent = $('camBtnE').textContent = 'Stop camera'; $('calBtn').disabled = false; $('snapBtn').disabled = false;
     setState('Keep the counter empty…');
+    $('cameraHelp').textContent = 'Camera is live. Video stays on this device and is not uploaded.';
     clearInterval(counter.timer); counter.timer = setInterval(tick, 120);
     loadModel().catch(() => {});
-  } catch (e) { toast(cameraErrorMessage(e)); }
+  } catch (e) { const message = cameraErrorMessage(e); $('cameraHelp').textContent = message; setState('Camera could not start'); toast(message); }
   finally { $('camBtn').disabled = false; }
 }
 function stopCounterCam() {
   clearInterval(counter.timer); counter.stream?.getTracks().forEach(t => t.stop()); counter.stream = null; $('vidC').srcObject = null; $('vidE').srcObject = null;
-  $('camBtn').textContent = $('camBtnE').textContent = 'Start camera'; $('calBtn').disabled = true; $('snapBtn').disabled = true; setState('Camera off'); drawBox(null);
+  $('camBtn').textContent = $('camBtnE').textContent = 'Start camera'; $('calBtn').disabled = true; $('snapBtn').disabled = true; setState('Camera off'); $('cameraHelp').textContent = 'Press Start camera to trigger your browser’s camera permission prompt.'; drawBox(null);
 }
 $('camBtn').onclick = () => counter.stream ? stopCounterCam() : startCounterCam();
 $('camSel').onchange = () => { if (counter.stream) { stopCounterCam(); startCounterCam(); } };
