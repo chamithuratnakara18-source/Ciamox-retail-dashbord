@@ -5,7 +5,6 @@
    → cashier confirms → cart → payment.
    ===================================================================== */
 const MOCK = new URLSearchParams(location.search).has('mock');   // test mode: tiny colour embedder
-const TF_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/dist/transformers.min.js';
 const MODEL_ID = 'Xenova/dinov2-small';
 const MODEL_TAG = MOCK ? 'mock-colour' : MODEL_ID;
 const $ = id => document.getElementById(id);
@@ -43,42 +42,65 @@ let products = [];            // {id,name,sku,price,thumb,model,samples:[ArrayBu
 let bank = [];                // flat list [{pid, vec:Float32Array}] for fast matching
 function rebuildBank() {
   bank = [];
-  for (const p of products) if (p.model === MODEL_TAG) for (const buf of p.samples) bank.push({ pid: p.id, vec: new Float32Array(buf) });
+  for(const p of products)if(p.model===MODEL_TAG){
+    for(const buf of p.samples)bank.push({pid:p.id,vec:new Float32Array(buf)});
+    if(p.photoSample)bank.push({pid:p.id,vec:new Float32Array(p.photoSample)});
+  }
+  $('readyStat').textContent=`${new Set(bank.map(s=>s.pid)).size} / ${products.length} products ready`;
   $('pCount').textContent = products.length;
   $('sCount').textContent = products.reduce((n, p) => n + p.samples.length, 0);
 }
 const byId = id => products.find(p => p.id === id);
 
-/* ---------- embedding model ---------- */
-let extractor = null, RawImageCls = null, modelPromise = null;
-function setModelState(t) { $('modelState').textContent = t; }
-function loadModel() {
-  if (modelPromise) return modelPromise;
-  modelPromise = (async () => {
-    if (MOCK) { setModelState('Model: test mode'); return; }
-    setModelState('Model: downloading… (first time only)');
-    const tf = await import(TF_URL);
-    tf.env.allowLocalModels = false;
-    RawImageCls = tf.RawImage;
-    extractor = await tf.pipeline('image-feature-extraction', MODEL_ID, { dtype: 'q8' });
-    setModelState('Model: ready');
-  })().catch(e => { modelPromise = null; setModelState('Model: failed to load'); toast('Could not load the AI model. Check the internet connection.'); throw e; });
+/* ---------- model worker: batched crops, no inference on the UI thread ---------- */
+let modelPromise=null, modelReady=false, modelBackend='CPU', visionWorker=null, visionId=0, inferenceMs=0;
+const pendingVision=new Map();
+function setModelState(t){ $('modelState').textContent=t; }
+function visionRequest(type, images=[]){
+  if(!visionWorker){
+    visionWorker=new Worker('./ai-vision-worker.js?v=multi-scan-1');
+    visionWorker.onmessage=({data})=>{
+      if(data.type==='status'){setModelState(data.text);return;}
+      const request=pendingVision.get(data.id);if(!request)return;
+      clearTimeout(request.timer);pendingVision.delete(data.id);
+      data.error?request.reject(new Error(data.error)):request.resolve(data);
+    };
+    visionWorker.onerror=()=>resetVision(new Error('Recognition worker could not start. Reload or retry model loading.'));
+  }
+  const id=++visionId;
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>resetVision(new Error('Recognition timed out. Check the connection, then retry.')),type==='load'?180000:60000);
+    pendingVision.set(id,{resolve,reject,timer});
+    visionWorker.postMessage({id,type,images},images.map(im=>im.buffer));
+  });
+}
+function resetVision(error){
+  visionWorker?.terminate();visionWorker=null;modelPromise=null;modelReady=false;
+  for(const r of pendingVision.values()){clearTimeout(r.timer);r.reject(error);}pendingVision.clear();
+  setModelState('Model unavailable · retry');
+}
+function loadModel(){
+  if(modelPromise)return modelPromise;
+  modelPromise=(MOCK?Promise.resolve({backend:'test'}):visionRequest('load')).then(result=>{
+    modelReady=true;modelBackend=result.backend==='webgpu'?'GPU':MOCK?'TEST':'CPU';
+    setModelState(`Model ready · ${modelBackend}`);return result;
+  }).catch(error=>{modelPromise=null;modelReady=false;setModelState('Model unavailable · press Retry model');$('cameraHelp').textContent=error.message;throw error;});
   return modelPromise;
 }
-async function embed(canvas) {            // canvas: any size, ideally square → Float32Array (L2-normalised)
+async function embedBatch(canvases){
   await loadModel();
-  if (MOCK) {
-    const c = document.createElement('canvas'); c.width = c.height = 8;
-    const x = c.getContext('2d'); x.drawImage(canvas, 0, 0, 8, 8);
-    const d = x.getImageData(0, 0, 8, 8).data, v = new Float32Array(192); let m = 0;
-    for (let i = 0, j = 0; i < d.length; i += 4) { v[j++] = d[i]; v[j++] = d[i + 1]; v[j++] = d[i + 2]; }
-    for (const a of v) m += a; m /= v.length; for (let i = 0; i < v.length; i++) v[i] -= m;
-    return norm(v);
-  }
-  const out = await extractor(RawImageCls.fromCanvas(canvas));
-  const D = out.dims[out.dims.length - 1];
-  return norm(Float32Array.from(out.data.subarray(0, D)));   // first token = global (CLS) descriptor
+  if(MOCK)return canvases.map(canvas=>{
+    const c=document.createElement('canvas');c.width=c.height=8;const ctx=c.getContext('2d');ctx.drawImage(canvas,0,0,8,8);
+    const d=ctx.getImageData(0,0,8,8).data,v=new Float32Array(192);let m=0;
+    for(let i=0,j=0;i<d.length;i+=4){v[j++]=d[i];v[j++]=d[i+1];v[j++]=d[i+2];}
+    for(const n of v)m+=n;m/=v.length;for(let i=0;i<v.length;i++)v[i]-=m;return norm(v);
+  });
+  const images=canvases.map(c=>({buffer:c.getContext('2d').getImageData(0,0,c.width,c.height).data.buffer,width:c.width,height:c.height}));
+  const result=await visionRequest('embed',images);inferenceMs=Math.round(result.ms);modelBackend=result.backend==='webgpu'?'GPU':'CPU';
+  $('latencyStat').textContent=`${inferenceMs} ms / ${canvases.length} ${canvases.length===1?'item':'items'} · ${modelBackend}`;
+  return result.vectors.map(v=>new Float32Array(v));
 }
+async function embed(canvas){return (await embedBatch([canvas]))[0];}
 
 /* ---------- matching ---------- */
 function match(q) {   // best score per product, top 3
@@ -88,10 +110,10 @@ function match(q) {   // best score per product, top 3
 }
 
 /* ---------- camera + presence engine ---------- */
-const SW = 80, SH = 50;             // small analysis frame
-const small = document.createElement('canvas'); small.width = SW; small.height = SH;
-const sctx = small.getContext('2d', { willReadFrequently: true });
-function grab(video) { sctx.drawImage(video, 0, 0, SW, SH); const d = sctx.getImageData(0, 0, SW, SH).data, g = new Float32Array(SW * SH); for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = d[i] * .3 + d[i + 1] * .59 + d[i + 2] * .11; return g; }
+const SW=192, SH=108;
+const small=document.createElement('canvas');small.width=SW;small.height=SH;
+const sctx=small.getContext('2d',{willReadFrequently:true});
+function grab(video){sctx.drawImage(video,0,0,SW,SH);return sctx.getImageData(0,0,SW,SH).data;}
 
 async function openCamera(video, deviceId) {
   const base = { width: { ideal: 1280 }, height: { ideal: 720 } };
@@ -143,107 +165,115 @@ function cropSquare(video, bbox) {   // bbox in 0..1 of the frame, or null → c
   return out;
 }
 
-/* ---------- counter state ---------- */
-const counter = { paused: false, stream: null, baseline: null, prev: null, stableSince: 0, armed: true, emptySince: 0, busy: false, timer: null, lastBBox: null, lastSnap: null, cand: null };
-const cart = new Map();     // pid → qty
-
-function setState(t) { $('stateC').textContent = t; $('stateE').textContent = t; }
-function drawBox(bb) { for (const id of ['bboxC', 'bboxE']) { const b = $(id); if (!bb) { b.style.display = 'none'; continue; } b.style.display = 'block'; b.style.left = bb.x0 * 100 + '%'; b.style.top = bb.y0 * 100 + '%'; b.style.width = (bb.x1 - bb.x0) * 100 + '%'; b.style.height = (bb.y1 - bb.y0) * 100 + '%'; } }
-
-function analyse(g) {
-  const base = counter.baseline; let changed = 0, x0 = SW, y0 = SH, x1 = -1, y1 = -1;
-  for (let i = 0; i < g.length; i++) if (Math.abs(g[i] - base[i]) > 28) { changed++; const x = i % SW, y = (i / SW) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-  let moved = 0; if (counter.prev) for (let i = 0; i < g.length; i++) if (Math.abs(g[i] - counter.prev[i]) > 20) moved++;
-  return { frac: changed / g.length, motion: counter.prev ? moved / g.length : 1, bbox: x1 < 0 ? null : { x0: x0 / SW, y0: y0 / SH, x1: (x1 + 1) / SW, y1: (y1 + 1) / SH } };
-}
-
-function tick() {
-  const v = $('vidC');
-  if (!counter.stream || !v.videoWidth) return;
-  const g = grab(v), now = performance.now();
-  if (!counter.baseline) { counter.baseline = g; counter.prev = g; setState('Counter empty · ready'); return; }
-  const a = analyse(g); counter.prev = g;
-  const present = a.frac > 0.03;
-  if (!present) {
-    drawBox(null);
-    if (a.motion < 0.01) { for (let i = 0; i < g.length; i++) counter.baseline[i] += (g[i] - counter.baseline[i]) * 0.03; }   // follow slow lighting changes
-    if (!counter.emptySince) counter.emptySince = now;
-    if (now - counter.emptySince > 500 && !counter.armed) { counter.armed = true; counter.cand = null; renderCand(null); }
-    counter.stableSince = 0; setState('Counter empty · ready'); $('rescanBtn').disabled = !counter.lastSnap;
-    return;
+/* ---------- independent objects + identity-preserving tracking ---------- */
+const tracker=new RetailScan.Tracker({settleMs:180,missingMs:900,maxTracks:8});
+const counter={paused:false,stream:null,baseline:null,prev:null,busy:false,timer:null,calibrating:false,lastBBox:null};
+const cart=new Map();
+let inventoryReady=false, checkoutBusy=false, inventoryRevision=0, recognitionFailures=0, retryAfter=0;
+function setState(t){$('stateC').textContent=t;$('stateE').textContent=t;}
+function analyse(frame){return counter.baseline?RetailScan.detect(frame,counter.baseline,counter.prev,SW,SH):{fraction:0,boxes:[]};}
+const overlayMaps=new Map();
+function drawBoxes(){
+  for(const id of ['bboxC','bboxE']){
+    const root=$(id),nodes=overlayMaps.get(id)||new Map();overlayMaps.set(id,nodes);
+    const visible=tracker.tracks.filter(t=>t.visible),ids=new Set(visible.map(t=>t.id));
+    for(const [key,node] of nodes)if(!ids.has(key)){node.remove();nodes.delete(key);}
+    for(const t of visible){
+      let node=nodes.get(t.id);if(!node){node=document.createElement('div');node.className='object-box';node.append(document.createElement('span'));root.append(node);nodes.set(t.id,node);}
+      const r=t.result,p=byId(r?.pid),b=t.bbox;
+      node.style.left=`${b.x0*100}%`;node.style.top=`${b.y0*100}%`;node.style.width=`${(b.x1-b.x0)*100}%`;node.style.height=`${(b.y1-b.y0)*100}%`;
+      node.firstChild.style.transform=b.y0<.15?'none':'translateY(-100%)';
+      node.firstChild.style.left=b.x0>.85?'auto':'-2px';node.firstChild.style.right=b.x0>.85?'-2px':'auto';
+      node.dataset.state=t.blocked?'maybe':t.counted?'added':r?.level||'pending';
+      node.firstChild.textContent=t.blocked?'Separate items':t.counted?`${p?.name||'Item'} · added`:r?.pid?`${p?.name||'Unavailable'} · ${Math.round(Math.max(0,r.score)*100)}% similarity`:`#${t.id} · ${t.busy?'Matching…':'Hold briefly'}`;
+    }
   }
-  counter.emptySince = 0; drawBox(a.bbox); counter.lastBBox = a.bbox;
-  if (a.motion > 0.015) { counter.stableSince = 0; setState('Item moving…'); return; }
-  if (!counter.stableSince) counter.stableSince = now;
-  if (!counter.armed && !counter.paused) { setState('Item recognised · remove it to scan the next'); return; }
-  if (counter.paused) return;
-  if (now - counter.stableSince > 600 && !counter.busy) recognise(a.bbox);
-  else setState('Hold still…');
+  $('visibleStat').textContent=`${tracker.tracks.filter(t=>t.visible).length} items in view`;
 }
-
-async function recognise(bbox) {
-  counter.busy = true; setState('Recognising…');
-  try {
-    const crop = cropSquare($('vidC'), bbox);
-    const q = await embed(crop);
-    counter.lastSnap = { crop, q };
-    $('rescanBtn').disabled = false;
-    counter.armed = false;
-    const top = bank.length ? match(q) : [];
-    const thr = $('thr').value / 100, mar = $('mar').value / 100;
-    let level = 'none';
-    if (top.length && top[0].score >= thr) level = (top.length < 2 || top[0].score - top[1].score >= mar) ? 'ok' : 'maybe';
-    else if (top.length && top[0].score >= thr - 0.15) level = 'maybe';
-    counter.cand = { top, level, q, crop };
-    renderCand(counter.cand);
-    if (level === 'ok' && $('autoAdd').checked && top[0].score >= thr + 0.12) { addToCart(top[0].p.id); toast('Added ' + top[0].p.name); }
-    setState(level === 'ok' ? 'Match found' : level === 'maybe' ? 'Please confirm' : 'Not recognised');
-  } catch (e) { console.error(e); setState('Recognition failed'); counter.armed = true; }
-  counter.busy = false;
+function canScan(){return counter.stream&&counter.baseline&&!counter.paused&&!counter.calibrating&&!checkoutBusy&&!$('payDlg').open&&inventoryReady&&!document.hidden;}
+function tick(){
+  const v=$('vidC');if(!counter.stream||!v.videoWidth||document.hidden||counter.calibrating)return;
+  if(!counter.baseline){setState('Clear the counter → Set empty counter');return;}
+  const g=grab(v),a=analyse(g),now=performance.now();counter.prev=g;
+  tracker.update(a.boxes,now);counter.lastBBox=a.boxes.length===1?a.boxes[0].bbox:null;
+  drawBoxes();renderCandidates();$('rescanBtn').disabled=!tracker.tracks.some(t=>t.visible&&!t.counted);
+  if(a.boxes.length>8){setState('Up to 8 separated items · scan the rest next');return;}
+  if(!canScan())return;
+  if(!a.boxes.length){setState('Ready · place separated items');return;}
+  if(!bank.length){setState('Preparing inventory photos · train products without photos');return;}
+  if(!modelReady){setState('Preparing recognition model…');return;}
+  if(!counter.busy&&now>=retryAfter){
+    const ready=tracker.ready(now).filter(t=>!t.result||t.result.level!=='ok'||t.hits<2);
+    if(ready.length)void recogniseTracks(ready.slice(0,modelBackend==='GPU'?4:2));
+  }
+  if(!counter.busy)setState(tracker.tracks.some(t=>t.blocked)?'Separate touching items':tracker.tracks.some(t=>t.visible&&t.result?.level==='ok'&&!t.counted)?'Matches ready · check cart or add items':tracker.tracks.filter(t=>t.visible).every(t=>t.counted)?'Items added · remove before the next batch':'Tracking items…');
 }
-
-function renderCand(c) {
-  const box = $('candBox'); box.replaceChildren();
-  if (!c) return;
-  const wrap = document.createElement('div'); wrap.className = 'cand ' + c.level;
-  const t = document.createElement('div'); t.className = 't';
-  t.textContent = c.level === 'ok' ? 'Looks like:' : c.level === 'maybe' ? 'Not sure — which one is it?' : (bank.length ? 'No confident match' : 'Catalogue is empty — enrol products first');
-  wrap.append(t);
-  c.top.forEach((m, i) => {
-    const b = document.createElement('button'); b.className = 'opt';
-    const img = document.createElement('img'); img.src = m.p.thumb || ''; img.alt = '';
-    const n = document.createElement('div'); n.className = 'n'; const nb = document.createElement('b'); nb.textContent = m.p.name; const ns = document.createElement('span'); ns.className = 'mute'; ns.textContent = money(m.p.price);
-    n.append(nb, ns);
-    const pc = document.createElement('span'); pc.className = 'pct'; pc.textContent = Math.round(m.score * 100) + '%';
-    b.append(img, n, pc);
-    if (i === 0 && c.level === 'ok') { b.style.borderColor = 'var(--acc)'; b.style.borderWidth = '2px'; }
-    b.onclick = () => confirmPick(m.p.id, i);
-    wrap.append(b);
-  });
-  const row = document.createElement('div'); row.className = 'row';
-  const nw = document.createElement('button'); nw.className = 'btn ghost'; nw.textContent = 'Not listed — enrol this product';
-  nw.onclick = () => { switchTab('catalogue'); enrol.samples = [{ q: c.q, thumb: c.crop.toDataURL('image/jpeg', .7) }]; renderSamples(); toast('Sample copied. Fill in the name and price.'); };
-  row.append(nw); wrap.append(row);
-  box.append(wrap);
+async function recogniseTracks(tracks){
+  counter.busy=true;const revision=inventoryRevision;
+  const jobs=tracks.map(t=>{t.busy=true;return {token:tracker.token(t),crop:cropSquare($('vidC'),t.bbox)};});
+  setState(`Matching ${jobs.length} ${jobs.length===1?'item':'items'}…`);
+  try{
+    const vectors=await embedBatch(jobs.map(j=>j.crop));recognitionFailures=0;
+    if(revision!==inventoryRevision||!canScan())return;
+    for(let i=0;i<jobs.length;i++){
+      const t=tracker.resolve(jobs[i].token,performance.now());if(!t)continue;
+      const top=match(vectors[i]),result={...RetailScan.decide(top,$('thr').value/100,$('mar').value/100),top,q:vectors[i],crop:jobs[i].crop};
+      const stable=tracker.accept(t,result,performance.now());
+      if(stable&&$('autoAdd').checked&&result.score>=Math.min(.98,$('thr').value/100+.08))addTrack(t);
+    }
+  }catch(error){
+    recognitionFailures++;retryAfter=performance.now()+Math.min(15000,1000*2**recognitionFailures);
+    setState('Recognition unavailable');$('cameraHelp').textContent=error.message;
+  }finally{for(const job of jobs){const t=tracker.tracks.find(t=>t.id===job.token.id);if(t)t.busy=false;}counter.busy=false;drawBoxes();renderCandidates(true);}
 }
-
-async function confirmPick(pid, rank) {
-  addToCart(pid);
-  const c = counter.cand;
-  if (c && rank > 0) {           // cashier corrected the AI → learn from it
-    const p = byId(pid);
-    try { await persistAiSamples(p, [...p.samples, c.q.buffer.slice(0)]); toast('Added. Saved this view of ' + p.name + ' to Firebase.'); }
-    catch (error) { toast('Added, but Firebase could not save the AI correction: ' + error.message); }
-  } else toast('Added ' + byId(pid).name);
-  counter.cand = null; renderCand(null);
+function addTrack(t,pid=t.result?.pid){
+  if(t.counted||!t.visible||t.blocked||checkoutBusy||$('payDlg').open||!inventoryReady)return false;
+  if(!addToCart(pid))return false;
+  t.counted=true;t.result={...t.result,pid,level:'ok'};drawBoxes();renderCandidates(true);return true;
+}
+let candidatesKey='';
+function renderCandidates(force=false){
+  const visible=tracker.tracks.filter(t=>t.visible&&!t.blocked&&!t.counted);
+  const key=visible.map(t=>`${t.id}:${t.result?.pid}:${t.result?.level}:${t.hits}`).join('|')+inventoryReady;
+  if(!force&&key===candidatesKey)return;candidatesKey=key;
+  const box=$('candBox');box.replaceChildren();
+  $('addVisibleBtn').disabled=!inventoryReady||!visible.some(t=>t.result?.level==='ok');
+  for(const t of visible){
+    if(!t.result)continue;const r=t.result;
+    const wrap=document.createElement('div');wrap.className='cand '+r.level;
+    const title=document.createElement('div');title.className='t';title.textContent=`Item ${t.id} · ${r.level==='ok'?'Match ready':r.level==='maybe'?'Confirm product':'Unknown item'}`;wrap.append(title);
+    for(const m of r.top){
+      const b=document.createElement('button');b.className='opt';const name=document.createElement('span');name.className='n';name.textContent=m.p.name;
+      const score=document.createElement('span');score.className='pct';score.textContent=`${Math.round(Math.max(0,m.score)*100)}% · Add`;
+      b.append(name,score);b.disabled=!inventoryReady;b.onclick=()=>addTrack(t,m.p.id);wrap.append(b);
+    }
+    if(r.level!=='ok'){
+      const select=document.createElement('select');select.setAttribute('aria-label',`Select inventory product for item ${t.id}`);
+      select.add(new Option('Choose from inventory…',''));for(const p of products)select.add(new Option(p.name,p.id));
+      const add=document.createElement('button');add.className='btn ghost';add.textContent='Add selected';add.onclick=()=>select.value&&addTrack(t,select.value);wrap.append(select,add);
+    }
+    box.append(wrap);
+  }
+}
+async function calibrate(){
+  if(!counter.stream||counter.calibrating)return;
+  if(tracker.tracks.some(t=>t.visible)&&!confirm('Remove every item from the counter first. Is the camera view now empty?'))return;
+  counter.calibrating=true;tracker.reset();drawBoxes();renderCandidates(true);$('calBtn').disabled=true;
+  setState('Capturing empty counter…');
+  try{
+    const samples=[];for(let i=0;i<5;i++){await new Promise(r=>setTimeout(r,65));if(!counter.stream)return;samples.push(grab($('vidC')));}
+    counter.baseline=new Uint8ClampedArray(samples[0].length);
+    for(let i=0;i<counter.baseline.length;i++)counter.baseline[i]=samples.map(s=>s[i]).sort((a,b)=>a-b)[2];
+    counter.prev=samples.at(-1);setState('Ready · place separated items');$('cameraHelp').textContent='Keep the camera fixed. Place up to 8 items with gaps; remove counted items before scanning another batch.';
+  }finally{counter.calibrating=false;$('calBtn').disabled=!counter.stream;}
 }
 
 /* ---------- cart + payment ---------- */
 function addToCart(pid) {
   const p = byId(pid), quantity = cart.get(pid) || 0;
-  if (!p) return;
-  if (quantity >= p.quantity) { toast(`Only ${p.quantity} ${p.name} in Firebase stock.`); return; }
-  cart.set(pid, quantity + 1); renderCart();
+  if (!p || !inventoryReady || checkoutBusy || $('payDlg').open) return false;
+  if (quantity >= p.quantity) { toast(`Only ${p.quantity} ${p.name} in Firebase stock.`); return false; }
+  cart.set(pid, quantity + 1); renderCart(); return true;
 }
 function cartTotal() { let t = 0; for (const [pid, q] of cart) t += (byId(pid)?.price || 0) * q; return t; }
 function renderCart() {
@@ -263,19 +293,22 @@ function renderCart() {
     l.append(im, n, qt, amt); box.append(l);
   }
   $('cartTotal').textContent = money(cartTotal());
-  $('payBtn').disabled = !cart.size;
+  $('payBtn').disabled = !cart.size || !inventoryReady || checkoutBusy;
 }
-$('clearBtn').onclick = () => { cart.clear(); renderCart(); };
+$('clearBtn').onclick = () => { if(checkoutBusy||$('payDlg').open)return; cart.clear(); renderCart(); };
+$('addVisibleBtn').onclick=()=>{for(const t of [...tracker.tracks])if(t.result?.level==='ok')addTrack(t);};
+$('autoAdd').onchange=()=>{if($('autoAdd').checked)for(const t of [...tracker.tracks])if(t.hits>=2&&t.result?.level==='ok'&&t.result.score>=Math.min(.98,$('thr').value/100+.08))addTrack(t);};
 $('payBtn').onclick = () => { $('payTotal').textContent = money(cartTotal()); $('cashIn').value = ''; $('changeV').textContent = '0.00'; $('payMethod').dispatchEvent(new Event('change')); $('payDlg').showModal(); };
 $('payMethod').onchange = () => $('cashBox').classList.toggle('hide', $('payMethod').value !== 'Cash');
 $('cashIn').oninput = () => { $('changeV').textContent = money(Math.max(0, (+$('cashIn').value || 0) - cartTotal())); };
 $('payCancel').onclick = () => $('payDlg').close();
 $('payDone').onclick = async () => {
+  if(checkoutBusy||!cart.size||!inventoryReady)return;
   const total = cartTotal();
   if ($('payMethod').value === 'Cash' && (+$('cashIn').value || 0) < total) { toast('Cash received is less than the total.'); return; }
   const paymentMethod = ({ Cash: 'cash', Card: 'card', 'Mobile / QR': 'qr' })[$('payMethod').value];
   const items = [...cart].map(([barcode, quantity]) => ({ barcode, quantity }));
-  $('payDone').disabled = true;
+  checkoutBusy=true; $('payDone').disabled = true; $('payCancel').disabled=true;
   let sale;
   try {
     ({ sale } = await aiModelRequest('/api/sales', { method: 'POST', body: { items, paymentMethod } }));
@@ -283,10 +316,11 @@ $('payDone').onclick = async () => {
     toast(`Sale #${sale.id} saved to Firebase · ${money(sale.totalOriginalPrice)}`);
   } catch (error) {
     toast(error.message || 'Firebase could not save the sale.');
-    $('payDone').disabled = false;
+    checkoutBusy=false; $('payDone').disabled = false; $('payCancel').disabled=false;
     return;
   }
-  $('payDone').disabled = false;
+  checkoutBusy=false; $('payDone').disabled = false; $('payCancel').disabled=false;
+  window.parent.postMessage({type:'retailflow:ai-sale-saved'},location.origin);
   try { await syncFirebaseProducts(); }
   catch { $('firebaseState').textContent = `Sale saved; inventory refresh failed. Tap “Refresh from Firebase”.`; }
 };
@@ -308,24 +342,26 @@ async function startCounterCam() {
     counter.stream = await openCamera($('vidC'), $('camSel').value || null);
     $('vidE').srcObject = counter.stream; $('vidE').play().catch(() => {});
     await listCameras();
-    counter.baseline = null; counter.armed = true; counter.emptySince = 0;
+    counter.baseline=null;counter.prev=null;tracker.reset();
+    for(const video of [$('vidC'),$('vidE')])video.parentElement.style.aspectRatio=`${$('vidC').videoWidth}/${$('vidC').videoHeight}`;
     $('camBtn').textContent = $('camBtnE').textContent = 'Stop camera'; $('calBtn').disabled = false; $('snapBtn').disabled = false;
-    setState('Keep the counter empty…');
-    $('cameraHelp').textContent = 'Camera is live. Video stays on this device and is not uploaded.';
-    clearInterval(counter.timer); counter.timer = setInterval(tick, 120);
-    loadModel().catch(() => {});
+    setState('Clear counter → Set empty counter');
+    $('cameraHelp').textContent = 'Camera is live. Clear the counter, then press Set empty counter. Video stays on this device.';
+    clearInterval(counter.timer); counter.timer = setInterval(tick, 70);
+    loadModel().then(()=>indexInventoryPhotos()).catch(() => {});
   } catch (e) { const message = cameraErrorMessage(e); $('cameraHelp').textContent = message; setState('Camera could not start'); toast(message); }
   finally { $('camBtn').disabled = false; }
 }
 function stopCounterCam() {
   clearInterval(counter.timer); counter.stream?.getTracks().forEach(t => t.stop()); counter.stream = null; $('vidC').srcObject = null; $('vidE').srcObject = null;
-  $('camBtn').textContent = $('camBtnE').textContent = 'Start camera'; $('calBtn').disabled = true; $('snapBtn').disabled = true; setState('Camera off'); $('cameraHelp').textContent = 'Press Start camera to trigger your browser’s camera permission prompt.'; drawBox(null);
+  $('camBtn').textContent = $('camBtnE').textContent = 'Start camera'; $('calBtn').disabled = true; $('snapBtn').disabled = true; setState('Camera off'); $('cameraHelp').textContent = 'Press Start camera to trigger your browser’s camera permission prompt.'; counter.baseline=null;tracker.reset();drawBoxes();renderCandidates(true);
 }
 $('camBtn').onclick = () => counter.stream ? stopCounterCam() : startCounterCam();
 $('camSel').onchange = () => { if (counter.stream) { stopCounterCam(); startCounterCam(); } };
 $('cameraHelp').textContent = 'Camera controls ready. Press Start camera to request access.';
-$('calBtn').onclick = () => { counter.baseline = null; counter.armed = true; setState('Recalibrating — keep the counter empty'); };
-$('rescanBtn').onclick = () => { counter.armed = true; counter.stableSince = 0; counter.cand = null; renderCand(null); };
+$('calBtn').onclick=calibrate;
+$('retryModel').onclick=()=>loadModel().then(()=>indexInventoryPhotos()).catch(error=>toast(error.message));
+$('rescanBtn').onclick=()=>{for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.nextAt=0;}renderCandidates(true);};
 $('thr').oninput = $('mar').oninput = () => { $('thrV').textContent = $('thr').value + '%'; $('marV').textContent = $('mar').value + '%'; try { localStorage.setItem('aic-thr', $('thr').value); localStorage.setItem('aic-mar', $('mar').value); } catch { /* ignore */ } };
 
 /* ---------- enrolment ---------- */
@@ -339,7 +375,9 @@ function updateSelectedProduct() {
   $('saveProd').disabled = !(p && enrol.samples.length);
 }
 async function aiModelRequest(path, { method = 'GET', body } = {}) {
+  if(MOCK&&method!=='GET')throw new Error('Test mode cannot write to Firebase.');
   const response = await fetch(path, {
+    cache:'no-store',
     method,
     credentials: 'same-origin',
     headers: body ? { 'Content-Type': 'application/json' } : {},
@@ -353,56 +391,90 @@ async function aiModelRequest(path, { method = 'GET', body } = {}) {
 async function persistAiSamples(product, samples) {
   if (MODEL_TAG !== 'Xenova/dinov2-small') throw new Error('Test mode samples are not saved to Firebase.');
   if (samples.length > 32) throw new Error('This product has reached the 32 sample limit. Clear training first.');
-  await aiModelRequest('/api/ai-counter/models', { method: 'PUT', body: { barcode: product.barcode, model: MODEL_TAG, samples: samples.map(b64) } });
+  await aiModelRequest('/api/ai-models', { method: 'PUT', body: { barcode: product.barcode, model: MODEL_TAG, samples: samples.map(b64) } });
+  inventoryRevision++;
   product.samples = samples; product.model = MODEL_TAG;
-  await DB.put('products', product); rebuildBank(); renderList();
+  await DB.put('products', product).catch(()=>{}); rebuildBank(); renderList();
 }
 async function loadAiModels(barcodes) {
   const found = new Map();
   for (let start = 0; start < barcodes.length; start += 25) {
     const query = new URLSearchParams();
     for (const barcode of barcodes.slice(start, start + 25)) query.append('barcode', barcode);
-    const response = await aiModelRequest(`/api/ai-counter/models?${query}`);
+    const response = await aiModelRequest(`/api/ai-models?${query}`);
     for (const model of response.models || []) found.set(String(model.barcode), model);
   }
   return found;
 }
-async function syncFirebaseProducts() {
-  $('firebaseState').textContent = 'Loading Firebase inventory…';
-  $('syncProducts').disabled = true;
-  try {
-    const response = await aiModelRequest('/api/inventory');
-    const saved = await DB.all('products');
-    const existing = new Map();
-    for (const item of saved) { existing.set(String(item.id), item); if (item.sku) existing.set(String(item.sku), item); }
-    const inventoryRows = (Array.isArray(response.products) ? response.products : []).filter(row => row && (row.barcode || row.id));
-    let cloudModels = new Map(), modelsUnavailable = '';
-    try { cloudModels = await loadAiModels(inventoryRows.map(row => String(row.barcode || row.id))); }
-    catch (error) { modelsUnavailable = ` · AI samples unavailable: ${error.message}`; }
-    const next = inventoryRows.map(row => {
-      const barcode = String(row.barcode || row.id);
-      const old = existing.get(barcode);
-      const remote = cloudModels.get(barcode);
-      const remoteSamples = remote?.model === MODEL_TAG && Array.isArray(remote.samples) ? remote.samples.map(unb64) : null;
-      const localSamples = old?.model === MODEL_TAG && Array.isArray(old.samples) ? old.samples : [];
-      return {
-        ...(old || {}), id: barcode, barcode, name: String(row.name || barcode), sku: barcode,
-        price: Number(row.originalPrice ?? row.price) || 0, quantity: Number(row.quantity) || 0,
-        category: String(row.category || ''), photoDataUrl: row.photoDataUrl || '',
-        thumb: row.photoDataUrl || old?.thumb || '', model: remote?.model || MODEL_TAG,
-        samples: remoteSamples ?? localSamples,
-      };
-    });
-    await DB.clear('products');
-    for (const item of next) await DB.put('products', item);
-    products = next;
-    for (const barcode of [...cart.keys()]) if (!products.some(item => item.id === barcode)) cart.delete(barcode);
-    rebuildBank(); renderProductSelect(); renderList(); renderCart(); updateSelectedProduct();
-    $('firebaseState').textContent = `Firebase connected · ${next.length} inventory products${modelsUnavailable}`;
-  } catch (error) {
-    $('firebaseState').textContent = `Firebase inventory unavailable: ${error.message}`;
-    throw error;
-  } finally { $('syncProducts').disabled = false; }
+let syncPromise=null, indexingPromise=null;
+async function indexInventoryPhotos(){
+  if(indexingPromise)return indexingPromise;
+  indexingPromise=(async()=>{
+    if(!modelReady||!inventoryReady)return;
+    let failed=0;
+    for(const product of [...products]){
+      if(!product.photoDataUrl||product.photoSample||product.samples.length||!products.includes(product))continue;
+      // Live checkout gets priority over background catalogue preparation.
+      while(counter.busy||checkoutBusy)await new Promise(r=>setTimeout(r,150));
+      try{
+        const image=new Image();image.crossOrigin='anonymous';
+        await new Promise((resolve,reject)=>{
+          const timer=setTimeout(()=>reject(new Error('Photo timed out')),10000);
+          image.onload=()=>{clearTimeout(timer);resolve();};image.onerror=()=>{clearTimeout(timer);reject(new Error('Photo unavailable'));};image.src=product.photoDataUrl;
+        });
+        const canvas=document.createElement('canvas');canvas.width=canvas.height=224;
+        const ctx=canvas.getContext('2d');ctx.fillStyle='#f3f4f6';ctx.fillRect(0,0,224,224);
+        const scale=224/Math.max(image.naturalWidth,image.naturalHeight),w=image.naturalWidth*scale,h=image.naturalHeight*scale;
+        ctx.drawImage(image,(224-w)/2,(224-h)/2,w,h);
+        const q=await embed(canvas);if(!products.includes(product))continue;
+        product.photoSample=q.buffer.slice(0);await DB.put('products',product).catch(()=>{});
+        rebuildBank();renderList();
+        // An inventory photo is a labelled reference. Store its descriptor so other devices can use it.
+        // Never guess the label of an unconfirmed camera crop or replace existing manual samples.
+        if(!product.samples.length){
+          try{await persistAiSamples(product,[q.buffer.slice(0)]);}
+          catch(saveError){$('firebaseState').textContent=`Photo ready on this device; Firebase training save failed: ${saveError.message}`;console.warn('Photo training save failed:',saveError);}
+        }
+      }catch(error){failed++;console.warn('Inventory photo could not be indexed:',product.barcode,error.message);}
+      await new Promise(r=>setTimeout(r,0));
+    }
+    if(failed)$('firebaseState').textContent=`Inventory connected · ${failed} photos need camera training. Open Firebase Products to train them.`;
+  })().finally(()=>{indexingPromise=null;});
+  return indexingPromise;
+}
+function syncFirebaseProducts(){
+  if(syncPromise)return syncPromise;
+  syncPromise=(async()=>{
+    $('firebaseState').textContent='Loading Firebase inventory…';$('syncProducts').disabled=true;
+    try{
+      const response=await aiModelRequest('/api/inventory');
+      const saved=await DB.all('products').catch(()=>[]),existing=new Map(saved.map(p=>[String(p.id),p]));
+      const rows=(Array.isArray(response.products)?response.products:[]).filter(row=>row&&(row.barcode||row.id));
+      let cloudModels=new Map(),modelsUnavailable='';
+      try{cloudModels=await loadAiModels(rows.map(row=>String(row.barcode||row.id)));}
+      catch(error){modelsUnavailable=' · Saved training unavailable; using current product photos';}
+      const next=rows.map(row=>{
+        const barcode=String(row.barcode||row.id),old=existing.get(barcode),remote=cloudModels.get(barcode);
+        const samples=remote?.model===MODEL_TAG&&Array.isArray(remote.samples)?remote.samples.map(unb64).filter(buf=>buf.byteLength===1536):[];
+        return {id:barcode,barcode,name:String(row.name||barcode),sku:barcode,price:Number(row.originalPrice??row.price)||0,
+          quantity:Math.max(0,Number(row.quantity)||0),category:String(row.category||''),photoDataUrl:row.photoDataUrl||'',
+          thumb:row.photoDataUrl||'',model:MODEL_TAG,samples,
+          photoSample:old?.model===MODEL_TAG&&old.photoDataUrl===row.photoDataUrl?old.photoSample:null};
+      });
+      products=next;inventoryReady=true;inventoryRevision++;
+      for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.nextAt=0;}
+      for(const barcode of [...cart.keys()]){
+        const p=byId(barcode);if(!p||!p.quantity)cart.delete(barcode);else if(cart.get(barcode)>p.quantity)cart.set(barcode,p.quantity);
+      }
+      await DB.clear('products').catch(()=>{});for(const item of next)await DB.put('products',item).catch(()=>{});
+      rebuildBank();renderProductSelect();renderList();renderCart();renderCandidates(true);updateSelectedProduct();
+      $('firebaseState').textContent=`Firebase connected · ${next.length} inventory products${modelsUnavailable}`;
+      // Current photos automatically become recognition references; embeddings are cached locally.
+      void loadModel().then(()=>indexInventoryPhotos()).catch(()=>{});
+    }catch(error){inventoryReady=false;$('firebaseState').textContent=`Inventory unavailable: ${error.message}`;renderCart();renderCandidates(true);throw error;}
+    finally{$('syncProducts').disabled=false;}
+  })().finally(()=>{syncPromise=null;});
+  return syncPromise;
 }
 window.addEventListener('message', event => {
   if (event.origin !== location.origin || event.data?.type !== 'retailflow:refresh-inventory') return;
@@ -434,11 +506,11 @@ $('snapBtn').onclick = async () => {
   try {
     // Same pipeline as the live counter: if an item is on the (calibrated) counter, crop to it.
     let bbox = null;
-    if (counter.baseline) { const a = analyse(grab($('vidE'))); if (a.frac > 0.03) bbox = a.bbox; }
+    if (counter.baseline) { const a = analyse(grab($('vidE'))); if(a.boxes.length===1)bbox=a.boxes[0].bbox;else if(a.boxes.length>1)throw new Error('Train one product at a time; remove other items.'); }
     if (!bbox) toast('Tip: place the product on the empty counter so it is cropped exactly like at checkout.');
     const crop = cropSquare($('vidE'), bbox), q = await embed(crop);
     enrol.samples.push({ q, thumb: crop.toDataURL('image/jpeg', .7) }); renderSamples();
-  } catch (e) { console.error(e); toast('Capture failed.'); }
+  } catch (e) { console.error(e); toast(e.message||'Capture failed.'); }
   $('snapBtn').disabled = !counter.stream;
 };
 $('resetEnrol').onclick = resetEnrol;
@@ -473,12 +545,12 @@ function renderList() {
   for (const p of list.slice(0, 300)) {
     const r = document.createElement('div'); r.className = 'prow';
     const im = document.createElement('img'); im.className = 'thumb'; im.src = p.thumb || '';
-    const n = document.createElement('div'); n.className = 'n'; const b = document.createElement('b'); b.textContent = p.name; const s = document.createElement('span'); s.className = 'mute'; s.textContent = `${money(p.price)} · ${p.quantity} in stock · ${p.samples.length} AI samples${p.category ? ' · ' + p.category : ''}`; n.append(b, s);
+    const n = document.createElement('div'); n.className = 'n'; const b = document.createElement('b'); b.textContent = p.name; const s = document.createElement('span'); s.className = 'mute'; s.textContent = `${money(p.price)} · ${p.quantity} in stock · ${p.samples.length} camera samples${p.photoSample?' · Photo ready':p.photoDataUrl?' · Photo preparing':' · Needs training'}${p.category ? ' · ' + p.category : ''}`; n.append(b, s);
     const add = document.createElement('button'); add.className = 'btn ghost'; add.textContent = 'Train'; add.onclick = () => { $('pProduct').value = p.id; enrol.editId = p.id; enrol.samples = []; $('enrolTitle').textContent = 'Train: ' + p.name; switchTab('catalogue'); renderSamples(); };
-    const del = document.createElement('button'); del.className = 'btn ghost'; del.textContent = 'Clear training'; del.disabled = !p.samples.length; del.onclick = async () => {
+    const del = document.createElement('button'); del.className = 'btn ghost'; del.textContent = 'Clear camera training'; del.disabled = !p.samples.length; del.onclick = async () => {
       try {
-        await aiModelRequest('/api/ai-counter/models', { method: 'DELETE', body: { barcode: p.barcode } });
-        p.samples = []; p.model = MODEL_TAG; await DB.put('products', p); cart.delete(p.id); rebuildBank(); renderList(); renderCart();
+        await aiModelRequest('/api/ai-models', { method: 'DELETE', body: { barcode: p.barcode } });
+        inventoryRevision++;p.samples=[];p.model=MODEL_TAG;await DB.put('products',p).catch(()=>{});rebuildBank();renderList();renderCart();
         toast('AI training removed from Firebase.');
       } catch (error) { toast(error.message || 'Could not clear Firebase training.'); }
     };
@@ -515,8 +587,15 @@ $('impFile').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
     const d = JSON.parse(await f.text()); if (d.app !== 'ai-counter') throw new Error('Not a catalogue backup');
-    for (const p of d.products) { p.samples = p.samples.map(unb64); const i = products.findIndex(x => x.id === p.id); i >= 0 ? products[i] = p : products.push(p); await DB.put('products', p); }
-    rebuildBank(); renderList(); toast('Imported ' + d.products.length + ' products');
+    if(d.model!==MODEL_TAG||!Array.isArray(d.products))throw new Error('Incompatible model backup');
+    let restored=0;
+    for(const item of d.products){
+      const current=byId(String(item.id));if(!current)continue;
+      if(!Array.isArray(item.samples)||item.samples.length>32)throw new Error('Invalid sample count');
+      const samples=item.samples.map(unb64);if(samples.some(b=>b.byteLength!==1536))throw new Error('Invalid sample size');
+      if(samples.length){await persistAiSamples(current,samples);restored++;}
+    }
+    toast(`Restored training for ${restored} current inventory products. Names, prices and stock stay from Firebase.`);
   } catch (err) { toast('Import failed: ' + err.message); }
   e.target.value = '';
 };
@@ -536,5 +615,10 @@ $('tabCounter').onclick = () => switchTab('counter'); $('tabCatalogue').onclick 
   // Only camera samples are reused, matched to current inventory by barcode.
   products = []; rebuildBank(); renderList(); renderCart(); renderSamples();
   try { await syncFirebaseProducts(); } catch { /* Keep the page open and show the Firebase error above. */ }
-  if (MOCK) window.__t = { embed, match, products: () => products, bank: () => bank, enrol, cart, counter, DB, renderSamples };
+  if (MOCK) window.__t={embed,match,products:()=>products,bank:()=>bank,enrol,cart,counter,tracker,DB,renderSamples,tick,addTrack,syncFirebaseProducts};
 })();
+
+// Refresh current inventory periodically; never resurrect product rows from a local backup.
+setInterval(()=>{if(!document.hidden&&!checkoutBusy&&!$('payDlg').open)syncFirebaseProducts().catch(()=>{});},30000);
+window.addEventListener('focus',()=>{if(!checkoutBusy&&!$('payDlg').open)syncFirebaseProducts().catch(()=>{});});
+window.addEventListener('pagehide',()=>{stopCounterCam();visionWorker?.terminate();});

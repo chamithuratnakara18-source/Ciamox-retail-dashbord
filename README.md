@@ -1,3 +1,27 @@
+# Fast multi-item AI camera update
+
+This ZIP contains the full dashboard with the camera fix retained. Extract and upload its contents at the repository root, replacing matching files and preserving the `api` folder. Do not upload the ZIP itself. Wait for Vercel to show Ready, then hard-refresh the dashboard. This scanner update does not require new Firebase rules or environment variables when the supplied base is already connected. The package includes the new `api/ai-models.js` route; ensure that file is uploaded along with the rest of the contents.
+
+## Start scanning
+
+1. Open **AI Detection Cam**, press **Start camera**, and allow camera access.
+2. Keep the camera fixed. Clear the counter and press **Set empty counter**. Wait for the model and inventory photos to finish preparing; the first model download can take time.
+3. Place up to eight products with visible gaps between them. Boxes show inventory product names and image similarity. Green matches can be added together using **Add matched items**. Enable **Auto-add stable matches** only after checking recognition with your products.
+4. Review the cart before payment. Uncertain matches require selection from current inventory. Remove counted products fully before scanning the next group.
+
+Recognition reads current products, photos, prices, and stock through the existing inventory API. Saved training samples are supported; add clear views of each package when products look alike. Similarity percentages are not calibrated probabilities of correctness. Touching products, hands, camera movement, reflections, and poor lighting can prevent reliable segmentation. Keep products separated and recalibrate after moving the camera.
+
+The model runs in a worker and batches crops to keep the camera responsive. It uses WebGPU when an adapter is available and otherwise CPU inference. Speed depends on the device; no fixed frame-rate guarantee. Inventory photos are cached for faster subsequent loads and their labelled descriptors are saved through the direct `/api/ai-models` Firebase endpoint when the photo is first indexed. Products without a photo still need cashier-labelled camera examples. The existing sales API remains responsible for saving sales and changing Firebase stock.
+
+## Validation for this update
+
+- Eight automated segmentation, tracking, duplicate-counting, and stale-result tests passed: `node --test tests/ai-scan-engine.test.cjs`.
+- Browser workflow checked with three simulated items, duplicate protection, cart totals, payment, and a local API fixture.
+- Real DINO model loading and inference checked against synthetic camera frames under the supplied Content Security Policy, including CPU fallback.
+- Physical webcam recognition and production Firebase writes were not tested here. Test with your actual stock before relying on automatic additions.
+
+---
+
 # RetailFlow dashboard — password-free preview
 
 This package keeps the existing dashboard UI and removes the sign-in screen for now. It is the **main dashboard only**; the phone scanner is a separate website. The default Firebase project is `ciamox-retail`.
