@@ -92,7 +92,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
           <button class="btn ghost" id="calBtn" disabled>Counter is empty — recalibrate</button>
           <button class="btn ghost" id="rescanBtn" disabled>Rescan item</button>
         </div>
-        <p id="cameraHelp" class="mute" role="status" style="margin:8px 0 0">Press Start camera to trigger your browser’s camera permission prompt.</p>
+        <p id="cameraHelp" class="mute" role="status" style="margin:8px 0 0">Loading camera controls…</p>
         <p class="mute" style="margin:4px 0 0">If this embedded view is blocked, <a href="./ai-counter.html" target="_blank" rel="noopener">open the camera directly</a>.</p>
         <div id="candBox"></div>
         <div class="row">
@@ -184,8 +184,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
 <div class="toast" id="toast"></div>
 <canvas id="work" class="hide"></canvas>
 
-<script type="module">
-import { api } from './firebase-store.js?preview-no-auth-20261105-1';
+<script>
 /* =====================================================================
    AI Counter — camera-based product recognition for a checkout counter
    Pipeline: webcam → empty-counter diff finds the item → crop → image
@@ -466,7 +465,7 @@ $('payDone').onclick = async () => {
   $('payDone').disabled = true;
   let sale;
   try {
-    ({ sale } = await api('/api/sales', { method: 'POST', body: JSON.stringify({ items, paymentMethod }) }));
+    ({ sale } = await aiModelRequest('/api/sales', { method: 'POST', body: { items, paymentMethod } }));
     cart.clear(); renderCart(); $('payDlg').close();
     toast(`Sale #${sale.id} saved to Firebase · ${money(sale.totalOriginalPrice)}`);
   } catch (error) {
@@ -484,6 +483,10 @@ async function startCounterCam() {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
     const message = 'Camera access is unavailable here. Open the secure HTTPS site in a current browser.';
     $('cameraHelp').textContent = message; setState('Camera unavailable'); toast(message); return;
+  }
+  if (document.permissionsPolicy?.allowsFeature?.('camera') === false || document.featurePolicy?.allowsFeature?.('camera') === false) {
+    const message = 'This embedded page is blocked from using the camera. Open the camera directly using the link below.';
+    $('cameraHelp').textContent = message; setState('Camera blocked in frame'); return;
   }
   $('camBtn').disabled = true;
   $('cameraHelp').textContent = 'Waiting for browser camera permission…'; setState('Requesting camera…');
@@ -507,6 +510,7 @@ function stopCounterCam() {
 }
 $('camBtn').onclick = () => counter.stream ? stopCounterCam() : startCounterCam();
 $('camSel').onchange = () => { if (counter.stream) { stopCounterCam(); startCounterCam(); } };
+$('cameraHelp').textContent = 'Camera controls ready. Press Start camera to request access.';
 $('calBtn').onclick = () => { counter.baseline = null; counter.armed = true; setState('Recalibrating — keep the counter empty'); };
 $('rescanBtn').onclick = () => { counter.armed = true; counter.stableSince = 0; counter.cand = null; renderCand(null); };
 $('thr').oninput = $('mar').oninput = () => { $('thrV').textContent = $('thr').value + '%'; $('marV').textContent = $('mar').value + '%'; try { localStorage.setItem('aic-thr', $('thr').value); localStorage.setItem('aic-mar', $('mar').value); } catch { /* ignore */ } };
