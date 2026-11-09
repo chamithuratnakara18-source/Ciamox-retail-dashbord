@@ -34,6 +34,10 @@ const DB = (() => {
     put: (store, v) => tx(store, 'readwrite', s => s.put(v)),
     del: (store, k) => tx(store, 'readwrite', s => s.delete(k)),
     clear: store => tx(store, 'readwrite', s => s.clear()),
+    replaceProducts: items => tx('products', 'readwrite', store => {
+      store.clear();
+      for (const item of items) store.put(item);
+    }),
   };
 })();
 
@@ -411,25 +415,62 @@ function photoSetKey(photos){
   for(const photo of photos)for(let i=0;i<photo.length;i++){h=Math.imul(h^photo.charCodeAt(i),16777619);}
   return `views-v1-${(h>>>0).toString(16)}`;
 }
+async function readTrainingInventory(){
+  // The generic /api/inventory route is not guaranteed to be deployed by Vercel.
+  // Read the same product documents the scanner writes, including their six views.
+  const [{ firebaseApp }, { collection, getDocs, getFirestore }] = await Promise.all([
+    import('./firebase-app.js'),
+    import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js'),
+  ]);
+  const snapshot = await getDocs(collection(getFirestore(firebaseApp), 'products'));
+  return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+}
+const cloudUploadAttempts=new Set();
+function saveTrainingToCloud(product,key,embeddings){
+  const uploadKey=`${product.id}:${key}`;
+  if(cloudUploadAttempts.has(uploadKey))return;
+  cloudUploadAttempts.add(uploadKey);
+  void aiModelRequest('/api/ai-models',{method:'PUT',body:{
+    barcode:product.barcode,model:MODEL_TAG,kind:'inventoryViews',
+    photoSamples:embeddings.map(b64),sourceKey:key,
+  }}).then(()=>{if(product.sourceKey===key)product.cloudSourceKey=key;}).catch(error=>{
+    console.warn('Cloud training save failed:',product.barcode,error);
+    $('firebaseState').textContent=`Recognition ready on this device; cloud training save failed: ${error.message}`;
+  });
+}
 async function indexTrainingViews(product){
   const photos=product.trainingPhotos;
-  if(photos?.length!==6 || photos.some(p=>!p) || product.sourceKey===photoSetKey(photos))return;
-  const embeddings=[];
-  for(const src of photos){
+  if(photos?.length!==6 || photos.some(p=>!p))return;
+  const key=photoSetKey(photos);
+  if(product.sourceKey===key && product.trainingSamples?.length===6){
+    if(product.cloudSourceKey!==key)saveTrainingToCloud(product,key,product.trainingSamples);
+    return;
+  }
+  const canvases=await Promise.all(photos.map(async src=>{
     const image=new Image();
     await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Training image unreadable'));image.src=src;});
     const canvas=document.createElement('canvas');canvas.width=canvas.height=224;
     const context=canvas.getContext('2d');context.fillStyle='#f3f4f6';context.fillRect(0,0,224,224);
     const scale=224/Math.max(image.naturalWidth,image.naturalHeight);
     context.drawImage(image,(224-image.naturalWidth*scale)/2,(224-image.naturalHeight*scale)/2,image.naturalWidth*scale,image.naturalHeight*scale);
-    embeddings.push((await embed(canvas)).buffer.slice(0));
+    return canvas;
+  }));
+  const embeddings=[];
+  // WebGPU can process all six together; keep CPU batches small on low-memory devices.
+  const batchSize=modelBackend==='GPU'?6:2;
+  for(let start=0;start<canvases.length;start+=batchSize){
+    while(counter.busy||checkoutBusy)await new Promise(resolve=>setTimeout(resolve,150));
+    $('firebaseState').textContent=`Preparing ${product.name}: views ${start+1}–${Math.min(start+batchSize,6)} of 6…`;
+    const vectors=await embedBatch(canvases.slice(start,start+batchSize));
+    embeddings.push(...vectors.map(vector=>vector.buffer.slice(0)));
   }
-  if(!products.includes(product))return;
-  const key=photoSetKey(photos);
-  await aiModelRequest('/api/ai-models',{method:'PUT',body:{barcode:product.barcode,model:MODEL_TAG,kind:'inventoryViews',photoSamples:embeddings.map(b64),sourceKey:key}});
+  if(embeddings.length!==6)throw new Error('Could not prepare all six product views.');
   if(!products.includes(product))return;
   product.trainingSamples=embeddings;product.sourceKey=key;
+  await DB.put('products',product).catch(error=>console.warn('Local training cache unavailable:',error));
   rebuildBank();renderList();
+  $('firebaseState').textContent=`${product.name} ready for recognition · six product views indexed`;
+  if(!MOCK)saveTrainingToCloud(product,key,embeddings);
 }
 let syncPromise=null, indexingPromise=null;
 async function indexInventoryPhotos(){
@@ -438,10 +479,10 @@ async function indexInventoryPhotos(){
     if(!modelReady||!inventoryReady)return;
     let failed=0;
     for(const product of [...products]){
-      if(product.trainingPhotos?.length===6 && product.sourceKey!==photoSetKey(product.trainingPhotos)){
+      if(product.trainingPhotos?.length===6 && product.trainingPhotos.every(Boolean)){
         try{await indexTrainingViews(product);}catch(error){failed++;console.warn('Six-view training failed:',product.barcode,error.message);$('firebaseState').textContent=`Six-view training failed: ${error.message}`;}
       }
-      if(!product.photoDataUrl||product.photoSample||product.samples.length||!products.includes(product))continue;
+      if(!product.photoDataUrl||product.photoSample||product.samples.length||product.trainingSamples?.length||!products.includes(product))continue;
       // Live checkout gets priority over background catalogue preparation.
       while(counter.busy||checkoutBusy)await new Promise(r=>setTimeout(r,150));
       try{
@@ -472,22 +513,33 @@ async function indexInventoryPhotos(){
 }
 function syncFirebaseProducts(){
   if(syncPromise)return syncPromise;
+  if(indexingPromise)return indexingPromise.then(()=>syncFirebaseProducts());
   syncPromise=(async()=>{
     $('firebaseState').textContent='Loading Firebase inventory…';$('syncProducts').disabled=true;
     try{
-      const response=await aiModelRequest('/api/inventory?training=1');
-      const saved=await DB.all('products').catch(()=>[]),existing=new Map(saved.map(p=>[String(p.id),p]));
-      const rows=(Array.isArray(response.products)?response.products:[]).filter(row=>row&&(row.barcode||row.id));
+      // Start the model download while Firestore and the local cache are loading.
+      const warmup=loadModel().catch(()=>null);
+      const [inventory,saved]=await Promise.all([readTrainingInventory(),DB.all('products').catch(()=>[])]);
+      const existing=new Map(saved.map(p=>[String(p.id),p]));
+      const rows=inventory.filter(row=>row&&(row.barcode||row.id));
       let cloudModels=new Map(),modelsUnavailable='';
       try{cloudModels=await loadAiModels(rows.map(row=>String(row.barcode||row.id)));}
       catch(error){modelsUnavailable=' · Saved training unavailable; using current product photos';}
       const next=rows.map(row=>{
         const barcode=String(row.barcode||row.id),old=existing.get(barcode),remote=cloudModels.get(barcode);
-        const samples=remote?.model===MODEL_TAG&&Array.isArray(remote.samples)?remote.samples.map(unb64).filter(buf=>buf.byteLength===1536):[];
-        const trainingSamples=remote?.model===MODEL_TAG&&Array.isArray(remote.photoSamples)?remote.photoSamples.map(unb64).filter(buf=>buf.byteLength===1536):[];
+        const validSamples=value=>Array.isArray(value)?value.filter(buf=>buf?.byteLength===1536):[];
+        const samples=remote?.model===MODEL_TAG&&Array.isArray(remote.samples)?remote.samples.map(unb64).filter(buf=>buf.byteLength===1536)
+          :modelsUnavailable?validSamples(old?.model===MODEL_TAG?old.samples:[]):[];
+        const views=Array.isArray(row.trainingPhotos)?row.trainingPhotos:[];
+        const key=views.length===6&&views.every(Boolean)?photoSetKey(views):'';
+        const cloudViews=remote?.model===MODEL_TAG&&remote.sourceKey===key&&Array.isArray(remote.photoSamples)
+          ?remote.photoSamples.map(unb64).filter(buf=>buf.byteLength===1536):[];
+        const localViews=old?.model===MODEL_TAG&&old.sourceKey===key?validSamples(old.trainingSamples):[];
+        const trainingSamples=cloudViews.length===6?cloudViews:localViews.length===6?localViews:[];
         return {id:barcode,barcode,name:String(row.name||barcode),sku:barcode,price:Number(row.originalPrice??row.price)||0,
           quantity:Math.max(0,Number(row.quantity)||0),category:String(row.category||''),photoDataUrl:row.photoDataUrl||'',
-          thumb:row.photoDataUrl||'',model:MODEL_TAG,samples,trainingSamples,sourceKey:remote?.sourceKey||'',trainingPhotos:Array.isArray(row.trainingPhotos)?row.trainingPhotos:[],
+          thumb:row.photoDataUrl||'',model:MODEL_TAG,samples,trainingSamples,sourceKey:trainingSamples.length===6?key:'',
+          cloudSourceKey:cloudViews.length===6?key:'',trainingPhotos:views,
           photoSample:old?.model===MODEL_TAG&&old.photoDataUrl===row.photoDataUrl?old.photoSample:null};
       });
       products=next;inventoryReady=true;inventoryRevision++;
@@ -495,11 +547,11 @@ function syncFirebaseProducts(){
       for(const barcode of [...cart.keys()]){
         const p=byId(barcode);if(!p||!p.quantity)cart.delete(barcode);else if(cart.get(barcode)>p.quantity)cart.set(barcode,p.quantity);
       }
-      await DB.clear('products').catch(()=>{});for(const item of next)await DB.put('products',item).catch(()=>{});
+      await DB.replaceProducts(next).catch(error=>console.warn('Local training cache unavailable:',error));
       rebuildBank();renderProductSelect();renderList();renderCart();renderCandidates(true);updateSelectedProduct();
       $('firebaseState').textContent=`Firebase connected · ${next.length} inventory products${modelsUnavailable}`;
       // Current photos automatically become recognition references; embeddings are cached locally.
-      void loadModel().then(()=>indexInventoryPhotos()).catch(()=>{});
+      void warmup.then(ready=>ready&&indexInventoryPhotos()).catch(()=>{});
     }catch(error){inventoryReady=false;$('firebaseState').textContent=`Inventory unavailable: ${error.message}`;renderCart();renderCandidates(true);throw error;}
     finally{$('syncProducts').disabled=false;}
   })().finally(()=>{syncPromise=null;});
@@ -521,7 +573,7 @@ function renderSamples() {
   const r = $('samplesRow'); r.replaceChildren();
   enrol.samples.forEach((s, i) => { const im = document.createElement('img'); im.src = s.thumb; im.title = 'Click to remove'; im.style.cursor = 'pointer'; im.onclick = () => { enrol.samples.splice(i, 1); renderSamples(); }; r.append(im); });
   const n = enrol.samples.length;
-  $('snapHint').textContent = n ? n + ' sample' + (n > 1 ? 's' : '') + ' ready' + (n < 6 ? ' — capture more angles for better accuracy.' : '.') : 'Select a Firebase product, then capture it from several angles. Saved AI samples sync through Firebase.';
+  $('snapHint').textContent = n ? n + ' extra camera sample' + (n > 1 ? 's' : '') + ' ready' + (n < 6 ? ' — capture more angles for better accuracy.' : '.') : 'Scanner photos from six angles are prepared automatically. Capture extra camera samples here if needed.';
   updateSelectedProduct();
 }
 $('pProduct').onchange = () => { enrol.samples = []; enrol.editId = $('pProduct').value || null; $('enrolTitle').textContent = byId(enrol.editId)?.name ? 'Train: ' + byId(enrol.editId).name : 'Train a Firebase product'; renderSamples(); };
@@ -574,7 +626,7 @@ function renderList() {
   for (const p of list.slice(0, 300)) {
     const r = document.createElement('div'); r.className = 'prow';
     const im = document.createElement('img'); im.className = 'thumb'; im.src = p.thumb || '';
-    const n = document.createElement('div'); n.className = 'n'; const b = document.createElement('b'); b.textContent = p.name; const s = document.createElement('span'); s.className = 'mute'; s.textContent = `${money(p.price)} · ${p.quantity} in stock · ${p.samples.length} camera samples${p.photoSample?' · Photo ready':p.photoDataUrl?' · Photo preparing':' · Needs training'}${p.category ? ' · ' + p.category : ''}`; n.append(b, s);
+    const n = document.createElement('div'); n.className = 'n'; const b = document.createElement('b'); b.textContent = p.name; const s = document.createElement('span'); s.className = 'mute'; s.textContent = `${money(p.price)} · ${p.quantity} in stock · ${p.samples.length} camera samples${p.trainingSamples?.length===6?' · Six views ready':p.photoSample?' · Photo ready':p.trainingPhotos?.length===6?' · Six views preparing':p.photoDataUrl?' · Photo preparing':' · Needs training'}${p.category ? ' · ' + p.category : ''}`; n.append(b, s);
     const add = document.createElement('button'); add.className = 'btn ghost'; add.textContent = 'Train'; add.onclick = () => { $('pProduct').value = p.id; enrol.editId = p.id; enrol.samples = []; $('enrolTitle').textContent = 'Train: ' + p.name; switchTab('catalogue'); renderSamples(); };
     const del = document.createElement('button'); del.className = 'btn ghost'; del.textContent = 'Clear camera training'; del.disabled = !p.samples.length; del.onclick = async () => {
       try {

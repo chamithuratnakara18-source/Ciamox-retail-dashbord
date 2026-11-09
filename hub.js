@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?preview-no-auth-20261105-1';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-direct-20261109-3';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
@@ -333,7 +333,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?preview-no-a
       await refreshSupplierDashboard();
     }
     if (view === 'ai-counter' && aiCounterFrame?.getAttribute('src') === 'about:blank') {
-      aiCounterFrame.src = './ai-counter.html?v=six-views-20261109-1';
+      aiCounterFrame.src = './ai-counter.html?v=fast-training-20261109-1';
     } else if (view === 'ai-counter') {
       aiCounterFrame?.contentWindow?.postMessage({ type: 'retailflow:refresh-inventory' }, location.origin);
     }

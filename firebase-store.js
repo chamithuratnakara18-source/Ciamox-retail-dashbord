@@ -1,6 +1,6 @@
 import {
-  collection, doc, getDoc, getDocFromServer, getDocs, getFirestore,
-  onSnapshot,
+  addDoc, collection, doc, getDoc, getDocFromServer, getDocs, getFirestore,
+  onSnapshot, runTransaction, serverTimestamp, updateDoc,
 } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 import { firebaseApp } from './firebase-app.js';
@@ -925,6 +925,62 @@ export function watchPos(onChange, onError) {
 export async function api(path, options = {}) {
   const url = new URL(path, location.origin);
   const method = (options.method || 'GET').toUpperCase();
+  if (url.pathname === '/api/inventory/category' && method === 'PATCH') {
+    const body = JSON.parse(options.body || '{}');
+    const barcode = typeof body.barcode === 'string' ? body.barcode.trim() : '';
+    const category = typeof body.category === 'string' ? body.category.trim() : '';
+    if (!barcode || barcode.length > 128 || !category || category.length > 80) {
+      throw new Error('Enter a valid barcode and category name.');
+    }
+    // Category is a field on the existing product. This path uses the same
+    // client-side Firestore access as the phone scanner in password-free mode.
+    await updateDoc(productRef(barcode), { category, updatedAt: serverTimestamp() });
+    return { product: shapeProduct((await getDocFromServer(productRef(barcode))).data()) };
+  }
+  if (url.pathname === '/api/finance/price' && method === 'PATCH') {
+    const body = JSON.parse(options.body || '{}');
+    const barcode = typeof body.barcode === 'string' ? body.barcode.trim().normalize('NFC') : '';
+    const sellingPrice = Number(body.sellingPrice);
+    const expectedPrice = body.expectedPrice == null ? null : Number(body.expectedPrice);
+    if (!barcode || barcode.length > 128 || /[\u0000-\u001f\u007f]/.test(barcode) ||
+        !['number', 'string'].includes(typeof body.sellingPrice) ||
+        (typeof body.sellingPrice === 'string' && !body.sellingPrice.trim()) ||
+        !Number.isFinite(sellingPrice) || sellingPrice < 0 || sellingPrice > 1_000_000_000 ||
+        (expectedPrice !== null && (!Number.isFinite(expectedPrice) || expectedPrice < 0 || expectedPrice > 1_000_000_000))) {
+      throw new Error('Enter a valid selling price.');
+    }
+    const ref = productRef(barcode);
+    return runTransaction(db(), async transaction => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error('This product is no longer in inventory. Refresh Finance.');
+      const product = snapshot.data();
+      const currentPrice = product.originalPrice == null ? null : Number(product.originalPrice);
+      if (currentPrice !== expectedPrice) {
+        throw new Error('The selling price changed on another device. Refresh Finance.');
+      }
+      transaction.update(ref, { originalPrice: sellingPrice, updatedAt: serverTimestamp() });
+      return { product: shapeProduct({ ...product, originalPrice: sellingPrice }) };
+    });
+  }
+  if (url.pathname === '/api/expenses' && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const title = typeof body.title === 'string' ? body.title.trim().normalize('NFC') : '';
+    const amount = Number(body.amount);
+    const expenseDate = validDate(body.expenseDate, 'expense date');
+    const expenseKind = body.expenseKind === undefined ? 'one_time' : body.expenseKind;
+    if (!title || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title) ||
+        !['number', 'string'].includes(typeof body.amount) ||
+        (typeof body.amount === 'string' && !body.amount.trim()) ||
+        !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000) {
+      throw new Error('Enter a valid expense name and amount.');
+    }
+    if (expenseDate > todayLocal()) throw new Error('Cost date cannot be in the future.');
+    if (!['monthly_cost', 'one_time'].includes(expenseKind)) throw new Error('Choose a valid cost type.');
+    const ref = await addDoc(collection(db(), 'expenses'), {
+      title, amount, expenseDate, expenseKind, createdBy: 'public-preview', createdAt: serverTimestamp(),
+    });
+    return { expense: { id: ref.id, title, amount, expenseDate, expenseKind } };
+  }
   if (method !== 'GET') {
     await auth.authStateReady();
     const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;

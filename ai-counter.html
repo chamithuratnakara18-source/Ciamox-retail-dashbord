@@ -150,7 +150,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
           <button class="btn acc" id="camBtnE">Start camera</button>
           <button class="btn" id="snapBtn" disabled>Capture sample</button>
           <button class="btn ghost" id="usePhotoBtn" disabled>Use Firebase product photo</button>
-          <span class="mute" id="snapHint">Select an onboarded product below, then capture it from several angles. Saved AI samples sync through Firebase.</span>
+          <span class="mute" id="snapHint">Scanner photos from six angles are prepared automatically. You can also capture extra camera samples here.</span>
         </div>
         <div class="samples" id="samplesRow"></div>
         <label class="f" for="pProduct">Onboarded Firebase product</label>
@@ -165,7 +165,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
     <div>
       <div class="card">
         <h2>Firebase inventory · <span id="pCount">0</span> products · <span id="sCount">0</span> camera samples</h2>
-        <div class="row" style="margin-top:0;margin-bottom:8px"><button class="btn ghost" id="syncProducts">Refresh from Firebase</button><span class="mute" id="firebaseState">Connecting to Firebase inventory… Inventory photos are prepared automatically for recognition.</span></div>
+        <div class="row" style="margin-top:0;margin-bottom:8px"><button class="btn ghost" id="syncProducts">Refresh from Firebase</button><span class="mute" id="firebaseState">Connecting to Firebase inventory… Six scanner views are prepared automatically for recognition.</span></div>
         <input type="search" id="pSearch" placeholder="Search products…">
         <div class="plist" id="pList"></div>
         <div class="row">
@@ -199,6 +199,6 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
 <canvas id="work" class="hide"></canvas>
 
 <script src="./ai-scan-engine.js?v=six-views-1"></script>
-<script src="./ai-counter.js?v=six-views-1"></script>
+<script src="./ai-counter.js?v=fast-training-20261109-1"></script>
 </body>
 </html>

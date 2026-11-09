@@ -1,20 +1,23 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Password-free preview mode: reads are public so the current UI works
-    // without a sign-in. Keep browser writes denied; the API remains the write path.
-    // Restore staff role checks before exposing this project publicly.
+    // Temporary password-free preview access for the phone scanner and
+    // dashboard category, selling price, and expense edits. Restore
+    // authenticated writes for real data.
     match /products/{document} {
       allow read: if true;
-      allow write: if false;
+      allow create, update: if true;
+      allow delete: if false;
     }
     match /sales/{document} {
       allow read: if true;
-      allow write: if false;
+      allow create: if true;
+      allow update, delete: if false;
     }
     match /receipts/{document} {
       allow read: if true;
-      allow write: if false;
+      allow create, update: if true;
+      allow delete: if false;
     }
     match /suppliers/{document} {
       allow read: if true;
@@ -22,7 +25,8 @@ service cloud.firestore {
     }
     match /expenses/{document} {
       allow read: if true;
-      allow write: if false;
+      allow create: if true;
+      allow update, delete: if false;
     }
     match /meta/connection {
       allow read: if true;

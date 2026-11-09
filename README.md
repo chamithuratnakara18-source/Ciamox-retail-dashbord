@@ -1,6 +1,62 @@
-## Six photos from the separate barcode scanner
+# Six-view AI reference indexing
 
-Deploy the matching phone scanner package. New inbound products capture front, back, top, bottom, left and right views in Firestore. AI Detection Cam alone requests these larger photos, computes six reference embeddings, and saves them to the existing `aiCounterModels` collection via `/api/ai-models`. Ordinary dashboard inventory requests do not download the six photos. Existing manually labelled camera samples remain separate. The model is prepared on first camera open, so the first recognition may take longer than later scans.
+This full dashboard package prepares the six front, back, top, bottom, left,
+and right photos saved by the phone scanner for recognition. **Upload the
+contents at the dashboard repository root**, including the root-level `api`
+directory. The separate phone scanner does not need a new upload for this
+dashboard change. The existing Firestore product read permission and Vercel
+Firebase Admin credentials are still required.
+
+Open **AI Detection Cam → Firebase Products** and wait for **Six views ready**
+beside each enrolled product. The camera reads the six photos directly from
+Firestore, so it does not rely on a nested `/api/inventory` route. The DINOv2
+model loads while the product list loads. WebGPU groups six photos into one
+inference request; CPU groups them into three requests of two photos to avoid
+large memory spikes. A successful result is cached on this device before it
+is sent to `/api/ai-models` for other devices. A refreshed inventory keeps a
+cached result only when all six source photos still match. If cloud saving
+fails, the camera shows **cloud training save failed** and remains usable on
+the device that indexed the photos; resolve the API failure before relying
+on a second device. A product without six views can still use its main photo
+or manually labelled camera samples.
+
+This is reference indexing, not fine-tuning the DINOv2 network. The first
+model download and CPU speed depend on the device and connection; no honest
+one-minute guarantee is possible without timing your actual phone/computer.
+Test visually similar packages with **Self-test accuracy**, then verify
+real counter scans before turning on automatic cart additions. No new
+Firestore rule or Storage bucket is needed for the existing photo fields.
+
+## Verification for this change
+
+- JavaScript syntax checks passed for the camera and hub.
+- The eight existing camera tracking tests passed.
+- A real-browser run and a live Firebase/model speed measurement were not
+  available in this environment; verify the deployed camera on your device.
+
+# Finance save fix
+
+The Finance selling price editor now updates the existing Firestore product in
+a transaction. It checks the previously displayed price before writing, so a
+price changed on another device is not overwritten. One-time costs are created
+in the existing `expenses` collection. Both actions use the temporary public
+Firestore permissions from the included `firestore.rules` and no longer depend
+on missing nested Vercel API routes. Other API-backed actions still require
+the root-level `api` directory on the dashboard Vercel deployment. Upload the
+full package at the repository root; do not upload the ZIP file itself.
+
+## Category and scanner
+
+Category assignment now updates the existing Firestore product directly from
+the dashboard, using the same browser write permission as the separate phone
+scanner. This avoids the 404 from `/api/inventory/category` on deployments
+without that nested route. The explicit `api/inventory/category.js` route is
+also included for future server-based writes. Upload the whole package at the
+dashboard repository root. The published Firestore rules must permit product
+updates for this password-free preview. Other dashboard edits still require
+the root-level `api` directory and Firebase Admin credentials on Vercel.
+
+Deploy the matching phone scanner package. New inbound products capture front, back, top, bottom, left and right views in Firestore. AI Detection Cam alone requests these larger photos, computes six reference embeddings, and saves them to the existing `aiCounterModels` collection via `/api/ai-models`. Ordinary dashboard inventory requests do not download the six photos. Existing manually labelled camera samples remain separate. The model begins loading when the camera page opens, so the first recognition may take longer than later scans.
 
 # Fast multi-item AI camera update
 
@@ -13,7 +69,7 @@ This ZIP contains the full dashboard with the camera fix retained. Extract and u
 3. Place up to eight products with visible gaps between them. Boxes show inventory product names and image similarity. Green matches can be added together using **Add matched items**. Enable **Auto-add stable matches** only after checking recognition with your products.
 4. Review the cart before payment. Uncertain matches require selection from current inventory. Remove counted products fully before scanning the next group.
 
-Recognition reads current products, photos, prices, and stock through the existing inventory API. Saved training samples are supported; add clear views of each package when products look alike. Similarity percentages are not calibrated probabilities of correctness. Touching products, hands, camera movement, reflections, and poor lighting can prevent reliable segmentation. Keep products separated and recalibrate after moving the camera.
+Recognition reads current products, photos, prices, and stock directly from Firestore. Saved training samples are supported; add clear views of each package when products look alike. Similarity percentages are not calibrated probabilities of correctness. Touching products, hands, camera movement, reflections, and poor lighting can prevent reliable segmentation. Keep products separated and recalibrate after moving the camera.
 
 The model runs in a worker and batches crops to keep the camera responsive. It uses WebGPU when an adapter is available and otherwise CPU inference. Speed depends on the device; no fixed frame-rate guarantee. Inventory photos are cached for faster subsequent loads and their labelled descriptors are saved through the direct `/api/ai-models` Firebase endpoint when the photo is first indexed. Products without a photo still need cashier-labelled camera examples. The existing sales API remains responsible for saving sales and changing Firebase stock.
 
@@ -39,8 +95,8 @@ This is an unauthenticated preview. Anyone who can reach the site can read store
 1. Extract the ZIP into the Vercel project root and keep the `api` folder. Use Node.js 22; Firebase Admin SDK 14 requires Node.js 22 or later.
 2. In Vercel Project Settings → Environment Variables, add `FIREBASE_PROJECT_ID=ciamox-retail` and `FIREBASE_SERVICE_ACCOUNT_JSON`. Store the service-account JSON only as a Vercel secret; never place it in `firebase-config.js`, source control, or the ZIP. Give this runtime account only the Firestore access the API needs.
 3. For a local preview, set the same variables in your local environment. `.env.example` lists their names.
-4. Publish the included `firestore.rules` only on a test Firebase project. It permits public reads of store records and denies browser writes; writes go through the unauthenticated API.
-5. The phone scanner is separate and is not included. Its old direct Firestore writes remain blocked by the rules. If it calls this API from another site, set `RETAILFLOW_SCANNER_ORIGIN` to its exact HTTPS origin.
+4. Publish the included `firestore.rules` only on a test Firebase project. For this temporary preview it permits scanner and category writes directly to products and receipts; this is unsafe for real store data.
+5. The phone scanner is separate and is not included. Its direct Firestore writes use the same published rules. If it calls the dashboard API from another site, set `RETAILFLOW_SCANNER_ORIGIN` to its exact HTTPS origin.
 
 The Firebase web config in `firebase-config.js` contains public app identifiers, not service-account credentials. This single Firebase project models one store and does not provide tenant separation. **Restore Firebase Authentication, server token/role checks, and authenticated Firestore rules before adding real data or using this on a public site.**
 
@@ -64,7 +120,7 @@ Choose **Day**, **Month**, or **Year** and a date at the top. Revenue and orders
 
 ## POS Sale
 
-The left side shows searchable product photo cards and an **In stock** filter. Tap a priced, stocked product to add it to the current order. Phone scanning can use the same order after the separate scanner is updated to call this API; its previous direct Firestore writes are blocked by the included rules. The right side shows quantities, prices, subtotal, and total. Change quantities, remove an item, or clear the order there. Choose Cash, Card, or QR and click **Complete sale** after collecting payment. Card and QR choices record the method only; the app does not charge the customer. Checkout reads the current shared order and stock in a Firestore transaction, writes one sale, reduces stock, then clears the order; a second checkout of the cleared order cannot create another sale. The API supports remote scan updates, but the scanner source is not included in this ZIP.
+The left side shows searchable product photo cards and an **In stock** filter. Tap a priced, stocked product to add it to the current order. Phone scanning can use the same order after the separate scanner is updated to call this API; its direct Firestore writes work while the temporary preview rules are published. The right side shows quantities, prices, subtotal, and total. Change quantities, remove an item, or clear the order there. Choose Cash, Card, or QR and click **Complete sale** after collecting payment. Card and QR choices record the method only; the app does not charge the customer. Checkout reads the current shared order and stock in a Firestore transaction, writes one sale, reduces stock, then clears the order; a second checkout of the cleared order cannot create another sale. The API supports remote scan updates, but the scanner source is not included in this ZIP.
 
 Set selling prices in **Finance** before checkout. A product without a price or purchase cost cannot be checked out. The active order is shared store-wide. Use **Clear order** on the dashboard to empty it.
 
