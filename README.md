@@ -1,5 +1,12 @@
 # RetailFlow dashboard: AI camera checkout
 
+The explicit Vercel functions `api/ai-models.js` and
+`api/ultralytics/sync.js` are required. If `/api/ai-models` returns 405,
+check that the deployment contains these direct routes and that the current
+`ai-counter.html` references `low-threshold-20261110-1`, rather than the
+earlier `six-views-1` camera script. The latter means an older deployment is
+still open. The Vercel cron URL returns 403 without its secret by design.
+
 ## Single-store Ultralytics photo sync pilot
 
 This complete package includes a server-only link to one private Ultralytics
