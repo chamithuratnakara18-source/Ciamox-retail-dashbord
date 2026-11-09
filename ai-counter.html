@@ -18,6 +18,7 @@ nav button.on{background:#1f3140;color:#fff}
 #modelState{font-size:12px;color:#9fb3c2}
 main{max-width:1200px;margin:0 auto;padding:16px}
 .grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px}
+.catalogue-layout{display:flex;flex-direction:column;gap:16px}.catalogue-inventory{order:-1}.manual-tools summary{cursor:pointer;font-weight:700;padding:14px;background:#fff;border:1px solid var(--line);border-radius:var(--r)}.manual-tools details[open] summary{margin-bottom:10px}
 @media(max-width:860px){.grid{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px}
 .card h2{font-size:13px;margin:0 0 10px;color:var(--mute);letter-spacing:.8px;text-transform:uppercase}
@@ -137,10 +138,11 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
   </section>
 
   <!-- ======================= CATALOGUE ======================= -->
-  <section id="viewCatalogue" class="grid hide">
-    <div>
+  <section id="viewCatalogue" class="catalogue-layout hide">
+    <div class="manual-tools">
+      <details id="manualTraining"><summary>Optional: add camera examples if similar packages get confused</summary>
       <div class="card">
-        <h2 id="enrolTitle">Train a Firebase product</h2>
+        <h2 id="enrolTitle">Optional camera examples</h2>
         <div class="cam">
           <video id="vidE" playsinline muted autoplay></video>
           <div class="box" id="bboxE"></div>
@@ -161,10 +163,12 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
           <button class="btn ghost" id="resetEnrol">Clear samples</button>
         </div>
       </div>
+      </details>
     </div>
-    <div>
+    <div class="catalogue-inventory">
       <div class="card">
-        <h2>Firebase inventory · <span id="pCount">0</span> products · <span id="sCount">0</span> camera samples</h2>
+        <h2>Automatic inventory recognition · <span id="pCount">0</span> products · <span id="sCount">0</span> ready</h2>
+        <p class="mute">The scanner's product photos are prepared automatically. No extra camera capture is needed for products marked <b>Six views ready</b>.</p>
         <div class="row" style="margin-top:0;margin-bottom:8px"><button class="btn ghost" id="syncProducts">Refresh from Firebase</button><span class="mute" id="firebaseState">Connecting to Firebase inventory… Six scanner views are prepared automatically for recognition.</span></div>
         <input type="search" id="pSearch" placeholder="Search products…">
         <div class="plist" id="pList"></div>
@@ -199,6 +203,6 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
 <canvas id="work" class="hide"></canvas>
 
 <script src="./ai-scan-engine.js?v=six-views-1"></script>
-<script src="./ai-counter.js?v=fast-training-20261109-1"></script>
+<script src="./ai-counter.js?v=auto-inventory-20261109-2"></script>
 </body>
 </html>

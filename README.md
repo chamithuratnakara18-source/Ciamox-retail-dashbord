@@ -4,8 +4,8 @@ This full dashboard package prepares the six front, back, top, bottom, left,
 and right photos saved by the phone scanner for recognition. **Upload the
 contents at the dashboard repository root**, including the root-level `api`
 directory. The separate phone scanner does not need a new upload for this
-dashboard change. The existing Firestore product read permission and Vercel
-Firebase Admin credentials are still required.
+dashboard change. The existing Firestore product read and update permissions are required.
+The optional server AI-model copy uses Vercel Firebase Admin credentials.
 
 Open **AI Detection Cam → Firebase Products** and wait for **Six views ready**
 beside each enrolled product. The camera reads the six photos directly from
@@ -13,12 +13,13 @@ Firestore, so it does not rely on a nested `/api/inventory` route. The DINOv2
 model loads while the product list loads. WebGPU groups six photos into one
 inference request; CPU groups them into three requests of two photos to avoid
 large memory spikes. A successful result is cached on this device before it
-is sent to `/api/ai-models` for other devices. A refreshed inventory keeps a
-cached result only when all six source photos still match. If cloud saving
-fails, the camera shows **cloud training save failed** and remains usable on
-the device that indexed the photos; resolve the API failure before relying
-on a second device. A product without six views can still use its main photo
-or manually labelled camera samples.
+is saved with the Firebase product and, when available, through `/api/ai-models`.
+A refreshed inventory keeps a cached result only when all six source photos
+still match. The optional camera-example panel is collapsed; there is no
+manual photo capture step for products showing **Six views ready**. If both
+Firebase save routes fail, the camera reports that the references are ready
+only on the current device. Products without six views can still use their
+main photo or manually labelled camera samples.
 
 This is reference indexing, not fine-tuning the DINOv2 network. The first
 model download and CPU speed depend on the device and connection; no honest
@@ -56,7 +57,7 @@ dashboard repository root. The published Firestore rules must permit product
 updates for this password-free preview. Other dashboard edits still require
 the root-level `api` directory and Firebase Admin credentials on Vercel.
 
-Deploy the matching phone scanner package. New inbound products capture front, back, top, bottom, left and right views in Firestore. AI Detection Cam alone requests these larger photos, computes six reference embeddings, and saves them to the existing `aiCounterModels` collection via `/api/ai-models`. Ordinary dashboard inventory requests do not download the six photos. Existing manually labelled camera samples remain separate. The model begins loading when the camera page opens, so the first recognition may take longer than later scans.
+Deploy the matching phone scanner package. New inbound products capture front, back, top, bottom, left and right views in Firestore. AI Detection Cam alone requests these larger photos, computes six reference embeddings, and saves them with the Firebase product and, when available, in `aiCounterModels` via `/api/ai-models`. Ordinary dashboard inventory requests do not download the six photos. Existing manually labelled camera samples remain separate. The model begins loading when the camera page opens, so the first recognition may take longer than later scans.
 
 # Fast multi-item AI camera update
 
@@ -71,7 +72,7 @@ This ZIP contains the full dashboard with the camera fix retained. Extract and u
 
 Recognition reads current products, photos, prices, and stock directly from Firestore. Saved training samples are supported; add clear views of each package when products look alike. Similarity percentages are not calibrated probabilities of correctness. Touching products, hands, camera movement, reflections, and poor lighting can prevent reliable segmentation. Keep products separated and recalibrate after moving the camera.
 
-The model runs in a worker and batches crops to keep the camera responsive. It uses WebGPU when an adapter is available and otherwise CPU inference. Speed depends on the device; no fixed frame-rate guarantee. Inventory photos are cached for faster subsequent loads and their labelled descriptors are saved through the direct `/api/ai-models` Firebase endpoint when the photo is first indexed. Products without a photo still need cashier-labelled camera examples. The existing sales API remains responsible for saving sales and changing Firebase stock.
+The model runs in a worker and batches crops to keep the camera responsive. It uses WebGPU when an adapter is available and otherwise CPU inference. Speed depends on the device; no fixed frame-rate guarantee. Inventory photos are cached for faster subsequent loads and their labelled descriptors are saved with the Firebase product and through `/api/ai-models` when that endpoint is available. Products without a photo still need cashier-labelled camera examples. The existing sales API remains responsible for saving sales and changing Firebase stock.
 
 ## Validation for this update
 

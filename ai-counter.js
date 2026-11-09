@@ -52,7 +52,7 @@ function rebuildBank() {
   }
   $('readyStat').textContent=`${new Set(bank.map(s=>s.pid)).size} / ${products.length} products ready`;
   $('pCount').textContent = products.length;
-  $('sCount').textContent = products.reduce((n, p) => n + p.samples.length, 0);
+  $('sCount').textContent = new Set(bank.map(sample=>sample.pid)).size;
 }
 const byId = id => products.find(p => p.id === id);
 
@@ -425,17 +425,37 @@ async function readTrainingInventory(){
   const snapshot = await getDocs(collection(getFirestore(firebaseApp), 'products'));
   return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
 }
+async function storeInventoryReferences(product,key,embeddings){
+  const [{ firebaseApp }, { doc, getFirestore, runTransaction }] = await Promise.all([
+    import('./firebase-app.js'),
+    import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js'),
+  ]);
+  const ref=doc(getFirestore(firebaseApp),'products',product.firebaseDocId);
+  await runTransaction(getFirestore(firebaseApp),async transaction=>{
+    const current=await transaction.get(ref);
+    const views=current.data()?.trainingPhotos;
+    if(!current.exists() || views?.length!==6 || !views.every(Boolean) || photoSetKey(views)!==key)throw new Error('Product photos changed while preparing AI references. Refresh inventory.');
+    transaction.update(ref,{aiReference:{model:MODEL_TAG,sourceKey:key,photoSamples:embeddings.map(b64)}});
+  });
+}
 const cloudUploadAttempts=new Set();
 function saveTrainingToCloud(product,key,embeddings){
   const uploadKey=`${product.id}:${key}`;
   if(cloudUploadAttempts.has(uploadKey))return;
   cloudUploadAttempts.add(uploadKey);
-  void aiModelRequest('/api/ai-models',{method:'PUT',body:{
+  const modelSave=aiModelRequest('/api/ai-models',{method:'PUT',body:{
     barcode:product.barcode,model:MODEL_TAG,kind:'inventoryViews',
     photoSamples:embeddings.map(b64),sourceKey:key,
-  }}).then(()=>{if(product.sourceKey===key)product.cloudSourceKey=key;}).catch(error=>{
-    console.warn('Cloud training save failed:',product.barcode,error);
-    $('firebaseState').textContent=`Recognition ready on this device; cloud training save failed: ${error.message}`;
+  }});
+  // A direct product reference also works if the Vercel AI-model route is absent.
+  void Promise.allSettled([storeInventoryReferences(product,key,embeddings),modelSave]).then(([inventorySave,apiSave])=>{
+    if(inventorySave.status==='fulfilled'||apiSave.status==='fulfilled'){
+      if(product.sourceKey===key)product.cloudSourceKey=key;
+      if(inventorySave.status==='fulfilled')$('firebaseState').textContent=`${product.name} ready · six views saved with Firebase inventory`;
+    }else{
+      console.warn('Firebase AI reference saves failed:',inventorySave.reason,apiSave.reason);
+      $('firebaseState').textContent=`${product.name} ready on this device; Firebase save failed: ${inventorySave.reason?.message||apiSave.reason?.message}`;
+    }
   });
 }
 async function indexTrainingViews(product){
@@ -524,7 +544,7 @@ function syncFirebaseProducts(){
       const rows=inventory.filter(row=>row&&(row.barcode||row.id));
       let cloudModels=new Map(),modelsUnavailable='';
       try{cloudModels=await loadAiModels(rows.map(row=>String(row.barcode||row.id)));}
-      catch(error){modelsUnavailable=' · Saved training unavailable; using current product photos';}
+      catch(error){modelsUnavailable=' · Using inventory photo references';}
       const next=rows.map(row=>{
         const barcode=String(row.barcode||row.id),old=existing.get(barcode),remote=cloudModels.get(barcode);
         const validSamples=value=>Array.isArray(value)?value.filter(buf=>buf?.byteLength===1536):[];
@@ -532,14 +552,15 @@ function syncFirebaseProducts(){
           :modelsUnavailable?validSamples(old?.model===MODEL_TAG?old.samples:[]):[];
         const views=Array.isArray(row.trainingPhotos)?row.trainingPhotos:[];
         const key=views.length===6&&views.every(Boolean)?photoSetKey(views):'';
-        const cloudViews=remote?.model===MODEL_TAG&&remote.sourceKey===key&&Array.isArray(remote.photoSamples)
-          ?remote.photoSamples.map(unb64).filter(buf=>buf.byteLength===1536):[];
+        const reference=remote?.model===MODEL_TAG&&remote.sourceKey===key&&Array.isArray(remote.photoSamples)
+          ?remote:row.aiReference?.model===MODEL_TAG&&row.aiReference.sourceKey===key?row.aiReference:null;
+        const cloudViews=Array.isArray(reference?.photoSamples)?reference.photoSamples.map(unb64).filter(buf=>buf.byteLength===1536):[];
         const localViews=old?.model===MODEL_TAG&&old.sourceKey===key?validSamples(old.trainingSamples):[];
         const trainingSamples=cloudViews.length===6?cloudViews:localViews.length===6?localViews:[];
         return {id:barcode,barcode,name:String(row.name||barcode),sku:barcode,price:Number(row.originalPrice??row.price)||0,
           quantity:Math.max(0,Number(row.quantity)||0),category:String(row.category||''),photoDataUrl:row.photoDataUrl||'',
           thumb:row.photoDataUrl||'',model:MODEL_TAG,samples,trainingSamples,sourceKey:trainingSamples.length===6?key:'',
-          cloudSourceKey:cloudViews.length===6?key:'',trainingPhotos:views,
+          cloudSourceKey:cloudViews.length===6?key:'',trainingPhotos:views,firebaseDocId:String(row.id),
           photoSample:old?.model===MODEL_TAG&&old.photoDataUrl===row.photoDataUrl?old.photoSample:null};
       });
       products=next;inventoryReady=true;inventoryRevision++;
@@ -576,7 +597,7 @@ function renderSamples() {
   $('snapHint').textContent = n ? n + ' extra camera sample' + (n > 1 ? 's' : '') + ' ready' + (n < 6 ? ' — capture more angles for better accuracy.' : '.') : 'Scanner photos from six angles are prepared automatically. Capture extra camera samples here if needed.';
   updateSelectedProduct();
 }
-$('pProduct').onchange = () => { enrol.samples = []; enrol.editId = $('pProduct').value || null; $('enrolTitle').textContent = byId(enrol.editId)?.name ? 'Train: ' + byId(enrol.editId).name : 'Train a Firebase product'; renderSamples(); };
+$('pProduct').onchange = () => { enrol.samples = []; enrol.editId = $('pProduct').value || null; $('enrolTitle').textContent = byId(enrol.editId)?.name ? 'Optional extra views: ' + byId(enrol.editId).name : 'Optional camera examples'; renderSamples(); };
 $('syncProducts').onclick = () => syncFirebaseProducts().catch(error => toast(error.message));
 $('camBtnE').onclick = () => $('camBtn').click();
 $('snapBtn').onclick = async () => {
@@ -595,7 +616,7 @@ $('snapBtn').onclick = async () => {
   $('snapBtn').disabled = !counter.stream;
 };
 $('resetEnrol').onclick = resetEnrol;
-function resetEnrol() { enrol.samples = []; enrol.editId = $('pProduct').value || null; $('enrolTitle').textContent = byId(enrol.editId) ? 'Train: ' + byId(enrol.editId).name : 'Train a Firebase product'; renderSamples(); }
+function resetEnrol() { enrol.samples = []; enrol.editId = $('pProduct').value || null; $('enrolTitle').textContent = byId(enrol.editId) ? 'Optional extra views: ' + byId(enrol.editId).name : 'Optional camera examples'; renderSamples(); }
 $('usePhotoBtn').onclick = async () => {
   const p = byId($('pProduct').value);
   if (!p?.photoDataUrl) return;
@@ -627,15 +648,14 @@ function renderList() {
     const r = document.createElement('div'); r.className = 'prow';
     const im = document.createElement('img'); im.className = 'thumb'; im.src = p.thumb || '';
     const n = document.createElement('div'); n.className = 'n'; const b = document.createElement('b'); b.textContent = p.name; const s = document.createElement('span'); s.className = 'mute'; s.textContent = `${money(p.price)} · ${p.quantity} in stock · ${p.samples.length} camera samples${p.trainingSamples?.length===6?' · Six views ready':p.photoSample?' · Photo ready':p.trainingPhotos?.length===6?' · Six views preparing':p.photoDataUrl?' · Photo preparing':' · Needs training'}${p.category ? ' · ' + p.category : ''}`; n.append(b, s);
-    const add = document.createElement('button'); add.className = 'btn ghost'; add.textContent = 'Train'; add.onclick = () => { $('pProduct').value = p.id; enrol.editId = p.id; enrol.samples = []; $('enrolTitle').textContent = 'Train: ' + p.name; switchTab('catalogue'); renderSamples(); };
-    const del = document.createElement('button'); del.className = 'btn ghost'; del.textContent = 'Clear camera training'; del.disabled = !p.samples.length; del.onclick = async () => {
+    const del = document.createElement('button'); del.className = 'btn ghost'; del.textContent = 'Clear extra camera examples'; del.disabled = !p.samples.length; del.onclick = async () => {
       try {
         await aiModelRequest('/api/ai-models', { method: 'DELETE', body: { barcode: p.barcode } });
         inventoryRevision++;p.samples=[];p.model=MODEL_TAG;await DB.put('products',p).catch(()=>{});rebuildBank();renderList();renderCart();
         toast('AI training removed from Firebase.');
       } catch (error) { toast(error.message || 'Could not clear Firebase training.'); }
     };
-    r.append(im, n, add, del); box.append(r);
+    r.append(im,n);if(p.samples.length)r.append(del);box.append(r);
   }
   if (list.length > 300) { const m = document.createElement('div'); m.className = 'mute'; m.style.padding = '8px'; m.textContent = `Showing 300 of ${list.length}. Use search.`; box.append(m); }
 }
