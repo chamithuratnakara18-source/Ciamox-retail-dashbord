@@ -42,7 +42,7 @@
     let merged=true;
     while(merged){merged=false;outer:for(let i=0;i<components.length;i++)for(let j=i+1;j<components.length;j++){
       const a=components[i],b=components[j],gapX=Math.max(0,a.x0-b.x1,b.x0-a.x1),gapY=Math.max(0,a.y0-b.y1,b.y0-a.y1);
-      if(intersection(a,b)>0 || (gapX<4/w&&gapY<4/h)){
+      if(intersection(a,b)>0 || (gapX<2/w&&gapY<2/h)){
         components[i]={x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1),pixels:a.pixels+b.pixels,moved:a.moved+b.moved};
         components.splice(j,1);merged=true;break outer;
       }
@@ -84,7 +84,7 @@
       for(const {i,t} of pairs){
         if(used.has(i)||assigned.has(t.id))continue;
         const d=detections[i],overlap=iou(t.bbox,d.bbox),wasMissing=now-t.lastSeen>220;
-        if(d.motion>.12||overlap<.78||wasMissing){
+        if(d.motion>.28||overlap<.68||wasMissing){
           t.stableSince=now;
           if(!t.counted){t.revision++;t.result=null;t.hits=0;t.matchPid=null;}
         }
@@ -102,7 +102,7 @@
     }
     ready(now){return this.tracks.filter(t=>t.visible&&!t.blocked&&!t.counted&&!t.busy&&now-t.stableSince>=this.settleMs&&now>=t.nextAt).sort((a,b)=>a.nextAt-b.nextAt||a.id-b.id);}
     token(t){return {id:t.id,epoch:t.epoch,revision:t.revision,bbox:{...t.bbox}};}
-    resolve(token,now){return this.tracks.find(t=>t.id===token.id&&t.epoch===token.epoch&&t.revision===token.revision&&t.visible&&!t.blocked&&!t.counted&&now-t.stableSince>=this.settleMs&&iou(t.bbox,token.bbox)>.72);}
+    resolve(token,now){return this.tracks.find(t=>t.id===token.id&&t.epoch===token.epoch&&t.revision===token.revision&&t.visible&&!t.blocked&&!t.counted&&now-t.stableSince>=this.settleMs&&iou(t.bbox,token.bbox)>.68);}
     accept(t,result,now){
       t.hits=result.level==='ok'&&t.matchPid===result.pid?t.hits+1:result.level==='ok'?1:0;
       t.matchPid=result.pid;t.result=result;t.nextAt=now+(result.level==='ok'&&t.hits<2?120:1200);
@@ -126,6 +126,10 @@
     }
     return winner;
   }
-  const api={detect,Tracker,iou,area,decide,selectInventoryMatch};
+  function canAutoAdd(result,hits,threshold,margin){
+    return hits>=2&&result?.level==='ok'&&result.score>=Math.max(.82,threshold+.08)
+      &&result.gap>=Math.max(.08,margin)&&result.backgroundLead>=.10;
+  }
+  const api={detect,Tracker,iou,area,decide,selectInventoryMatch,canAutoAdd};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RetailScan=api;
 })(globalThis);

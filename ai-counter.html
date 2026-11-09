@@ -109,7 +109,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
         <p class="scan-note">Set the empty counter first. The camera compares regions with your inventory photos and the empty scene; only confirmed product matches get a box. If a product is missed, show it clearly, adjust the similarity setting, or add better scanner photos. Check every cart item before payment.</p>
         <div class="row">
           <button class="btn acc" id="addVisibleBtn" disabled>Add matched items</button>
-          <label class="mute"><input type="checkbox" id="autoAdd"> Auto-add stable matches</label>
+          <label class="mute"><input type="checkbox" id="autoAdd" checked> Auto-add verified products</label>
         </div>
         <div id="candBox"></div>
       </div>
@@ -129,10 +129,10 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
         <h2>Recognition settings</h2>
         <button class="btn ghost" id="retryModel">Retry model</button>
         <label class="f">Minimum similarity to accept: <b id="thrV"></b></label>
-        <input type="range" id="thr" min="30" max="95" value="72" style="width:100%">
+        <input type="range" id="thr" min="72" max="95" value="78" style="width:100%">
         <label class="f">Required lead over the 2nd best product: <b id="marV"></b></label>
-        <input type="range" id="mar" min="0" max="30" value="8" style="width:100%">
-        <div class="mute" style="margin-top:6px">Unmatched objects stay unmarked. Scores are image similarity, not a probability of correctness. Two agreeing checks are needed before a box appears. Check the cart before payment. Use Firebase Products → Self-test and live counter trials to tune this setting.</div>
+        <input type="range" id="mar" min="8" max="30" value="8" style="width:100%">
+        <div class="mute" style="margin-top:6px">Unmatched objects stay unmarked. Auto-add is on for repeated, high-similarity matches that also beat the empty-counter view; uncertain items stay out of the cart. Similarity is not a probability. Check the cart before payment.</div>
       </div>
     </div>
   </section>
@@ -202,7 +202,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
 <div class="toast" id="toast"></div>
 <canvas id="work" class="hide"></canvas>
 
-<script src="./ai-scan-engine.js?v=semantic-focus-20261109-1"></script>
-<script src="./ai-counter.js?v=semantic-focus-20261109-1"></script>
+<script src="./ai-scan-engine.js?v=multi-auto-20261109-1"></script>
+<script src="./ai-counter.js?v=multi-auto-20261109-1"></script>
 </body>
 </html>

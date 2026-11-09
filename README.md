@@ -1,3 +1,37 @@
+# Two-product scanner, Firebase sample saves, and automatic cart
+
+This is the **complete dashboard**, with the root-level `api` folder. Extract
+the ZIP and upload its contents at the dashboard repository root. Deploy the
+branch you actually upload to, and hard-refresh when Vercel reports Ready.
+The old screen with “3 items in view”, “Hold briefly”, and a 32% similarity
+setting is the previous build, not the inventory-verified camera in this ZIP.
+
+The camera now leaves a narrow visible gap between two products unmerged and
+does not discard a stable product match for slight camera motion. It only
+draws boxes for inventory-verified objects. **Auto-add verified products** is
+enabled by default: it adds each separately tracked product to the cart once
+after two matching observations, a high similarity score, a clear margin over
+the second-best product, and a clear lead over the empty background. The
+ordinary minimum similarity slider cannot be set below 72% in this build;
+automatic addition requires at least 82%. Check the cart before taking
+payment. Items that touch or overlap may still be impossible to count
+separately with this image-matching model; leave a visible gap.
+
+Optional **Save camera samples** now writes `aiCameraSamples` directly to
+the same Firebase `products/{barcode}` document as the scanner photos,
+then reads that field back on refresh. It does not call the `/api/ai-models`
+route that returned “Operation not available” for extra samples. The
+existing product read/update Firestore rules must permit this write. The
+server inbound route now merges stock fields so later deliveries do not
+erase these reference fields. No new Firebase collection or Storage bucket
+is needed for these short embedding vectors. The dashboard does not upload
+raw camera sample images to Firestore.
+
+Verification: 15 Node tests passed, including two separated products,
+small camera motion, background rejection, and automatic-add safeguards.
+JavaScript syntax checks passed. Actual camera accuracy and Firestore writes
+on your deployment were not available to test here; verify both after deploy.
+
 # Inventory-verified camera focus
 
 This package changes the camera display and checkout candidate list so

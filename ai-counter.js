@@ -261,7 +261,7 @@ async function recogniseTracks(tracks){
       const picked=picks[i],result=picked?{...picked}:{pid:null,score:0,top:[],level:'none'};
       const stable=tracker.accept(t,result,performance.now());
       t.focusBBox=result.level==='ok'?result.bbox:null;
-      if(stable&&$('autoAdd').checked&&result.score>=Math.min(.98,$('thr').value/100+.08))addTrack(t);
+      if(stable&&$('autoAdd').checked&&RetailScan.canAutoAdd(result,t.hits,threshold,margin))addTrack(t);
     }
   }catch(error){
     recognitionFailures++;retryAfter=performance.now()+Math.min(15000,1000*2**recognitionFailures);
@@ -357,7 +357,8 @@ function renderCart() {
 }
 $('clearBtn').onclick = () => { if(checkoutBusy||$('payDlg').open)return; cart.clear(); renderCart(); };
 $('addVisibleBtn').onclick=()=>{for(const t of [...tracker.tracks])if(t.result?.level==='ok')addTrack(t);};
-$('autoAdd').onchange=()=>{if($('autoAdd').checked)for(const t of [...tracker.tracks])if(t.hits>=2&&t.result?.level==='ok'&&t.result.score>=Math.min(.98,$('thr').value/100+.08))addTrack(t);};
+$('autoAdd').onchange=()=>{if($('autoAdd').checked)for(const t of [...tracker.tracks])
+  if(RetailScan.canAutoAdd(t.result,t.hits,$('thr').value/100,$('mar').value/100))addTrack(t);};
 $('payBtn').onclick = () => { $('payTotal').textContent = money(cartTotal()); $('cashIn').value = ''; $('changeV').textContent = '0.00'; $('payMethod').dispatchEvent(new Event('change')); $('payDlg').showModal(); };
 $('payMethod').onchange = () => $('cashBox').classList.toggle('hide', $('payMethod').value !== 'Cash');
 $('cashIn').oninput = () => { $('changeV').textContent = money(Math.max(0, (+$('cashIn').value || 0) - cartTotal())); };
@@ -451,7 +452,17 @@ async function aiModelRequest(path, { method = 'GET', body } = {}) {
 async function persistAiSamples(product, samples) {
   if (MODEL_TAG !== 'Xenova/dinov2-small') throw new Error('Test mode samples are not saved to Firebase.');
   if (samples.length > 32) throw new Error('This product has reached the 32 sample limit. Clear training first.');
-  await aiModelRequest('/api/ai-models', { method: 'PUT', body: { barcode: product.barcode, model: MODEL_TAG, samples: samples.map(b64) } });
+  const [{ firebaseApp }, { doc, getFirestore, runTransaction }] = await Promise.all([
+    import('./firebase-app.js'),
+    import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js'),
+  ]);
+  const db=getFirestore(firebaseApp),ref=doc(db,'products',product.firebaseDocId);
+  await runTransaction(db,async transaction=>{
+    const current=await transaction.get(ref);
+    if(!current.exists()||String(current.data().barcode||current.id)!==product.barcode)
+      throw new Error('This inventory product changed. Refresh and try again.');
+    transaction.update(ref,{aiCameraSamples:{model:MODEL_TAG,samples:samples.map(b64)}});
+  });
   inventoryRevision++;
   product.samples = samples; product.model = MODEL_TAG;
   await DB.put('products', product).catch(()=>{}); rebuildBank(); renderList();
@@ -604,7 +615,9 @@ function syncFirebaseProducts(){
       const next=rows.map(row=>{
         const barcode=String(row.barcode||row.id),old=existing.get(barcode),remote=cloudModels.get(barcode);
         const validSamples=value=>Array.isArray(value)?value.filter(buf=>buf?.byteLength===1536):[];
-        const samples=remote?.model===MODEL_TAG&&Array.isArray(remote.samples)?remote.samples.map(unb64).filter(buf=>buf.byteLength===1536)
+        const direct=row.aiCameraSamples?.model===MODEL_TAG&&Array.isArray(row.aiCameraSamples.samples)?row.aiCameraSamples.samples:null;
+        const samples=direct?direct.map(unb64).filter(buf=>buf.byteLength===1536)
+          :remote?.model===MODEL_TAG&&Array.isArray(remote.samples)?remote.samples.map(unb64).filter(buf=>buf.byteLength===1536)
           :modelsUnavailable?validSamples(old?.model===MODEL_TAG?old.samples:[]):[];
         const views=Array.isArray(row.trainingPhotos)?row.trainingPhotos:[];
         const key=views.length===6&&views.every(Boolean)?photoSetKey(views):'';
@@ -706,9 +719,8 @@ function renderList() {
     const n = document.createElement('div'); n.className = 'n'; const b = document.createElement('b'); b.textContent = p.name; const s = document.createElement('span'); s.className = 'mute'; s.textContent = `${money(p.price)} · ${p.quantity} in stock · ${p.samples.length} camera samples${p.trainingSamples?.length===6?' · Six views ready':p.photoSample?' · Photo ready':p.trainingPhotos?.length===6?' · Six views preparing':p.photoDataUrl?' · Photo preparing':' · Needs training'}${p.category ? ' · ' + p.category : ''}`; n.append(b, s);
     const del = document.createElement('button'); del.className = 'btn ghost'; del.textContent = 'Clear extra camera examples'; del.disabled = !p.samples.length; del.onclick = async () => {
       try {
-        await aiModelRequest('/api/ai-models', { method: 'DELETE', body: { barcode: p.barcode } });
-        inventoryRevision++;p.samples=[];p.model=MODEL_TAG;await DB.put('products',p).catch(()=>{});rebuildBank();renderList();renderCart();
-        toast('AI training removed from Firebase.');
+        await persistAiSamples(p,[]);
+        toast('Extra camera examples removed from Firebase inventory.');
       } catch (error) { toast(error.message || 'Could not clear Firebase training.'); }
     };
     r.append(im,n);if(p.samples.length)r.append(del);box.append(r);
@@ -766,7 +778,10 @@ function switchTab(t) {
 $('tabCounter').onclick = () => switchTab('counter'); $('tabCatalogue').onclick = () => switchTab('catalogue');
 
 (async () => {
-  try { const a = localStorage.getItem('aic-thr'), b = localStorage.getItem('aic-mar'); if (a) $('thr').value = a; if (b) $('mar').value = b; } catch { /* ignore */ }
+  try { const a = localStorage.getItem('aic-thr'), b = localStorage.getItem('aic-mar');
+    if (a) $('thr').value = Math.max(72,Math.min(95,Number(a)||72));
+    if (b) $('mar').value = Math.max(8,Math.min(30,Number(b)||8));
+  } catch { /* ignore */ }
   $('thr').dispatchEvent(new Event('input'));
   // Do not show persisted inventory cache before a successful Firebase read.
   // Only camera samples are reused, matched to current inventory by barcode.
