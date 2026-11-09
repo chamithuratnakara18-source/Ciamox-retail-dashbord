@@ -1,6 +1,6 @@
 import {
   collection, doc, getDoc, getDocFromServer, getDocs, getFirestore,
-  onSnapshot,
+  onSnapshot, serverTimestamp, updateDoc,
 } from 'https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 import { firebaseApp } from './firebase-app.js';
@@ -925,6 +925,18 @@ export function watchPos(onChange, onError) {
 export async function api(path, options = {}) {
   const url = new URL(path, location.origin);
   const method = (options.method || 'GET').toUpperCase();
+  if (url.pathname === '/api/inventory/category' && method === 'PATCH') {
+    const body = JSON.parse(options.body || '{}');
+    const barcode = typeof body.barcode === 'string' ? body.barcode.trim() : '';
+    const category = typeof body.category === 'string' ? body.category.trim() : '';
+    if (!barcode || barcode.length > 128 || !category || category.length > 80) {
+      throw new Error('Enter a valid barcode and category name.');
+    }
+    // Category is a field on the existing product. This path uses the same
+    // client-side Firestore access as the phone scanner in password-free mode.
+    await updateDoc(productRef(barcode), { category, updatedAt: serverTimestamp() });
+    return { product: shapeProduct((await getDocFromServer(productRef(barcode))).data()) };
+  }
   if (method !== 'GET') {
     await auth.authStateReady();
     const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;

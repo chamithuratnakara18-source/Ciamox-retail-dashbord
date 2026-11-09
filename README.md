@@ -1,11 +1,13 @@
 ## Six photos from the separate barcode scanner
 
-Category assignment uses the explicit `api/inventory/category.js` Vercel
-function. Upload the whole package, including the `api` directory, at the
-dashboard repository root. Once the deployment is Ready, opening
-`/api/inventory/category` in a browser should return a JSON 405 response;
-the dashboard sends PATCH to that same route when assigning a category.
-Firebase rules do not deploy Vercel API functions.
+Category assignment now updates the existing Firestore product directly from
+the dashboard, using the same browser write permission as the separate phone
+scanner. This avoids the 404 from `/api/inventory/category` on deployments
+without that nested route. The explicit `api/inventory/category.js` route is
+also included for future server-based writes. Upload the whole package at the
+dashboard repository root. The published Firestore rules must permit product
+updates for this password-free preview. Other dashboard edits still require
+the root-level `api` directory and Firebase Admin credentials on Vercel.
 
 Deploy the matching phone scanner package. New inbound products capture front, back, top, bottom, left and right views in Firestore. AI Detection Cam alone requests these larger photos, computes six reference embeddings, and saves them to the existing `aiCounterModels` collection via `/api/ai-models`. Ordinary dashboard inventory requests do not download the six photos. Existing manually labelled camera samples remain separate. The model is prepared on first camera open, so the first recognition may take longer than later scans.
 
@@ -46,8 +48,8 @@ This is an unauthenticated preview. Anyone who can reach the site can read store
 1. Extract the ZIP into the Vercel project root and keep the `api` folder. Use Node.js 22; Firebase Admin SDK 14 requires Node.js 22 or later.
 2. In Vercel Project Settings → Environment Variables, add `FIREBASE_PROJECT_ID=ciamox-retail` and `FIREBASE_SERVICE_ACCOUNT_JSON`. Store the service-account JSON only as a Vercel secret; never place it in `firebase-config.js`, source control, or the ZIP. Give this runtime account only the Firestore access the API needs.
 3. For a local preview, set the same variables in your local environment. `.env.example` lists their names.
-4. Publish the included `firestore.rules` only on a test Firebase project. It permits public reads of store records and denies browser writes; writes go through the unauthenticated API.
-5. The phone scanner is separate and is not included. Its old direct Firestore writes remain blocked by the rules. If it calls this API from another site, set `RETAILFLOW_SCANNER_ORIGIN` to its exact HTTPS origin.
+4. Publish the included `firestore.rules` only on a test Firebase project. For this temporary preview it permits scanner and category writes directly to products and receipts; this is unsafe for real store data.
+5. The phone scanner is separate and is not included. Its direct Firestore writes use the same published rules. If it calls the dashboard API from another site, set `RETAILFLOW_SCANNER_ORIGIN` to its exact HTTPS origin.
 
 The Firebase web config in `firebase-config.js` contains public app identifiers, not service-account credentials. This single Firebase project models one store and does not provide tenant separation. **Restore Firebase Authentication, server token/role checks, and authenticated Firestore rules before adding real data or using this on a public site.**
 
@@ -71,7 +73,7 @@ Choose **Day**, **Month**, or **Year** and a date at the top. Revenue and orders
 
 ## POS Sale
 
-The left side shows searchable product photo cards and an **In stock** filter. Tap a priced, stocked product to add it to the current order. Phone scanning can use the same order after the separate scanner is updated to call this API; its previous direct Firestore writes are blocked by the included rules. The right side shows quantities, prices, subtotal, and total. Change quantities, remove an item, or clear the order there. Choose Cash, Card, or QR and click **Complete sale** after collecting payment. Card and QR choices record the method only; the app does not charge the customer. Checkout reads the current shared order and stock in a Firestore transaction, writes one sale, reduces stock, then clears the order; a second checkout of the cleared order cannot create another sale. The API supports remote scan updates, but the scanner source is not included in this ZIP.
+The left side shows searchable product photo cards and an **In stock** filter. Tap a priced, stocked product to add it to the current order. Phone scanning can use the same order after the separate scanner is updated to call this API; its direct Firestore writes work while the temporary preview rules are published. The right side shows quantities, prices, subtotal, and total. Change quantities, remove an item, or clear the order there. Choose Cash, Card, or QR and click **Complete sale** after collecting payment. Card and QR choices record the method only; the app does not charge the customer. Checkout reads the current shared order and stock in a Firestore transaction, writes one sale, reduces stock, then clears the order; a second checkout of the cleared order cannot create another sale. The API supports remote scan updates, but the scanner source is not included in this ZIP.
 
 Set selling prices in **Finance** before checkout. A product without a price or purchase cost cannot be checked out. The active order is shared store-wide. Use **Clear order** on the dashboard to empty it.
 
