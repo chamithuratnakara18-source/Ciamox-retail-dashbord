@@ -1,3 +1,22 @@
+# RT-DETRv2 camera: distinct products and confirmable cart matches
+
+This release fixes a case where a large foreground region from a hand or shadow
+blocked two physically separate products. The camera now combines detector
+boxes with smaller foreground parts and retains a tracked product only while
+its location still differs from the empty-counter view. A 79% match can be
+confirmed with an **Add [product]** button directly below the video. Automatic
+addition keeps its stronger repeated-match checks; the cashier must review a
+lower-scoring match. If an item is removed, it is not recovered merely because
+another part of the scene moved. The 22 deterministic camera tests pass.
+
+Upload the **entire extracted ZIP contents** at the dashboard repo root on the
+AI camera branch, replacing matching files. Include `api/` and the two workers.
+Wait for the Vercel preview to show Ready, hard-refresh, then test the two
+products together. The actual device camera and Firebase connection cannot be
+exercised in this workspace.
+
+## Previous release notes
+
 # RT-DETRv2 object proposals and automatic Firebase product indexing
 
 Upload **all contents of this package** to the dashboard repository root, including

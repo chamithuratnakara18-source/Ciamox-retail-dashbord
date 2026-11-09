@@ -62,7 +62,7 @@ const pendingVision=new Map();
 function setModelState(t){ $('modelState').textContent=t; }
 function visionRequest(type, images=[]){
   if(!visionWorker){
-    visionWorker=new Worker('./ai-vision-worker.js?v=rtdetr-20261109-1');
+    visionWorker=new Worker('./ai-vision-worker.js?v=rtdetr-cart-20261109-2');
     visionWorker.onmessage=({data})=>{
       if(data.type==='status'){setModelState(data.text);return;}
       const request=pendingVision.get(data.id);if(!request)return;
@@ -134,7 +134,7 @@ function resetDetector(error){
 }
 function detectorRequest(type,image){
   if(!detectorWorker){
-    detectorWorker=new Worker('./ai-detector-worker.js?v=rtdetr-20261109-1');
+    detectorWorker=new Worker('./ai-detector-worker.js?v=rtdetr-cart-20261109-2');
     detectorWorker.onmessage=({data})=>{
       const item=detectorPending.get(data.id);if(!item)return;
       clearTimeout(item.timer);detectorPending.delete(data.id);
@@ -276,8 +276,17 @@ function tick(){
   if(!counter.baseline){setState('Clear the counter → Set empty counter');return;}
   const g=grab(v),a=analyse(g),now=performance.now();counter.prev=g;
   requestObjectBoxes(v,now);
-  if(detectorResult&&now-detectorResult.at<1700)
-    a.boxes=RetailScan.fuseProposals(a.boxes,detectorResult.boxes);
+  const objects=detectorResult&&now-detectorResult.at<1700?detectorResult.boxes:null;
+  const coarseMerge=a.boxes.some(d=>{
+    const inside=tracker.tracks.filter(t=>RetailScan.iou(d.bbox,t.bbox)>.04||
+      (d.bbox.x0<=t.bbox.x0&&d.bbox.y0<=t.bbox.y0&&d.bbox.x1>=t.bbox.x1&&d.bbox.y1>=t.bbox.y1));
+    return inside.length>1||inside.some(t=>t.result?.level==='ok'&&
+      RetailScan.area(d.bbox)>RetailScan.area(t.bbox)*3);
+  });
+  if(objects?.length||coarseMerge){
+    const prior=tracker.tracks.map(t=>({...t,present:RetailScan.foregroundShare(g,counter.baseline,t.bbox,SW,SH)>.18}));
+    a.boxes=RetailScan.fuseProposals(a.boxes,objects||[],8,prior,a.parts||[]);
+  }
   tracker.update(a.boxes,now);counter.lastBBox=a.boxes.length===1?a.boxes[0].bbox:null;
   drawBoxes();renderCandidates();$('rescanBtn').disabled=!tracker.tracks.some(t=>t.visible&&!t.counted);
   if(a.boxes.length>8){setState('Up to 8 separated items · scan the rest next');return;}
@@ -289,7 +298,7 @@ function tick(){
     const ready=tracker.ready(now).filter(t=>!t.result||t.result.level!=='ok'||t.hits<2);
     if(ready.length)void recogniseTracks(ready.slice(0,modelBackend==='GPU'?4:2));
   }
-  if(!counter.busy)setState(tracker.tracks.some(t=>t.blocked)?'Move touching items apart':tracker.tracks.some(t=>t.visible&&t.hits>=2&&t.result?.level==='ok'&&!t.counted)?'Inventory match ready · check cart':tracker.tracks.filter(t=>t.visible).every(t=>t.counted)?'Items added · remove before the next batch':'Checking view against inventory photos…');
+  if(!counter.busy)setState(tracker.tracks.some(t=>t.blocked)?'Objects overlap · keep items visible and retry':tracker.tracks.some(t=>t.visible&&t.hits>=2&&t.result?.level==='ok'&&!t.counted)?'Inventory match ready · tap Add below':tracker.tracks.filter(t=>t.visible).every(t=>t.counted)?'Items added · remove before the next batch':'Checking view against inventory photos…');
 }
 async function recogniseTracks(tracks){
   counter.busy=true;const revision=inventoryRevision,referenceEpoch=counter.referenceEpoch;
@@ -322,6 +331,10 @@ async function recogniseTracks(tracks){
       const picked=picks[i],result=picked?{...picked}:{pid:null,score:0,top:[],level:'none'};
       const stable=tracker.accept(t,result,performance.now());
       t.focusBBox=result.level==='ok'?result.bbox:null;
+      // Keep tracking the matched product crop, rather than the broad hand or
+      // shadow region from which that crop was found.
+      if(result.level==='ok'&&result.bbox&&RetailScan.area(result.bbox)<RetailScan.area(t.bbox)*.85)
+        t.bbox=result.bbox;
       if(stable&&$('autoAdd').checked&&RetailScan.canAutoAdd(result,t.hits,threshold,margin))addTrack(t);
     }
   }catch(error){
@@ -339,10 +352,17 @@ function renderCandidates(force=false){
   const visible=tracker.tracks.filter(t=>t.visible&&!t.blocked&&!t.counted&&t.result?.level==='ok'&&t.hits>=2);
   const key=visible.map(t=>`${t.id}:${t.result?.pid}:${t.result?.level}:${t.hits}`).join('|')+inventoryReady;
   if(!force&&key===candidatesKey)return;candidatesKey=key;
-  const box=$('candBox');box.replaceChildren();
+  const box=$('candBox'),quick=$('quickAdds');box.replaceChildren();quick.replaceChildren();
   $('addVisibleBtn').disabled=!inventoryReady||!visible.some(t=>t.result?.level==='ok');
   for(const t of visible){
     if(!t.result)continue;const r=t.result;
+    const product=byId(r.pid);
+    if(product){
+      const button=document.createElement('button');button.type='button';
+      button.textContent=`Add ${product.name} · ${Math.round(r.score*100)}% match`;
+      button.onclick=()=>{if(!addTrack(t))toast('Could not add this item. Check stock and keep the product in view.');};
+      quick.append(button);
+    }
     const wrap=document.createElement('div');wrap.className='cand '+r.level;
     const title=document.createElement('div');title.className='t';title.textContent=`Item ${t.id} · ${r.level==='ok'?'Match ready':r.level==='maybe'?'Confirm product':'Unknown item'}`;wrap.append(title);
     for(const m of r.top){
@@ -356,6 +376,11 @@ function renderCandidates(force=false){
       const add=document.createElement('button');add.className='btn ghost';add.textContent='Add selected';add.onclick=()=>select.value&&addTrack(t,select.value);wrap.append(select,add);
     }
     box.append(wrap);
+  }
+  if(visible.length){
+    const note=document.createElement('small');
+    note.textContent='Review the product name before tapping Add. Lower-scoring matches require this confirmation.';
+    quick.append(note);
   }
 }
 async function calibrate(){
@@ -490,7 +515,7 @@ $('retryModel').onclick=()=>{
   loadModel().then(()=>indexInventoryPhotos()).catch(error=>toast(error.message));
 };
 $('rescanBtn').onclick=()=>{for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.nextAt=0;}renderCandidates(true);};
-$('thr').oninput = $('mar').oninput = () => { $('thrV').textContent = $('thr').value + '%'; $('marV').textContent = $('mar').value + '%'; try { localStorage.setItem('aic-thr', $('thr').value); localStorage.setItem('aic-mar', $('mar').value); } catch { /* ignore */ } };
+$('thr').oninput = $('mar').oninput = () => { $('thrV').textContent = $('thr').value + '%'; $('marV').textContent = $('mar').value + '%';renderCandidates(true); try { localStorage.setItem('aic-thr', $('thr').value); localStorage.setItem('aic-mar', $('mar').value); } catch { /* ignore */ } };
 
 /* ---------- enrolment ---------- */
 const enrol = { samples: [], editId: null };

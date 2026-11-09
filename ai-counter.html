@@ -32,6 +32,7 @@ main{max-width:1200px;margin:0 auto;padding:16px}
 .object-box[data-state=maybe]{border-color:#ffbe57}.object-box[data-state=maybe] span{background:#ffbe57}
 .object-box[data-state=none]{border-color:#f5a797}.object-box[data-state=none] span{background:#f5a797}
 .scan-metrics{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.scan-metrics span{font-size:12px;background:#edf6f1;border:1px solid #d5e8dc;border-radius:99px;padding:5px 9px;color:#34584a}
+.quick-add{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.quick-add button{background:#0f9f71;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.quick-add small{align-self:center;color:#526675}
 .scan-note{padding:10px 12px;background:#eff5f9;border-radius:9px;margin:12px 0;color:#56707d;font-size:13px}
 header{flex-wrap:wrap}#modelState{margin-left:auto}nav button{padding:8px 10px}
 @media(max-width:480px){header h1{display:none}.object-box span{font-size:10px;max-width:120px}main{padding:10px}.card{padding:12px}}
@@ -99,6 +100,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
           <div class="box" id="bboxC"></div>
           <span class="badge" id="stateC">Camera off</span>
         </div>
+        <div id="quickAdds" class="quick-add" aria-live="polite"></div>
         <div class="row">
           <button class="btn acc" id="camBtn">Start camera</button>
           <select id="camSel" style="max-width:220px"></select>
@@ -203,7 +205,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
 <div class="toast" id="toast"></div>
 <canvas id="work" class="hide"></canvas>
 
-<script src="./ai-scan-engine.js?v=rtdetr-20261109-1"></script>
-<script src="./ai-counter.js?v=rtdetr-20261109-1"></script>
+<script src="./ai-scan-engine.js?v=rtdetr-cart-20261109-2"></script>
+<script src="./ai-counter.js?v=rtdetr-cart-20261109-2"></script>
 </body>
 </html>

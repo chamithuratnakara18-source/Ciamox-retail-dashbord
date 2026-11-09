@@ -5,6 +5,17 @@
   function intersection(a,b) { return Math.max(0,Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0))*Math.max(0,Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0)); }
   function iou(a,b) { const n=intersection(a,b); return n/(area(a)+area(b)-n || 1); }
   function contains(a,b) { return intersection(a,b)/(area(b)||1); }
+  function foregroundShare(frame,baseline,b,w,h){
+    const x0=Math.max(0,Math.floor(b.x0*w)),y0=Math.max(0,Math.floor(b.y0*h));
+    const x1=Math.min(w,Math.ceil(b.x1*w)),y1=Math.min(h,Math.ceil(b.y1*h));
+    let changed=0,total=0;
+    for(let y=y0;y<y1;y+=2)for(let x=x0;x<x1;x+=2){
+      const i=(y*w+x)*4;total++;
+      if(Math.max(Math.abs(frame[i]-baseline[i]),Math.abs(frame[i+1]-baseline[i+1]),
+        Math.abs(frame[i+2]-baseline[i+2]))>42)changed++;
+    }
+    return total?changed/total:0;
+  }
   function detect(rgba, baseline, previous, w, h, threshold=32) {
     const size=w*h, mask=new Uint8Array(size), clean=new Uint8Array(size);
     // Median brightness shift ignores small whole-frame exposure changes.
@@ -38,6 +49,11 @@
       if(n>=24&&x1-x0>=3&&y1-y0>=3)
         components.push({x0:x0/w,y0:y0/h,x1:(x1+1)/w,y1:(y1+1)/h,pixels:n,moved});
     }
+    // Preserve substantial independent fragments for the detector fusion step.
+    // Joining via a hand or shadow can otherwise swallow a second product.
+    const parts=components.filter(c=>c.pixels>=96&&area(c)>.008).map(c=>({
+      bbox:{x0:c.x0,y0:c.y0,x1:c.x1,y1:c.y1},motion:previous?c.moved/c.pixels:1,
+    }));
     // Join fragments belonging to the same package. Keep a visible gap between items.
     let merged=true;
     while(merged){merged=false;outer:for(let i=0;i<components.length;i++)for(let j=i+1;j<components.length;j++){
@@ -60,12 +76,12 @@
     const visible=primary && area(primary)>.15
       ?candidates.filter((c,i)=>i===0||c.pixels>=Math.max(160,primary.pixels*.04)||area(c)>.012)
       :candidates;
-    return {fraction:changed/size, boxes:visible.map(c=>({bbox:{x0:c.x0,y0:c.y0,x1:c.x1,y1:c.y1},motion:previous?c.moved/c.pixels:1}))};
+    return {fraction:changed/size, parts, boxes:visible.map(c=>({bbox:{x0:c.x0,y0:c.y0,x1:c.x1,y1:c.y1},motion:previous?c.moved/c.pixels:1}))};
   }
   // RT-DETR provides separate object boxes when foreground segmentation merges
   // touching items. A generic COCO detection alone cannot create a cart item:
   // it must also overlap a change since the empty-counter calibration.
-  function fuseProposals(foreground,objects,max=8){
+  function fuseProposals(foreground,objects,max=8,prior=[],parts=[]){
     const accepted=objects.filter(d=>area(d.bbox)>.001 && foreground.some(m=>
       intersection(d.bbox,m.bbox)/Math.max(area(d.bbox),.0001)>.18))
       .sort((a,b)=>(b.score||0)-(a.score||0));
@@ -74,12 +90,28 @@
       if(distinct.some(other=>iou(d.bbox,other.bbox)>.55||contains(other.bbox,d.bbox)>.88))continue;
       distinct.push({bbox:d.bbox,motion:0,source:'rtdetr'});
     }
+    // Keep an already tracked package when a later hand/desk change creates
+    // one large foreground rectangle around several distinct products.
+    const recovered=prior.filter(t=>t.bbox&&t.present!==false&&area(t.bbox)<.18&&foreground.some(m=>contains(m.bbox,t.bbox)>.65)
+      &&!distinct.some(d=>iou(d.bbox,t.bbox)>.22||contains(d.bbox,t.bbox)>.78))
+      .map(t=>({bbox:t.bbox,motion:0,source:'tracked'}));
+    const smallParts=parts.filter(p=>area(p.bbox)<.18 && foreground.some(m=>contains(m.bbox,p.bbox)>.65)
+      &&![...distinct,...recovered].some(d=>iou(d.bbox,p.bbox)>.25||contains(d.bbox,p.bbox)>.75))
+      .map(p=>({...p,source:'foreground-part'}));
+    const detailed=[...distinct,...recovered,...smallParts];
     const remaining=foreground.filter(m=>{
-      const overlapping=distinct.filter(d=>intersection(m.bbox,d.bbox)>0);
-      if(overlapping.length>1)return false;
-      return !overlapping.some(d=>intersection(m.bbox,d.bbox)/area(m.bbox)>.45);
-    }).filter(m=>!distinct.some(d=>iou(m.bbox,d.bbox)>.45));
-    return [...distinct,...remaining].sort((a,b)=>area(b.bbox)-area(a.bbox)).slice(0,max);
+      const inside=detailed.filter(d=>contains(m.bbox,d.bbox)>.65);
+      // A coarse rectangle must not block two separately found/tracked items.
+      if(inside.length>1)return false;
+      if(inside.length===1&&area(m.bbox)>area(inside[0].bbox)*3)return false;
+      return !inside.some(d=>iou(m.bbox,d.bbox)>.4);
+    });
+    const proposals=[];
+    for(const d of [...distinct,...recovered,...smallParts,...remaining]){
+      if(proposals.some(p=>iou(p.bbox,d.bbox)>.55||contains(p.bbox,d.bbox)>.88))continue;
+      proposals.push(d);
+    }
+    return proposals.slice(0,max);
   }
   class Tracker {
     constructor({settleMs=180, missingMs=900, maxTracks=8}={}) {this.settleMs=settleMs;this.missingMs=missingMs;this.maxTracks=maxTracks;this.nextId=1;this.epoch=0;this.tracks=[];}
@@ -149,6 +181,6 @@
     return hits>=2&&result?.level==='ok'&&result.score>=Math.max(.82,threshold+.08)
       &&result.gap>=Math.max(.08,margin)&&result.backgroundLead>=.10;
   }
-  const api={detect,fuseProposals,Tracker,iou,area,decide,selectInventoryMatch,canAutoAdd};
+  const api={detect,fuseProposals,foregroundShare,Tracker,iou,area,decide,selectInventoryMatch,canAutoAdd};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RetailScan=api;
 })(globalThis);
