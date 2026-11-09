@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "crons": [
+    { "path": "/api/ultralytics/sync", "schedule": "0 2 * * *" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

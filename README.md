@@ -1,5 +1,38 @@
 # RetailFlow dashboard: AI camera checkout
 
+## Single-store Ultralytics photo sync pilot
+
+This complete package includes a server-only link to one private Ultralytics
+**dataset**. Upload the ZIP contents at the repository root, including `api/`.
+In Vercel Project Settings → Environment Variables set
+`ULTRALYTICS_SYNC_ENABLED=true`, `ULTRALYTICS_API_KEY` (a private Platform
+key), `ULTRALYTICS_OWNER=chamithu-ratnakara`, and `ULTRALYTICS_DATASET` to the
+**actual dataset URL slug** under `/datasets/` (not the `cimox-retail` project
+slug). Set a random `CRON_SECRET` for the daily backfill route. Enable the
+settings for **Production** when ready and redeploy. Vercel cron runs only on
+production deployments; a preview branch will not run the schedule. Never
+add the real key to Git.
+
+The current separate phone scanner writes directly to Firestore, so its new
+photos are picked up by the **daily server-side sync**. If inventory is sent
+through this site's `POST /api/inventory`, the Firebase stock is saved first
+and the upload starts during that request. The server sends the six photos as
+**unlabeled** images with barcode and angle metadata.
+If Platform is unavailable, stock stays saved; the API response reports
+`trainingSync.status=failed` when that API was used. The next daily cron
+retries; cron processes at most three photo sets per run. Existing six-view
+products are backfilled by that protected daily job. The six photos still index into the
+camera's existing local visual matcher independently of Ultralytics.
+
+This does **not** train a YOLO detector or make newly added products instantly
+recognizable by YOLO. Training a detector needs labeled counter images, a
+validation split, a training job, and a deployed model. Do not use low-score
+automatic cart matches as ground-truth labels. Dataset import jobs are
+asynchronous; `queued` means accepted for processing, not that all six images
+finished ingesting. This is a **single-store pilot**: the current API's
+password-free preview mode and global `products` collection cannot isolate
+multiple customer stores. Do not connect customer stores to this dataset.
+
 This ZIP contains the complete dashboard. Upload the extracted contents to the
 **root** of the dashboard GitHub repository on the AI camera branch, including
 `api/`, both AI workers, `index.html`, and `vercel.json`. The separate phone
