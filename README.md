@@ -1,5 +1,12 @@
 ## Six photos from the separate barcode scanner
 
+Category assignment uses the explicit `api/inventory/category.js` Vercel
+function. Upload the whole package, including the `api` directory, at the
+dashboard repository root. Once the deployment is Ready, opening
+`/api/inventory/category` in a browser should return a JSON 405 response;
+the dashboard sends PATCH to that same route when assigning a category.
+Firebase rules do not deploy Vercel API functions.
+
 Deploy the matching phone scanner package. New inbound products capture front, back, top, bottom, left and right views in Firestore. AI Detection Cam alone requests these larger photos, computes six reference embeddings, and saves them to the existing `aiCounterModels` collection via `/api/ai-models`. Ordinary dashboard inventory requests do not download the six photos. Existing manually labelled camera samples remain separate. The model is prepared on first camera open, so the first recognition may take longer than later scans.
 
 # Fast multi-item AI camera update
