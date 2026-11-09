@@ -1,3 +1,24 @@
+# Faster two-product recognition
+
+This full dashboard update preserves product identity and recognition votes
+when an RT-DETR box jitters slightly while DINOv2 processes both crops. If a
+product genuinely moves during inference, a late match becomes provisional
+and needs a second fresh match before it can automatically enter the cart.
+Once a product's main inventory photo is usable, preparation of its six-view
+reference yields to live checkout recognition. Detector boxes are reused for
+briefly longer only while the region still differs from the calibrated empty
+counter. These changes reduce avoidable rescans and model contention when two
+products are on the counter together.
+
+Upload **all extracted contents** at the dashboard repository root on the AI
+camera branch, including `api/`; the phone scanner remains separate. The 24
+camera core tests pass. Actual webcam latency and recognition accuracy depend
+on the device, light, products, and trained reference photos; a fixed
+under-seconds result is not established by these tests. Test two products and
+verify that removing one does not add it again before merging into `main`.
+
+## Previous release notes
+
 # RT-DETRv2 camera: distinct products and confirmable cart matches
 
 This release fixes a case where a large foreground region from a hand or shadow

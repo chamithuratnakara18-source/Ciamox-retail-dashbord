@@ -62,7 +62,7 @@ const pendingVision=new Map();
 function setModelState(t){ $('modelState').textContent=t; }
 function visionRequest(type, images=[]){
   if(!visionWorker){
-    visionWorker=new Worker('./ai-vision-worker.js?v=rtdetr-cart-20261109-2');
+    visionWorker=new Worker('./ai-vision-worker.js?v=rtdetr-fast-20261109-3');
     visionWorker.onmessage=({data})=>{
       if(data.type==='status'){setModelState(data.text);return;}
       const request=pendingVision.get(data.id);if(!request)return;
@@ -134,7 +134,7 @@ function resetDetector(error){
 }
 function detectorRequest(type,image){
   if(!detectorWorker){
-    detectorWorker=new Worker('./ai-detector-worker.js?v=rtdetr-cart-20261109-2');
+    detectorWorker=new Worker('./ai-detector-worker.js?v=rtdetr-fast-20261109-3');
     detectorWorker.onmessage=({data})=>{
       const item=detectorPending.get(data.id);if(!item)return;
       clearTimeout(item.timer);detectorPending.delete(data.id);
@@ -160,7 +160,8 @@ function loadDetector(){
   return detectorLoading;
 }
 function requestObjectBoxes(video,now){
-  if(!detectorReady||detectorBusy||counter.busy||now-detectorLastAt<850)return;
+  const interval=tracker.tracks.filter(t=>t.visible).length>=2?1200:850;
+  if(!detectorReady||detectorBusy||counter.busy||now-detectorLastAt<interval)return;
   detectorLastAt=now;detectorBusy=true;
   detectorCanvas.width=512;
   detectorCanvas.height=Math.round(512*video.videoHeight/video.videoWidth);
@@ -276,7 +277,7 @@ function tick(){
   if(!counter.baseline){setState('Clear the counter → Set empty counter');return;}
   const g=grab(v),a=analyse(g),now=performance.now();counter.prev=g;
   requestObjectBoxes(v,now);
-  const objects=detectorResult&&now-detectorResult.at<1700?detectorResult.boxes:null;
+  const objects=detectorResult&&now-detectorResult.at<3500?detectorResult.boxes:null;
   const coarseMerge=a.boxes.some(d=>{
     const inside=tracker.tracks.filter(t=>RetailScan.iou(d.bbox,t.bbox)>.04||
       (d.bbox.x0<=t.bbox.x0&&d.bbox.y0<=t.bbox.y0&&d.bbox.x1>=t.bbox.x1&&d.bbox.y1>=t.bbox.y1));
@@ -327,7 +328,10 @@ async function recogniseTracks(tracks){
       }
     }
     for(let i=0;i<jobs.length;i++){
-      const t=tracker.resolve(jobs[i].token,performance.now());if(!t)continue;
+      const verified=tracker.resolve(jobs[i].token,performance.now());
+      const t=verified||tracker.resolveCandidate(jobs[i].token,performance.now());
+      if(!t)continue;
+      if(!verified){t.hits=0;t.matchPid=null;t.result=null;}
       const picked=picks[i],result=picked?{...picked}:{pid:null,score:0,top:[],level:'none'};
       const stable=tracker.accept(t,result,performance.now());
       t.focusBBox=result.level==='ok'?result.bbox:null;
@@ -638,7 +642,14 @@ async function indexTrainingViews(product){
   // WebGPU can process all six together; keep CPU batches small on low-memory devices.
   const batchSize=modelBackend==='GPU'?6:2;
   for(let start=0;start<canvases.length;start+=batchSize){
-    while(counter.busy||checkoutBusy)await new Promise(resolve=>setTimeout(resolve,150));
+    // A product's main photo is already usable. Do not queue six background
+    // embeddings ahead of a live batch of products awaiting checkout.
+    while(counter.busy||checkoutBusy||(counter.stream&&(product.photoSample||product.samples.length)
+      &&tracker.tracks.some(t=>t.visible&&!t.counted))){
+      if(indexRequested||!products.includes(product))return;
+      await new Promise(resolve=>setTimeout(resolve,150));
+    }
+    if(indexRequested||!products.includes(product))return;
     $('firebaseState').textContent=`Preparing ${product.name}: views ${start+1}–${Math.min(start+batchSize,6)} of 6…`;
     const vectors=await embedBatch(canvases.slice(start,start+batchSize));
     embeddings.push(...vectors.map(vector=>vector.buffer.slice(0)));

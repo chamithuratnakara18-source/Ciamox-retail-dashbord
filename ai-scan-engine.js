@@ -135,7 +135,12 @@
       for(const {i,t} of pairs){
         if(used.has(i)||assigned.has(t.id))continue;
         const d=detections[i],overlap=iou(t.bbox,d.bbox),wasMissing=now-t.lastSeen>220;
-        if(d.motion>.28||overlap<.68||wasMissing){
+        const oldArea=area(t.bbox),newArea=area(d.bbox);
+        const cx=(t.bbox.x0+t.bbox.x1-d.bbox.x0-d.bbox.x1)/2;
+        const cy=(t.bbox.y0+t.bbox.y1-d.bbox.y0-d.bbox.y1)/2;
+        const boxJitter=overlap>=.5&&Math.hypot(cx,cy)<.05&&
+          newArea/Math.max(oldArea,.0001)>.65&&newArea/Math.max(oldArea,.0001)<1.5;
+        if(d.motion>.28||(!boxJitter&&overlap<.68)||wasMissing){
           t.stableSince=now;
           if(!t.counted){t.revision++;t.result=null;t.hits=0;t.matchPid=null;}
         }
@@ -153,7 +158,12 @@
     }
     ready(now){return this.tracks.filter(t=>t.visible&&!t.blocked&&!t.counted&&!t.busy&&now-t.stableSince>=this.settleMs&&now>=t.nextAt).sort((a,b)=>a.nextAt-b.nextAt||a.id-b.id);}
     token(t){return {id:t.id,epoch:t.epoch,revision:t.revision,bbox:{...t.bbox}};}
-    resolve(token,now){return this.tracks.find(t=>t.id===token.id&&t.epoch===token.epoch&&t.revision===token.revision&&t.visible&&!t.blocked&&!t.counted&&now-t.stableSince>=this.settleMs&&iou(t.bbox,token.bbox)>.68);}
+    resolve(token,now){return this.tracks.find(t=>t.id===token.id&&t.epoch===token.epoch&&t.revision===token.revision&&t.visible&&!t.blocked&&!t.counted&&now-t.stableSince>=this.settleMs&&iou(t.bbox,token.bbox)>.52);}
+    // An inference can finish just after a small position correction. Its
+    // result is provisional: the caller resets votes and needs another match.
+    resolveCandidate(token,now){return this.tracks.find(t=>t.id===token.id&&t.epoch===token.epoch&&
+      t.visible&&!t.blocked&&!t.counted&&now-t.stableSince>=this.settleMs&&
+      iou(t.bbox,token.bbox)>.52);}
     accept(t,result,now){
       t.hits=result.level==='ok'&&t.matchPid===result.pid?t.hits+1:result.level==='ok'?1:0;
       t.matchPid=result.pid;t.result=result;t.nextAt=now+(result.level==='ok'&&t.hits<2?120:1200);
