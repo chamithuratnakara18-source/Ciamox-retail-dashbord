@@ -43,7 +43,7 @@ let bank = [];                // flat list [{pid, vec:Float32Array}] for fast ma
 function rebuildBank() {
   bank = [];
   for(const p of products)if(p.model===MODEL_TAG){
-    for(const buf of p.samples)bank.push({pid:p.id,vec:new Float32Array(buf)});
+    for(const buf of [...p.samples,...(p.trainingSamples||[])])bank.push({pid:p.id,vec:new Float32Array(buf)});
     if(p.photoSample)bank.push({pid:p.id,vec:new Float32Array(p.photoSample)});
   }
   $('readyStat').textContent=`${new Set(bank.map(s=>s.pid)).size} / ${products.length} products ready`;
@@ -406,6 +406,31 @@ async function loadAiModels(barcodes) {
   }
   return found;
 }
+function photoSetKey(photos){
+  let h=2166136261;
+  for(const photo of photos)for(let i=0;i<photo.length;i++){h=Math.imul(h^photo.charCodeAt(i),16777619);}
+  return `views-v1-${(h>>>0).toString(16)}`;
+}
+async function indexTrainingViews(product){
+  const photos=product.trainingPhotos;
+  if(photos?.length!==6 || photos.some(p=>!p) || product.sourceKey===photoSetKey(photos))return;
+  const embeddings=[];
+  for(const src of photos){
+    const image=new Image();
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Training image unreadable'));image.src=src;});
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=224;
+    const context=canvas.getContext('2d');context.fillStyle='#f3f4f6';context.fillRect(0,0,224,224);
+    const scale=224/Math.max(image.naturalWidth,image.naturalHeight);
+    context.drawImage(image,(224-image.naturalWidth*scale)/2,(224-image.naturalHeight*scale)/2,image.naturalWidth*scale,image.naturalHeight*scale);
+    embeddings.push((await embed(canvas)).buffer.slice(0));
+  }
+  if(!products.includes(product))return;
+  const key=photoSetKey(photos);
+  await aiModelRequest('/api/ai-models',{method:'PUT',body:{barcode:product.barcode,model:MODEL_TAG,kind:'inventoryViews',photoSamples:embeddings.map(b64),sourceKey:key}});
+  if(!products.includes(product))return;
+  product.trainingSamples=embeddings;product.sourceKey=key;
+  rebuildBank();renderList();
+}
 let syncPromise=null, indexingPromise=null;
 async function indexInventoryPhotos(){
   if(indexingPromise)return indexingPromise;
@@ -413,6 +438,9 @@ async function indexInventoryPhotos(){
     if(!modelReady||!inventoryReady)return;
     let failed=0;
     for(const product of [...products]){
+      if(product.trainingPhotos?.length===6 && product.sourceKey!==photoSetKey(product.trainingPhotos)){
+        try{await indexTrainingViews(product);}catch(error){failed++;console.warn('Six-view training failed:',product.barcode,error.message);$('firebaseState').textContent=`Six-view training failed: ${error.message}`;}
+      }
       if(!product.photoDataUrl||product.photoSample||product.samples.length||!products.includes(product))continue;
       // Live checkout gets priority over background catalogue preparation.
       while(counter.busy||checkoutBusy)await new Promise(r=>setTimeout(r,150));
@@ -447,7 +475,7 @@ function syncFirebaseProducts(){
   syncPromise=(async()=>{
     $('firebaseState').textContent='Loading Firebase inventory…';$('syncProducts').disabled=true;
     try{
-      const response=await aiModelRequest('/api/inventory');
+      const response=await aiModelRequest('/api/inventory?training=1');
       const saved=await DB.all('products').catch(()=>[]),existing=new Map(saved.map(p=>[String(p.id),p]));
       const rows=(Array.isArray(response.products)?response.products:[]).filter(row=>row&&(row.barcode||row.id));
       let cloudModels=new Map(),modelsUnavailable='';
@@ -456,9 +484,10 @@ function syncFirebaseProducts(){
       const next=rows.map(row=>{
         const barcode=String(row.barcode||row.id),old=existing.get(barcode),remote=cloudModels.get(barcode);
         const samples=remote?.model===MODEL_TAG&&Array.isArray(remote.samples)?remote.samples.map(unb64).filter(buf=>buf.byteLength===1536):[];
+        const trainingSamples=remote?.model===MODEL_TAG&&Array.isArray(remote.photoSamples)?remote.photoSamples.map(unb64).filter(buf=>buf.byteLength===1536):[];
         return {id:barcode,barcode,name:String(row.name||barcode),sku:barcode,price:Number(row.originalPrice??row.price)||0,
           quantity:Math.max(0,Number(row.quantity)||0),category:String(row.category||''),photoDataUrl:row.photoDataUrl||'',
-          thumb:row.photoDataUrl||'',model:MODEL_TAG,samples,
+          thumb:row.photoDataUrl||'',model:MODEL_TAG,samples,trainingSamples,sourceKey:remote?.sourceKey||'',trainingPhotos:Array.isArray(row.trainingPhotos)?row.trainingPhotos:[],
           photoSample:old?.model===MODEL_TAG&&old.photoDataUrl===row.photoDataUrl?old.photoSample:null};
       });
       products=next;inventoryReady=true;inventoryRevision++;

@@ -1,3 +1,7 @@
+## Six photos from the separate barcode scanner
+
+Deploy the matching phone scanner package. New inbound products capture front, back, top, bottom, left and right views in Firestore. AI Detection Cam alone requests these larger photos, computes six reference embeddings, and saves them to the existing `aiCounterModels` collection via `/api/ai-models`. Ordinary dashboard inventory requests do not download the six photos. Existing manually labelled camera samples remain separate. The model is prepared on first camera open, so the first recognition may take longer than later scans.
+
 # Fast multi-item AI camera update
 
 This ZIP contains the full dashboard with the camera fix retained. Extract and upload its contents at the repository root, replacing matching files and preserving the `api` folder. Do not upload the ZIP itself. Wait for Vercel to show Ready, then hard-refresh the dashboard. This scanner update does not require new Firebase rules or environment variables when the supplied base is already connected. The package includes the new `api/ai-models.js` route; ensure that file is uploaded along with the rest of the contents.

@@ -333,7 +333,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?preview-no-a
       await refreshSupplierDashboard();
     }
     if (view === 'ai-counter' && aiCounterFrame?.getAttribute('src') === 'about:blank') {
-      aiCounterFrame.src = './ai-counter.html?v=multi-scan-20261106-2';
+      aiCounterFrame.src = './ai-counter.html?v=six-views-20261109-1';
     } else if (view === 'ai-counter') {
       aiCounterFrame?.contentWindow?.postMessage({ type: 'retailflow:refresh-inventory' }, location.origin);
     }
