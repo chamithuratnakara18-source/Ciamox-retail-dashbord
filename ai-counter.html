@@ -15,7 +15,7 @@ header .sp{flex:1}
 nav{display:flex;gap:6px}
 nav button{background:transparent;border:0;color:#b9c7d2;padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:600}
 nav button.on{background:#1f3140;color:#fff}
-#modelState{font-size:12px;color:#9fb3c2}
+#modelState,#detectorState{font-size:12px;color:#9fb3c2}
 main{max-width:1200px;margin:0 auto;padding:16px}
 .grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px}
 .catalogue-layout{display:flex;flex-direction:column;gap:16px}.catalogue-inventory{order:-1}.manual-tools summary{cursor:pointer;font-weight:700;padding:14px;background:#fff;border:1px solid var(--line);border-radius:var(--r)}.manual-tools details[open] summary{margin-bottom:10px}
@@ -83,6 +83,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
     <button id="tabCatalogue">Firebase Products</button>
   </nav>
   <span class="sp"></span>
+  <span id="detectorState">Object detector: starts with camera</span>
   <span id="modelState">Model: not loaded</span>
 </header>
 
@@ -106,7 +107,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
         </div>
         <p id="cameraHelp" class="mute" role="status" style="margin:8px 0 0">Loading camera controls…</p>
         <p class="mute" style="margin:4px 0 0">If this embedded view is blocked, <a href="./ai-counter.html" target="_blank" rel="noopener">open the camera directly</a>.</p>
-        <p class="scan-note">Set the empty counter first. The camera compares regions with your inventory photos and the empty scene; only confirmed product matches get a box. If a product is missed, show it clearly, adjust the similarity setting, or add better scanner photos. Check every cart item before payment.</p>
+        <p class="scan-note">Set the empty counter first. RT-DETRv2 finds object regions; changes from the empty view catch packages it misses. Only regions matching your Firebase product photos can enter the cart. New scanner photos are indexed automatically after Firebase sync. Keep items visible until matched and check the cart before payment.</p>
         <div class="row">
           <button class="btn acc" id="addVisibleBtn" disabled>Add matched items</button>
           <label class="mute"><input type="checkbox" id="autoAdd" checked> Auto-add verified products</label>
@@ -202,7 +203,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
 <div class="toast" id="toast"></div>
 <canvas id="work" class="hide"></canvas>
 
-<script src="./ai-scan-engine.js?v=multi-auto-20261109-1"></script>
-<script src="./ai-counter.js?v=multi-auto-20261109-1"></script>
+<script src="./ai-scan-engine.js?v=rtdetr-20261109-1"></script>
+<script src="./ai-counter.js?v=rtdetr-20261109-1"></script>
 </body>
 </html>

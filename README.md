@@ -1,3 +1,36 @@
+# RT-DETRv2 object proposals and automatic Firebase product indexing
+
+Upload **all contents of this package** to the dashboard repository root, including
+`api/`, `ai-detector-worker.js`, `ai-vision-worker.js`, `ai-scan-engine.js`,
+`ai-counter.js`, `ai-counter.html`, `hub.js`, and `index.html`. Replace matching
+files together. This is the full dashboard package; the phone scanner remains
+separate. After Vercel reports Ready, hard-refresh the dashboard.
+
+The AI camera downloads a quantized RT-DETRv2 R18 ONNX object detector in a
+background worker. Its boxes help split objects that foreground segmentation
+merged. Each box must also overlap a change from the calibrated empty counter,
+then DINOv2 must match a Firebase inventory photo before it can be added to the
+cart. Packages the generic detector does not find still use foreground proposals.
+The detector is trained on general COCO objects, **not your specific medicine
+cartons**; the six scanner photos provide product identity references rather
+than fine-tuning RT-DETR. Do not treat similarity scores as payment certainty.
+
+The camera subscribes to changes in Firestore `products`. New or updated scanner
+photos trigger a Firebase refresh and automatic indexing, without a manual camera
+sample. The original product stock, sales, category, supplier and finance logic
+is retained. The existing `products` read and update permissions must allow
+the AI reference field to be saved. No extra Firebase collection is required.
+
+Test with two separated products, new inventory uploaded while the camera is
+open, and an unrelated moving object. Set empty counter after moving the camera.
+The first model download and CPU inference can be slow on some devices; no
+real camera speed or recognition accuracy has been measured in this workspace.
+If the detector cannot load, the status says so and the previous foreground
+proposal path remains usable. The 18 deterministic camera tests and syntax
+checks passed; live browser and Firebase tests remain to be run on your setup.
+
+## Previous release notes
+
 # Two-product scanner, Firebase sample saves, and automatic cart
 
 This is the **complete dashboard**, with the root-level `api` folder. Extract

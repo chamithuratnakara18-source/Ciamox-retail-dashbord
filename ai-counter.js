@@ -1,6 +1,6 @@
 /* =====================================================================
    AI Counter — camera-based product recognition for a checkout counter
-   Pipeline: webcam → empty-counter diff finds the item → crop → image
+   Pipeline: webcam → RT-DETRv2 proposals plus empty-counter foreground → crop → image
    embedding (DINOv2-small, runs in the browser) → nearest enrolled product
    → cashier confirms → cart → payment.
    ===================================================================== */
@@ -62,7 +62,7 @@ const pendingVision=new Map();
 function setModelState(t){ $('modelState').textContent=t; }
 function visionRequest(type, images=[]){
   if(!visionWorker){
-    visionWorker=new Worker('./ai-vision-worker.js?v=multi-scan-1');
+    visionWorker=new Worker('./ai-vision-worker.js?v=rtdetr-20261109-1');
     visionWorker.onmessage=({data})=>{
       if(data.type==='status'){setModelState(data.text);return;}
       const request=pendingVision.get(data.id);if(!request)return;
@@ -118,6 +118,64 @@ const SW=192, SH=108;
 const small=document.createElement('canvas');small.width=SW;small.height=SH;
 const sctx=small.getContext('2d',{willReadFrequently:true});
 function grab(video){sctx.drawImage(video,0,0,SW,SH);return sctx.getImageData(0,0,SW,SH).data;}
+
+/* RT-DETRv2 is a generic object localizer, not a retail SKU classifier. It
+   runs independently so loading or inferencing never pauses the camera UI. */
+let detectorWorker=null,detectorReady=false,detectorLoading=null,detectorBusy=false;
+let detectorSeq=0,detectorLastAt=0,detectorResult=null,detectorFailed=false;
+const detectorPending=new Map();
+const detectorCanvas=document.createElement('canvas');
+function detectorStatus(text){$('detectorState').textContent=text;}
+function resetDetector(error){
+  detectorWorker?.terminate();detectorWorker=null;detectorReady=false;detectorLoading=null;detectorBusy=false;
+  detectorResult=null;detectorFailed=true;
+  for(const item of detectorPending.values()){clearTimeout(item.timer);item.reject(error);}
+  detectorPending.clear();detectorStatus('Object detector unavailable · foreground fallback');
+}
+function detectorRequest(type,image){
+  if(!detectorWorker){
+    detectorWorker=new Worker('./ai-detector-worker.js?v=rtdetr-20261109-1');
+    detectorWorker.onmessage=({data})=>{
+      const item=detectorPending.get(data.id);if(!item)return;
+      clearTimeout(item.timer);detectorPending.delete(data.id);
+      data.type==='error'?item.reject(new Error(data.error)):item.resolve(data);
+    };
+    detectorWorker.onerror=()=>resetDetector(new Error('Object detector worker failed.'));
+  }
+  const id=++detectorSeq;
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>resetDetector(new Error('Object detector timed out.')),type==='load'?180000:45000);
+    detectorPending.set(id,{resolve,reject,timer});
+    try{detectorWorker.postMessage({id,type,...image},image?[image.buffer]:[]);}
+    catch(error){clearTimeout(timer);detectorPending.delete(id);reject(error);}
+  });
+}
+function loadDetector(){
+  if(detectorFailed||MOCK)return Promise.resolve(false);
+  if(detectorLoading)return detectorLoading;
+  detectorStatus('Loading RT-DETRv2 object detector…');
+  detectorLoading=detectorRequest('load').then(()=>{
+    detectorReady=true;detectorStatus('RT-DETRv2 ready · CPU');return true;
+  }).catch(error=>{resetDetector(error);console.warn('RT-DETR unavailable; foreground fallback remains active:',error);return false;});
+  return detectorLoading;
+}
+function requestObjectBoxes(video,now){
+  if(!detectorReady||detectorBusy||counter.busy||now-detectorLastAt<850)return;
+  detectorLastAt=now;detectorBusy=true;
+  detectorCanvas.width=512;
+  detectorCanvas.height=Math.round(512*video.videoHeight/video.videoWidth);
+  const context=detectorCanvas.getContext('2d',{willReadFrequently:true});
+  context.drawImage(video,0,0,detectorCanvas.width,detectorCanvas.height);
+  const image={buffer:context.getImageData(0,0,detectorCanvas.width,detectorCanvas.height).data.buffer,
+    width:detectorCanvas.width,height:detectorCanvas.height};
+  const epoch=counter.referenceEpoch;
+  void detectorRequest('detect',image).then(result=>{
+    if(counter.stream&&epoch===counter.referenceEpoch){
+      detectorResult={boxes:result.boxes,at:performance.now()};
+      detectorStatus(`RT-DETRv2 ready · ${result.ms} ms / frame`);
+    }
+  }).catch(error=>{resetDetector(error);console.warn('RT-DETR inference failed:',error);}).finally(()=>{detectorBusy=false;});
+}
 
 async function openCamera(video, deviceId) {
   const base = { width: { ideal: 1280 }, height: { ideal: 720 } };
@@ -217,6 +275,9 @@ function tick(){
   const v=$('vidC');if(!counter.stream||!v.videoWidth||document.hidden||counter.calibrating)return;
   if(!counter.baseline){setState('Clear the counter → Set empty counter');return;}
   const g=grab(v),a=analyse(g),now=performance.now();counter.prev=g;
+  requestObjectBoxes(v,now);
+  if(detectorResult&&now-detectorResult.at<1700)
+    a.boxes=RetailScan.fuseProposals(a.boxes,detectorResult.boxes);
   tracker.update(a.boxes,now);counter.lastBBox=a.boxes.length===1?a.boxes[0].bbox:null;
   drawBoxes();renderCandidates();$('rescanBtn').disabled=!tracker.tracks.some(t=>t.visible&&!t.counted);
   if(a.boxes.length>8){setState('Up to 8 separated items · scan the rest next');return;}
@@ -300,7 +361,7 @@ function renderCandidates(force=false){
 async function calibrate(){
   if(!counter.stream||counter.calibrating)return;
   if(tracker.tracks.some(t=>t.visible)&&!confirm('Remove every item from the counter first. Is the camera view now empty?'))return;
-  counter.calibrating=true;counter.backgroundBank=[];const epoch=++counter.referenceEpoch;
+  counter.calibrating=true;counter.backgroundBank=[];detectorResult=null;const epoch=++counter.referenceEpoch;
   tracker.reset();drawBoxes();renderCandidates(true);$('calBtn').disabled=true;
   setState('Capturing empty counter…');
   try{
@@ -404,11 +465,13 @@ async function startCounterCam() {
     $('vidE').srcObject = counter.stream; $('vidE').play().catch(() => {});
     await listCameras();
     counter.baseline=null;counter.prev=null;counter.backgroundBank=[];counter.referenceEpoch++;tracker.reset();
+    detectorResult=null;
     for(const video of [$('vidC'),$('vidE')])video.parentElement.style.aspectRatio=`${$('vidC').videoWidth}/${$('vidC').videoHeight}`;
     $('camBtn').textContent = $('camBtnE').textContent = 'Stop camera'; $('calBtn').disabled = false; $('snapBtn').disabled = false;
     setState('Clear counter → Set empty counter');
     $('cameraHelp').textContent = 'Camera is live. Clear the counter, then press Set empty counter. Video stays on this device.';
     clearInterval(counter.timer); counter.timer = setInterval(tick, 70);
+    void loadDetector();
     loadModel().then(()=>indexInventoryPhotos()).catch(() => {});
   } catch (e) { const message = cameraErrorMessage(e); $('cameraHelp').textContent = message; setState('Camera could not start'); toast(message); }
   finally { $('camBtn').disabled = false; }
@@ -416,12 +479,16 @@ async function startCounterCam() {
 function stopCounterCam() {
   clearInterval(counter.timer); counter.stream?.getTracks().forEach(t => t.stop()); counter.stream = null; $('vidC').srcObject = null; $('vidE').srcObject = null;
   $('camBtn').textContent = $('camBtnE').textContent = 'Start camera'; $('calBtn').disabled = true; $('snapBtn').disabled = true; setState('Camera off'); $('cameraHelp').textContent = 'Press Start camera to trigger your browser’s camera permission prompt.'; counter.baseline=null;counter.backgroundBank=[];counter.referenceEpoch++;tracker.reset();drawBoxes();renderCandidates(true);
+  detectorResult=null;
 }
 $('camBtn').onclick = () => counter.stream ? stopCounterCam() : startCounterCam();
 $('camSel').onchange = () => { if (counter.stream) { stopCounterCam(); startCounterCam(); } };
 $('cameraHelp').textContent = 'Camera controls ready. Press Start camera to request access.';
 $('calBtn').onclick=calibrate;
-$('retryModel').onclick=()=>loadModel().then(()=>indexInventoryPhotos()).catch(error=>toast(error.message));
+$('retryModel').onclick=()=>{
+  detectorFailed=false;void loadDetector();
+  loadModel().then(()=>indexInventoryPhotos()).catch(error=>toast(error.message));
+};
 $('rescanBtn').onclick=()=>{for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.nextAt=0;}renderCandidates(true);};
 $('thr').oninput = $('mar').oninput = () => { $('thrV').textContent = $('thr').value + '%'; $('marV').textContent = $('mar').value + '%'; try { localStorage.setItem('aic-thr', $('thr').value); localStorage.setItem('aic-mar', $('mar').value); } catch { /* ignore */ } };
 
@@ -559,54 +626,89 @@ async function indexTrainingViews(product){
   $('firebaseState').textContent=`${product.name} ready for recognition · six product views indexed`;
   if(!MOCK)saveTrainingToCloud(product,key,embeddings);
 }
-let syncPromise=null, indexingPromise=null;
+let syncPromise=null, indexingPromise=null, indexRequested=false, inventoryListener=null;
+let lastInventorySignature='', queuedSync=false, listenerTimer=null;
+function inventorySignature(rows){
+  return JSON.stringify(rows.map(row=>({
+    id:row.id,barcode:row.barcode,name:row.name,quantity:row.quantity,
+    price:row.originalPrice??row.price,category:row.category,
+    photo:row.photoDataUrl?photoSetKey([row.photoDataUrl]):'',
+    photos:Array.isArray(row.trainingPhotos)?photoSetKey(row.trainingPhotos):'',
+  })).sort((a,b)=>String(a.id).localeCompare(String(b.id))));
+}
+async function watchInventory(){
+  if(inventoryListener)return;
+  const [{firebaseApp},{collection,getFirestore,onSnapshot}]=await Promise.all([
+    import('./firebase-app.js'),import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js'),
+  ]);
+  inventoryListener=onSnapshot(collection(getFirestore(firebaseApp),'products'),snapshot=>{
+    const signature=inventorySignature(snapshot.docs.map(doc=>({...doc.data(),id:doc.id})));
+    if(signature===lastInventorySignature)return;
+    clearTimeout(listenerTimer);
+    listenerTimer=setTimeout(()=>{
+      if(syncPromise){queuedSync=true;return;}
+      syncFirebaseProducts().catch(error=>console.warn('Inventory listener refresh failed:',error));
+    },250);
+  },error=>{
+    $('firebaseState').textContent=`Inventory updates unavailable: ${error.message}. Use Refresh from Firebase.`;
+  });
+}
+async function indexPrimaryPhoto(product){
+  const photo=product.photoDataUrl||product.trainingPhotos?.[0];
+  if(!photo||product.photoSample||product.samples.length||product.trainingSamples?.length||!products.includes(product))return;
+  while(counter.busy||checkoutBusy)await new Promise(resolve=>setTimeout(resolve,150));
+  const image=new Image();image.crossOrigin='anonymous';
+  await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('Product photo timed out')),10000);
+    image.onload=()=>{clearTimeout(timer);resolve();};
+    image.onerror=()=>{clearTimeout(timer);reject(new Error('Product photo unavailable'));};
+    image.src=photo;
+  });
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=224;
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#f3f4f6';ctx.fillRect(0,0,224,224);
+  const scale=224/Math.max(image.naturalWidth,image.naturalHeight),w=image.naturalWidth*scale,h=image.naturalHeight*scale;
+  ctx.drawImage(image,(224-w)/2,(224-h)/2,w,h);
+  const q=await embed(canvas);if(!products.includes(product))return;
+  product.photoSample=q.buffer.slice(0);
+  await DB.put('products',product).catch(()=>{});
+  rebuildBank();renderList();
+  $('firebaseState').textContent=`${product.name} ready from inventory photo · preparing six views in background`;
+  if(!product.samples.length){
+    try{await persistAiSamples(product,[q.buffer.slice(0)]);}
+    catch(error){$('firebaseState').textContent=`Photo ready here; Firebase reference save failed: ${error.message}`;console.warn('Photo save failed:',error);}
+  }
+}
 async function indexInventoryPhotos(){
-  if(indexingPromise)return indexingPromise;
+  if(indexingPromise){indexRequested=true;return indexingPromise;}
   indexingPromise=(async()=>{
     if(!modelReady||!inventoryReady)return;
     let failed=0;
-    for(const product of [...products]){
+    for(const product of [...products].sort((a,b)=>Number(!!a.trainingSamples?.length)-Number(!!b.trainingSamples?.length))){
+      if(indexRequested||!products.includes(product))break;
+      try{await indexPrimaryPhoto(product);}
+      catch(error){failed++;console.warn('Primary inventory photo could not be indexed:',product.barcode,error);}
+      if(indexRequested||!products.includes(product))break;
       if(product.trainingPhotos?.length===6 && product.trainingPhotos.every(Boolean)){
         try{await indexTrainingViews(product);}catch(error){failed++;console.warn('Six-view training failed:',product.barcode,error.message);$('firebaseState').textContent=`Six-view training failed: ${error.message}`;}
       }
-      if(!product.photoDataUrl||product.photoSample||product.samples.length||product.trainingSamples?.length||!products.includes(product))continue;
-      // Live checkout gets priority over background catalogue preparation.
-      while(counter.busy||checkoutBusy)await new Promise(r=>setTimeout(r,150));
-      try{
-        const image=new Image();image.crossOrigin='anonymous';
-        await new Promise((resolve,reject)=>{
-          const timer=setTimeout(()=>reject(new Error('Photo timed out')),10000);
-          image.onload=()=>{clearTimeout(timer);resolve();};image.onerror=()=>{clearTimeout(timer);reject(new Error('Photo unavailable'));};image.src=product.photoDataUrl;
-        });
-        const canvas=document.createElement('canvas');canvas.width=canvas.height=224;
-        const ctx=canvas.getContext('2d');ctx.fillStyle='#f3f4f6';ctx.fillRect(0,0,224,224);
-        const scale=224/Math.max(image.naturalWidth,image.naturalHeight),w=image.naturalWidth*scale,h=image.naturalHeight*scale;
-        ctx.drawImage(image,(224-w)/2,(224-h)/2,w,h);
-        const q=await embed(canvas);if(!products.includes(product))continue;
-        product.photoSample=q.buffer.slice(0);await DB.put('products',product).catch(()=>{});
-        rebuildBank();renderList();
-        // An inventory photo is a labelled reference. Store its descriptor so other devices can use it.
-        // Never guess the label of an unconfirmed camera crop or replace existing manual samples.
-        if(!product.samples.length){
-          try{await persistAiSamples(product,[q.buffer.slice(0)]);}
-          catch(saveError){$('firebaseState').textContent=`Photo ready on this device; Firebase training save failed: ${saveError.message}`;console.warn('Photo training save failed:',saveError);}
-        }
-      }catch(error){failed++;console.warn('Inventory photo could not be indexed:',product.barcode,error.message);}
       await new Promise(r=>setTimeout(r,0));
     }
     if(failed)$('firebaseState').textContent=`Inventory connected · ${failed} photos need camera training. Open Firebase Products to train them.`;
-  })().finally(()=>{indexingPromise=null;});
+  })().finally(()=>{
+    const repeat=indexRequested;indexRequested=false;indexingPromise=null;
+    if(repeat)void indexInventoryPhotos();
+  });
   return indexingPromise;
 }
 function syncFirebaseProducts(){
-  if(syncPromise)return syncPromise;
-  if(indexingPromise)return indexingPromise.then(()=>syncFirebaseProducts());
+  if(syncPromise){queuedSync=true;return syncPromise;}
   syncPromise=(async()=>{
     $('firebaseState').textContent='Loading Firebase inventory…';$('syncProducts').disabled=true;
     try{
       // Start the model download while Firestore and the local cache are loading.
       const warmup=loadModel().catch(()=>null);
       const [inventory,saved]=await Promise.all([readTrainingInventory(),DB.all('products').catch(()=>[])]);
+      const signature=inventorySignature(inventory);
       const existing=new Map(saved.map(p=>[String(p.id),p]));
       const rows=inventory.filter(row=>row&&(row.barcode||row.id));
       let cloudModels=new Map(),modelsUnavailable='';
@@ -632,8 +734,12 @@ function syncFirebaseProducts(){
           cloudSourceKey:cloudViews.length===6?key:'',trainingPhotos:views,firebaseDocId:String(row.id),
           photoSample:old?.model===MODEL_TAG&&old.photoDataUrl===row.photoDataUrl?old.photoSample:null};
       });
-      products=next;inventoryReady=true;inventoryRevision++;
-      for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.nextAt=0;}
+      products=next;inventoryReady=true;
+      if(signature!==lastInventorySignature){
+        inventoryRevision++;
+        for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.nextAt=0;}
+      }
+      lastInventorySignature=signature;
       for(const barcode of [...cart.keys()]){
         const p=byId(barcode);if(!p||!p.quantity)cart.delete(barcode);else if(cart.get(barcode)>p.quantity)cart.set(barcode,p.quantity);
       }
@@ -642,9 +748,13 @@ function syncFirebaseProducts(){
       $('firebaseState').textContent=`Firebase connected · ${next.length} inventory products${modelsUnavailable}`;
       // Current photos automatically become recognition references; embeddings are cached locally.
       void warmup.then(ready=>ready&&indexInventoryPhotos()).catch(()=>{});
+      void watchInventory().catch(error=>console.warn('Real-time inventory unavailable:',error));
     }catch(error){inventoryReady=false;$('firebaseState').textContent=`Inventory unavailable: ${error.message}`;renderCart();renderCandidates(true);throw error;}
     finally{$('syncProducts').disabled=false;}
-  })().finally(()=>{syncPromise=null;});
+  })().finally(()=>{
+    syncPromise=null;
+    if(queuedSync){queuedSync=false;void syncFirebaseProducts().catch(()=>{});}
+  });
   return syncPromise;
 }
 window.addEventListener('message', event => {
@@ -791,6 +901,9 @@ $('tabCounter').onclick = () => switchTab('counter'); $('tabCatalogue').onclick 
 })();
 
 // Refresh current inventory periodically; never resurrect product rows from a local backup.
-setInterval(()=>{if(!document.hidden&&!checkoutBusy&&!$('payDlg').open)syncFirebaseProducts().catch(()=>{});},30000);
-window.addEventListener('focus',()=>{if(!checkoutBusy&&!$('payDlg').open)syncFirebaseProducts().catch(()=>{});});
-window.addEventListener('pagehide',()=>{stopCounterCam();visionWorker?.terminate();});
+setInterval(()=>{if(!document.hidden&&!checkoutBusy&&!indexingPromise&&!$('payDlg').open)syncFirebaseProducts().catch(()=>{});},30000);
+window.addEventListener('focus',()=>{if(!checkoutBusy&&!indexingPromise&&!$('payDlg').open)syncFirebaseProducts().catch(()=>{});});
+window.addEventListener('pagehide',()=>{
+  stopCounterCam();visionWorker?.terminate();detectorWorker?.terminate();
+  inventoryListener?.();clearTimeout(listenerTimer);
+});

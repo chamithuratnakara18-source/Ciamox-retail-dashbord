@@ -62,6 +62,25 @@
       :candidates;
     return {fraction:changed/size, boxes:visible.map(c=>({bbox:{x0:c.x0,y0:c.y0,x1:c.x1,y1:c.y1},motion:previous?c.moved/c.pixels:1}))};
   }
+  // RT-DETR provides separate object boxes when foreground segmentation merges
+  // touching items. A generic COCO detection alone cannot create a cart item:
+  // it must also overlap a change since the empty-counter calibration.
+  function fuseProposals(foreground,objects,max=8){
+    const accepted=objects.filter(d=>area(d.bbox)>.001 && foreground.some(m=>
+      intersection(d.bbox,m.bbox)/Math.max(area(d.bbox),.0001)>.18))
+      .sort((a,b)=>(b.score||0)-(a.score||0));
+    const distinct=[];
+    for(const d of accepted){
+      if(distinct.some(other=>iou(d.bbox,other.bbox)>.55||contains(other.bbox,d.bbox)>.88))continue;
+      distinct.push({bbox:d.bbox,motion:0,source:'rtdetr'});
+    }
+    const remaining=foreground.filter(m=>{
+      const overlapping=distinct.filter(d=>intersection(m.bbox,d.bbox)>0);
+      if(overlapping.length>1)return false;
+      return !overlapping.some(d=>intersection(m.bbox,d.bbox)/area(m.bbox)>.45);
+    }).filter(m=>!distinct.some(d=>iou(m.bbox,d.bbox)>.45));
+    return [...distinct,...remaining].sort((a,b)=>area(b.bbox)-area(a.bbox)).slice(0,max);
+  }
   class Tracker {
     constructor({settleMs=180, missingMs=900, maxTracks=8}={}) {this.settleMs=settleMs;this.missingMs=missingMs;this.maxTracks=maxTracks;this.nextId=1;this.epoch=0;this.tracks=[];}
     reset(){this.tracks=[];this.epoch++;}
@@ -130,6 +149,6 @@
     return hits>=2&&result?.level==='ok'&&result.score>=Math.max(.82,threshold+.08)
       &&result.gap>=Math.max(.08,margin)&&result.backgroundLead>=.10;
   }
-  const api={detect,Tracker,iou,area,decide,selectInventoryMatch,canAutoAdd};
+  const api={detect,fuseProposals,Tracker,iou,area,decide,selectInventoryMatch,canAutoAdd};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RetailScan=api;
 })(globalThis);
