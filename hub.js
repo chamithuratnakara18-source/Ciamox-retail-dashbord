@@ -333,7 +333,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-dire
       await refreshSupplierDashboard();
     }
     if (view === 'ai-counter' && aiCounterFrame?.getAttribute('src') === 'about:blank') {
-      aiCounterFrame.src = './ai-counter.html?v=rtdetr-fast-20261109-3';
+      aiCounterFrame.src = './ai-counter.html?v=repeat-20261110-1';
     } else if (view === 'ai-counter') {
       aiCounterFrame?.contentWindow?.postMessage({ type: 'retailflow:refresh-inventory' }, location.origin);
     }

@@ -62,7 +62,7 @@ const pendingVision=new Map();
 function setModelState(t){ $('modelState').textContent=t; }
 function visionRequest(type, images=[]){
   if(!visionWorker){
-    visionWorker=new Worker('./ai-vision-worker.js?v=rtdetr-fast-20261109-3');
+    visionWorker=new Worker('./ai-vision-worker.js?v=repeat-20261110-1');
     visionWorker.onmessage=({data})=>{
       if(data.type==='status'){setModelState(data.text);return;}
       const request=pendingVision.get(data.id);if(!request)return;
@@ -105,6 +105,24 @@ async function embedBatch(canvases){
   return result.vectors.map(v=>new Float32Array(v));
 }
 async function embed(canvas){return (await embedBatch([canvas]))[0];}
+let ocrWorkerPromise=null;
+async function textWorker(){
+  if(!ocrWorkerPromise)ocrWorkerPromise=(async()=>{
+    if(!window.Tesseract)await new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src='https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js';
+      script.onload=resolve;script.onerror=()=>reject(new Error('Text recognition unavailable'));
+      document.head.append(script);
+    });
+    return window.Tesseract.createWorker('eng');
+  })().catch(error=>{ocrWorkerPromise=null;throw error;});
+  return ocrWorkerPromise;
+}
+async function readLabel(canvas){
+  const worker=await textWorker();
+  const result=await worker.recognize(canvas,{rotateAuto:true});
+  return String(result.data?.text||'');
+}
 
 /* ---------- matching ---------- */
 function match(q) {   // best score per product, top 3
@@ -134,7 +152,7 @@ function resetDetector(error){
 }
 function detectorRequest(type,image){
   if(!detectorWorker){
-    detectorWorker=new Worker('./ai-detector-worker.js?v=rtdetr-fast-20261109-3');
+    detectorWorker=new Worker('./ai-detector-worker.js?v=repeat-20261110-1');
     detectorWorker.onmessage=({data})=>{
       const item=detectorPending.get(data.id);if(!item)return;
       clearTimeout(item.timer);detectorPending.delete(data.id);
@@ -227,6 +245,12 @@ function cropSquare(video, bbox, padding=1.25) {   // bbox in 0..1 of the frame,
   const out = document.createElement('canvas'); out.width = out.height = 224; out.getContext('2d').drawImage(c, 0, 0);
   return out;
 }
+function rotateCrop(source,degrees){
+  const out=document.createElement('canvas');out.width=out.height=224;
+  const ctx=out.getContext('2d');ctx.translate(112,112);ctx.rotate(degrees*Math.PI/180);
+  ctx.drawImage(source,-112,-112);
+  return out;
+}
 function focusRegions(bbox){
   const regions=[bbox],w=bbox.x1-bbox.x0,h=bbox.y1-bbox.y0;
   // A broad motion region can include a hand or moving cloth. Search smaller
@@ -244,6 +268,44 @@ const tracker=new RetailScan.Tracker({settleMs:180,missingMs:900,maxTracks:8});
 const counter={paused:false,stream:null,baseline:null,prev:null,busy:false,timer:null,calibrating:false,lastBBox:null,backgroundBank:[],referenceEpoch:0};
 const cart=new Map();
 let inventoryReady=false, checkoutBusy=false, inventoryRevision=0, recognitionFailures=0, retryAfter=0;
+const repeatCache=new RetailScan.RepeatCache();
+let batchWaitingSince=0;
+function viewFingerprint(canvas){
+  const c=document.createElement('canvas');c.width=c.height=16;
+  const context=c.getContext('2d',{willReadFrequently:true});
+  context.drawImage(canvas,0,0,16,16);
+  return RetailScan.repeatFingerprint(context.getImageData(0,0,16,16).data,16,16);
+}
+function tryRecentRepeat(track,now){
+  if(track.repeatTriedRevision===track.revision)return false;
+  const crop=cropSquare($('vidC'),track.bbox,1.08);
+  const signature=viewFingerprint(crop);
+  const found=repeatCache.find(signature,track.bbox,now,counter.referenceEpoch);
+  if(!found){track.repeatTriedRevision=track.revision;track.repeatCandidate=null;return false;}
+  const prev=track.repeatCandidate;
+  if(!prev||prev.pid!==found.pid||prev.revision!==track.revision){
+    track.repeatCandidate={pid:found.pid,revision:track.revision,at:now};
+    track.nextAt=now+80;
+    return true;
+  }
+  if(now-prev.at<70)return true;
+  track.repeatTriedRevision=track.revision;
+  const original=found.entry;
+  // Only near-identical pixels from two successive frames may reuse a trusted
+  // checkout. Similar packaging below this mark remains a manual suggestion.
+  const repeatTrusted=original.trusted&&found.similarity>=.992;
+  const result={pid:found.pid,score:Math.min(original.score,found.similarity),gap:original.gap,
+    backgroundLead:original.backgroundLead,level:'ok',bbox:track.bbox,
+    top:[{p:byId(found.pid),score:Math.min(original.score,found.similarity)}],source:'repeat',
+    repeatTrusted,manualOnly:!repeatTrusted};
+  track.result=result;track.matchPid=found.pid;track.hits=2;
+  track.lastFingerprint=signature;
+  // A weaker manually confirmed view can suggest a repeat, but cannot charge it.
+  if(result.repeatTrusted&&$('autoAdd').checked&&
+    RetailScan.canAutoAdd(result,track.hits,$('thr').value/100,$('mar').value/100))addTrack(track);
+  renderCandidates(true);drawBoxes();
+  return true;
+}
 function setState(t){$('stateC').textContent=t;$('stateE').textContent=t;}
 function analyse(frame){return counter.baseline?RetailScan.detect(frame,counter.baseline,counter.prev,SW,SH):{fraction:0,boxes:[]};}
 const overlayMaps=new Map();
@@ -265,8 +327,9 @@ function drawBoxes(){
       node.style.left=`${b.x0*100}%`;node.style.top=`${b.y0*100}%`;node.style.width=`${(b.x1-b.x0)*100}%`;node.style.height=`${(b.y1-b.y0)*100}%`;
       node.firstChild.style.transform=b.y0<.15?'none':'translateY(-100%)';
       node.firstChild.style.left=b.x0>.85?'auto':'-2px';node.firstChild.style.right=b.x0>.85?'-2px':'auto';
-      node.dataset.state=t.counted?'added':'ok';
-      node.firstChild.textContent=t.counted?`${p?.name||'Item'} · added`:`${p?.name||'Inventory match'} · ${Math.round(Math.max(0,r.score)*100)}% similarity`;
+      node.dataset.state=t.counted?'added':r?.manualOnly?'maybe':'ok';
+      node.firstChild.textContent=t.counted?`${p?.name||'Item'} · added`:
+        `${p?.name||'Inventory match'} · ${Math.round(Math.max(0,r.score)*100)}% match${r?.manualOnly?' · confirm':''}`;
     }
   }
   $('visibleStat').textContent=`${tracker.tracks.filter(t=>t.visible&&!t.blocked&&(t.counted||t.result?.level==='ok'&&t.hits>=2)).length} inventory matches`;
@@ -288,7 +351,8 @@ function tick(){
     const prior=tracker.tracks.map(t=>({...t,present:RetailScan.foregroundShare(g,counter.baseline,t.bbox,SW,SH)>.18}));
     a.boxes=RetailScan.fuseProposals(a.boxes,objects||[],8,prior,a.parts||[]);
   }
-  tracker.update(a.boxes,now);counter.lastBBox=a.boxes.length===1?a.boxes[0].bbox:null;
+  tracker.update(a.boxes,now,{emptyView:!a.boxes.length&&a.fraction<.015});
+  counter.lastBBox=a.boxes.length===1?a.boxes[0].bbox:null;
   drawBoxes();renderCandidates();$('rescanBtn').disabled=!tracker.tracks.some(t=>t.visible&&!t.counted);
   if(a.boxes.length>8){setState('Up to 8 separated items · scan the rest next');return;}
   if(!canScan()){if(counter.baseline&&!counter.backgroundBank.length)setState('Preparing empty-counter reference…');return;}
@@ -297,7 +361,16 @@ function tick(){
   if(!modelReady){setState('Preparing recognition model…');return;}
   if(!counter.busy&&now>=retryAfter){
     const ready=tracker.ready(now).filter(t=>!t.result||t.result.level!=='ok'||t.hits<2);
-    if(ready.length)void recogniseTracks(ready.slice(0,modelBackend==='GPU'?4:2));
+    const needsModel=ready.filter(t=>!tryRecentRepeat(t,now));
+    if(needsModel.length){
+      if(!batchWaitingSince)batchWaitingSince=now;
+      const pending=tracker.tracks.some(t=>t.visible&&!t.counted&&!t.blocked&&
+        now-t.stableSince<tracker.settleMs&&now-t.stableSince>=0);
+      if(!pending||now-batchWaitingSince>=160){
+        batchWaitingSince=0;
+        void recogniseTracks(needsModel.slice(0,modelBackend==='GPU'?4:2));
+      }
+    }else batchWaitingSince=0;
   }
   if(!counter.busy)setState(tracker.tracks.some(t=>t.blocked)?'Objects overlap · keep items visible and retry':tracker.tracks.some(t=>t.visible&&t.hits>=2&&t.result?.level==='ok'&&!t.counted)?'Inventory match ready · tap Add below':tracker.tracks.filter(t=>t.visible).every(t=>t.counted)?'Items added · remove before the next batch':'Checking view against inventory photos…');
 }
@@ -313,6 +386,24 @@ async function recogniseTracks(tracks){
     const threshold=$('thr').value/100,margin=$('mar').value/100;
     const picks=jobs.map((job,i)=>RetailScan.selectInventoryMatch([{bbox:job.regions[0],top:match(vectors[i])}],
       [Math.max(...counter.backgroundBank.map(bg=>dot(vectors[i],bg)))],threshold,margin));
+    // Rotating only failed crops keeps upright multi-item scans to one batch.
+    // A 180-degree retry handles upside-down labels; sideways views are last.
+    for(const degrees of [180,90,270]){
+      const indices=jobs.map((_,i)=>i).filter(i=>!picks[i]);
+      if(!indices.length)break;
+      for(let start=0;start<indices.length;start+=(modelBackend==='GPU'?4:2)){
+        const ids=indices.slice(start,start+(modelBackend==='GPU'?4:2));
+        const rotated=ids.map(i=>rotateCrop(primary[i],degrees));
+        const outputs=await embedBatch(rotated);
+        if(revision!==inventoryRevision||referenceEpoch!==counter.referenceEpoch||!canScan())return;
+        for(let k=0;k<ids.length;k++){
+          const i=ids[k],q=outputs[k];
+          const choice=RetailScan.selectInventoryMatch([{bbox:jobs[i].regions[0],top:match(q)}],
+            [Math.max(...counter.backgroundBank.map(bg=>dot(q,bg)))],threshold,margin);
+          if(choice)picks[i]={...choice,orientation:degrees};
+        }
+      }
+    }
     const search=[];
     for(let i=0;i<jobs.length;i++)if(!picks[i]&&jobs[i].regions.length>1)
       for(const bbox of jobs[i].regions.slice(1))search.push({i,bbox,crop:cropSquare($('vidC'),bbox,1.05)});
@@ -327,13 +418,35 @@ async function recogniseTracks(tracks){
         if(candidate&&(!picks[search[i].i]||candidate.rank>picks[search[i].i].rank))picks[search[i].i]=candidate;
       }
     }
+    // Start all ambiguous label checks together. A slow OCR worker has a
+    // shared 1.7-second budget, rather than multiplying delay by item count.
+    const evidence=await Promise.all(jobs.map(async(job,i)=>{
+      const result=picks[i];if(!result||result.level!=='ok'||result.score>=.94)return null;
+      const p=byId(result.pid),last=tracker.tracks.find(t=>t.id===job.token.id);
+      const previous=last?.ocrRevision===job.token.revision&&last.ocrPid===result.pid?last.ocrStatus:null;
+      if(previous)return previous;
+      let observed='unreadable';
+      if(p&&/[a-zA-Z]{4}/.test(p.name)){
+        const image=result.orientation?rotateCrop(primary[i],result.orientation):primary[i];
+        try{
+          const label=await Promise.race([readLabel(image),
+            new Promise((_,reject)=>setTimeout(()=>reject(new Error('Text check timed out')),1700))]);
+          observed=RetailScan.textEvidence(label,p.name,products.map(product=>product.name));
+        }catch{ /* An unavailable OCR model never approves an automatic sale. */ }
+      }
+      if(last){last.ocrRevision=job.token.revision;last.ocrPid=result.pid;last.ocrStatus=observed;}
+      return observed;
+    }));
     for(let i=0;i<jobs.length;i++){
+      const picked=picks[i],result=picked?{...picked}:{pid:null,score:0,top:[],level:'none'};
+      if(evidence[i]&&evidence[i]!=='verified')result.manualOnly=true;
       const verified=tracker.resolve(jobs[i].token,performance.now());
       const t=verified||tracker.resolveCandidate(jobs[i].token,performance.now());
       if(!t)continue;
       if(!verified){t.hits=0;t.matchPid=null;t.result=null;}
-      const picked=picks[i],result=picked?{...picked}:{pid:null,score:0,top:[],level:'none'};
       const stable=tracker.accept(t,result,performance.now());
+      t.lastFingerprint=result.level==='ok'?viewFingerprint(
+        result.bbox===jobs[i].regions[0]?primary[i]:cropSquare($('vidC'),result.bbox,1.08)):null;
       t.focusBBox=result.level==='ok'?result.bbox:null;
       // Keep tracking the matched product crop, rather than the broad hand or
       // shadow region from which that crop was found.
@@ -349,6 +462,8 @@ async function recogniseTracks(tracks){
 function addTrack(t,pid=t.result?.pid){
   if(t.counted||!t.visible||t.blocked||checkoutBusy||$('payDlg').open||!inventoryReady)return false;
   if(!addToCart(pid))return false;
+  if(t.lastFingerprint&&pid===t.result?.pid)
+    repeatCache.remember(pid,t.lastFingerprint,t.bbox,t.result,performance.now(),counter.referenceEpoch);
   t.counted=true;t.result={...t.result,pid,level:'ok'};drawBoxes();renderCandidates(true);return true;
 }
 let candidatesKey='';
@@ -368,7 +483,7 @@ function renderCandidates(force=false){
       quick.append(button);
     }
     const wrap=document.createElement('div');wrap.className='cand '+r.level;
-    const title=document.createElement('div');title.className='t';title.textContent=`Item ${t.id} · ${r.level==='ok'?'Match ready':r.level==='maybe'?'Confirm product':'Unknown item'}`;wrap.append(title);
+    const title=document.createElement('div');title.className='t';title.textContent=`Item ${t.id} · ${r.manualOnly?'Confirm product':r.level==='ok'?'Match ready':r.level==='maybe'?'Confirm product':'Unknown item'}`;wrap.append(title);
     for(const m of r.top){
       const b=document.createElement('button');b.className='opt';const name=document.createElement('span');name.className='n';name.textContent=m.p.name;
       const score=document.createElement('span');score.className='pct';score.textContent=`${Math.round(Math.max(0,m.score)*100)}% · Add`;
@@ -391,6 +506,7 @@ async function calibrate(){
   if(!counter.stream||counter.calibrating)return;
   if(tracker.tracks.some(t=>t.visible)&&!confirm('Remove every item from the counter first. Is the camera view now empty?'))return;
   counter.calibrating=true;counter.backgroundBank=[];detectorResult=null;const epoch=++counter.referenceEpoch;
+  repeatCache.clear();batchWaitingSince=0;
   tracker.reset();drawBoxes();renderCandidates(true);$('calBtn').disabled=true;
   setState('Capturing empty counter…');
   try{
@@ -448,7 +564,8 @@ function renderCart() {
 $('clearBtn').onclick = () => { if(checkoutBusy||$('payDlg').open)return; cart.clear(); renderCart(); };
 $('addVisibleBtn').onclick=()=>{for(const t of [...tracker.tracks])if(t.result?.level==='ok')addTrack(t);};
 $('autoAdd').onchange=()=>{if($('autoAdd').checked)for(const t of [...tracker.tracks])
-  if(RetailScan.canAutoAdd(t.result,t.hits,$('thr').value/100,$('mar').value/100))addTrack(t);};
+  if((t.result?.source!=='repeat'||t.result.repeatTrusted)&&
+    RetailScan.canAutoAdd(t.result,t.hits,$('thr').value/100,$('mar').value/100))addTrack(t);};
 $('payBtn').onclick = () => { $('payTotal').textContent = money(cartTotal()); $('cashIn').value = ''; $('changeV').textContent = '0.00'; $('payMethod').dispatchEvent(new Event('change')); $('payDlg').showModal(); };
 $('payMethod').onchange = () => $('cashBox').classList.toggle('hide', $('payMethod').value !== 'Cash');
 $('cashIn').oninput = () => { $('changeV').textContent = money(Math.max(0, (+$('cashIn').value || 0) - cartTotal())); };
@@ -493,7 +610,7 @@ async function startCounterCam() {
     counter.stream = await openCamera($('vidC'), $('camSel').value || null);
     $('vidE').srcObject = counter.stream; $('vidE').play().catch(() => {});
     await listCameras();
-    counter.baseline=null;counter.prev=null;counter.backgroundBank=[];counter.referenceEpoch++;tracker.reset();
+    counter.baseline=null;counter.prev=null;counter.backgroundBank=[];counter.referenceEpoch++;tracker.reset();repeatCache.clear();batchWaitingSince=0;
     detectorResult=null;
     for(const video of [$('vidC'),$('vidE')])video.parentElement.style.aspectRatio=`${$('vidC').videoWidth}/${$('vidC').videoHeight}`;
     $('camBtn').textContent = $('camBtnE').textContent = 'Stop camera'; $('calBtn').disabled = false; $('snapBtn').disabled = false;
@@ -507,7 +624,7 @@ async function startCounterCam() {
 }
 function stopCounterCam() {
   clearInterval(counter.timer); counter.stream?.getTracks().forEach(t => t.stop()); counter.stream = null; $('vidC').srcObject = null; $('vidE').srcObject = null;
-  $('camBtn').textContent = $('camBtnE').textContent = 'Start camera'; $('calBtn').disabled = true; $('snapBtn').disabled = true; setState('Camera off'); $('cameraHelp').textContent = 'Press Start camera to trigger your browser’s camera permission prompt.'; counter.baseline=null;counter.backgroundBank=[];counter.referenceEpoch++;tracker.reset();drawBoxes();renderCandidates(true);
+  $('camBtn').textContent = $('camBtnE').textContent = 'Start camera'; $('calBtn').disabled = true; $('snapBtn').disabled = true; setState('Camera off'); $('cameraHelp').textContent = 'Press Start camera to trigger your browser’s camera permission prompt.'; counter.baseline=null;counter.backgroundBank=[];counter.referenceEpoch++;tracker.reset();repeatCache.clear();batchWaitingSince=0;drawBoxes();renderCandidates(true);
   detectorResult=null;
 }
 $('camBtn').onclick = () => counter.stream ? stopCounterCam() : startCounterCam();
@@ -518,8 +635,15 @@ $('retryModel').onclick=()=>{
   detectorFailed=false;void loadDetector();
   loadModel().then(()=>indexInventoryPhotos()).catch(error=>toast(error.message));
 };
-$('rescanBtn').onclick=()=>{for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.nextAt=0;}renderCandidates(true);};
-$('thr').oninput = $('mar').oninput = () => { $('thrV').textContent = $('thr').value + '%'; $('marV').textContent = $('mar').value + '%';renderCandidates(true); try { localStorage.setItem('aic-thr', $('thr').value); localStorage.setItem('aic-mar', $('mar').value); } catch { /* ignore */ } };
+$('rescanBtn').onclick=()=>{for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.lastFingerprint=null;t.nextAt=0;}renderCandidates(true);};
+$('thr').oninput = $('mar').oninput = () => {
+  $('thrV').textContent=$('thr').value+'%';$('marV').textContent=$('mar').value+'%';
+  $('thresholdHelp').textContent=Number($('thr').value)<RetailScan.PROVISIONAL_AUTO_MIN*100
+    ?'Manual only below 86%. The 0–100 number is visual similarity, not measured accuracy.'
+    :'Auto-add can use this level after two matching scans and background checks. 86% is provisional until tested on your products.';
+  renderCandidates(true);
+  try{localStorage.setItem('aic-thr',$('thr').value);localStorage.setItem('aic-mar',$('mar').value);}catch{}
+};
 
 /* ---------- enrolment ---------- */
 const enrol = { samples: [], editId: null };
@@ -772,8 +896,8 @@ function syncFirebaseProducts(){
       });
       products=next;inventoryReady=true;
       if(signature!==lastInventorySignature){
-        inventoryRevision++;
-        for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.nextAt=0;}
+        inventoryRevision++;repeatCache.clear();batchWaitingSince=0;
+        for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.lastFingerprint=null;t.nextAt=0;}
       }
       lastInventorySignature=signature;
       for(const barcode of [...cart.keys()]){
@@ -925,7 +1049,7 @@ $('tabCounter').onclick = () => switchTab('counter'); $('tabCatalogue').onclick 
 
 (async () => {
   try { const a = localStorage.getItem('aic-thr'), b = localStorage.getItem('aic-mar');
-    if (a) $('thr').value = Math.max(72,Math.min(95,Number(a)||72));
+    if (a!==null) $('thr').value = Math.max(0,Math.min(100,Number(a)||0));
     if (b) $('mar').value = Math.max(8,Math.min(30,Number(b)||8));
   } catch { /* ignore */ }
   $('thr').dispatchEvent(new Event('input'));

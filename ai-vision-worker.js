@@ -17,6 +17,14 @@ async function load(){
       catch{report('GPU unavailable · loading CPU fallback…');}
     }
     if(!extractor)extractor=await tf.pipeline('image-feature-extraction','Xenova/dinov2-small',{...options,device:'wasm'});
+    // Build kernels before the first customer places a product. This cannot
+    // remove download time, but it moves one-time setup out of checkout.
+    report('Warming up recognition…');
+    try{
+      const pixels=new Uint8ClampedArray(224*224*4);
+      for(let i=3;i<pixels.length;i+=4)pixels[i]=255;
+      await extractor([new tf.RawImage(pixels,224,224,4)]);
+    }catch(error){report('Warmup skipped · model ready');}
     report(`Model ready · ${backend==='webgpu'?'GPU':'CPU'}`);return backend;
   })().catch(e=>{loading=null;throw e;});
   return loading;

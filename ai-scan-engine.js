@@ -115,8 +115,9 @@
   }
   class Tracker {
     constructor({settleMs=180, missingMs=900, maxTracks=8}={}) {this.settleMs=settleMs;this.missingMs=missingMs;this.maxTracks=maxTracks;this.nextId=1;this.epoch=0;this.tracks=[];}
-    reset(){this.tracks=[];this.epoch++;}
-    update(detections,now){
+    reset(){this.tracks=[];this.cleanEmptySince=null;this.epoch++;}
+    update(detections,now,{emptyView=false}={}){
+      this.cleanEmptySince=emptyView&&!detections.length?(this.cleanEmptySince??now):null;
       for(const t of this.tracks){t.visible=false;t.blocked=false;}
       const used=new Set(),assigned=new Set();
       // A hand joining two tracked items must never create a new chargeable item.
@@ -142,12 +143,15 @@
           newArea/Math.max(oldArea,.0001)>.65&&newArea/Math.max(oldArea,.0001)<1.5;
         if(d.motion>.28||(!boxJitter&&overlap<.68)||wasMissing){
           t.stableSince=now;
-          if(!t.counted){t.revision++;t.result=null;t.hits=0;t.matchPid=null;}
+          if(!t.counted){t.revision++;t.result=null;t.hits=0;t.matchPid=null;t.lastFingerprint=null;}
         }
         t.bbox=d.bbox;t.visible=true;t.lastSeen=now;t.motion=d.motion;
         used.add(i);assigned.add(t.id);
       }
-      this.tracks=this.tracks.filter(t=>now-t.lastSeen<this.missingMs);
+      // A truly empty calibrated counter rearms sooner than an occluded item.
+      // A hand covering an item still changes pixels and cannot use this path.
+      const fullyClear=this.cleanEmptySince!==null&&now-this.cleanEmptySince>=400;
+      this.tracks=this.tracks.filter(t=>!fullyClear&&now-t.lastSeen<this.missingMs);
       detections.forEach((d,i)=>{
         if(used.has(i)||this.tracks.length>=this.maxTracks)return;
         // Ignore fragments while a known item is temporarily occluded/merged.
@@ -187,10 +191,72 @@
     }
     return winner;
   }
+  const PROVISIONAL_AUTO_MIN=.86;
   function canAutoAdd(result,hits,threshold,margin){
-    return hits>=2&&result?.level==='ok'&&result.score>=Math.max(.82,threshold+.08)
-      &&result.gap>=Math.max(.08,margin)&&result.backgroundLead>=.10;
+    return threshold>=PROVISIONAL_AUTO_MIN&&hits>=2&&result?.level==='ok'&&!result.manualOnly&&
+      result.score>=threshold&&result.gap>=Math.max(.08,margin)&&result.backgroundLead>=.10;
   }
-  const api={detect,fuseProposals,foregroundShare,Tracker,iou,area,decide,selectInventoryMatch,canAutoAdd};
+  function textEvidence(text,name,names){
+    const tokens=s=>(String(s||'').toUpperCase().match(/[A-Z0-9]{4,}/g)||[]);
+    const words=new Set(tokens(text));
+    if(!words.size)return 'unreadable';
+    const target=tokens(name).filter(token=>!names.some(other=>other!==name&&tokens(other).includes(token)));
+    if(target.some(token=>words.has(token)))return 'verified';
+    if(names.some(other=>other!==name&&tokens(other).some(token=>words.has(token))))return 'conflict';
+    return 'unknown';
+  }
+  // A recent checkout crop can be compared without running the vision network.
+  // This is deliberately strict: a quick visual resemblance is not a SKU label.
+  function repeatFingerprint(rgba,w,h){
+    if(w!==16||h!==16||rgba.length!==w*h*4)throw new Error('Expected a 16 by 16 RGBA crop');
+    const rgb=new Uint8Array(16*16*3);let edge=0;
+    for(let i=0;i<256;i++){
+      rgb[3*i]=rgba[4*i];rgb[3*i+1]=rgba[4*i+1];rgb[3*i+2]=rgba[4*i+2];
+      if(i%16)edge+=Math.abs(rgb[3*i]-rgb[3*(i-1)])+Math.abs(rgb[3*i+1]-rgb[3*(i-1)+1]);
+    }
+    return {rgb,edge:edge/256};
+  }
+  function repeatSimilarity(a,b){
+    if(!a?.rgb||!b?.rgb||a.rgb.length!==b.rgb.length)return 0;
+    let color=0,detail=0;
+    for(let i=0;i<256;i++){
+      const j=i*3;
+      color+=Math.abs(a.rgb[j]-b.rgb[j])+Math.abs(a.rgb[j+1]-b.rgb[j+1])+Math.abs(a.rgb[j+2]-b.rgb[j+2]);
+      if(i%16){
+        for(let k=0;k<3;k++)detail+=Math.abs((a.rgb[j+k]-a.rgb[j-3+k])-(b.rgb[j+k]-b.rgb[j-3+k]));
+      }
+    }
+    return Math.max(0,1-.65*color/(256*3*255)-.35*detail/(240*3*255));
+  }
+  class RepeatCache {
+    constructor({ttlMs=20*60*1000,max=24}={}){this.ttlMs=ttlMs;this.max=max;this.entries=[];}
+    clear(){this.entries=[];}
+    remember(pid,signature,bbox,result,now,epoch){
+      if(!pid||!signature||!bbox||!result||result.level!=='ok')return;
+      const trusted=!result.manualOnly&&result.score>=.90&&result.gap>=.14&&result.backgroundLead>=.14;
+      this.entries=this.entries.filter(e=>now-e.at<this.ttlMs&&!(e.pid===pid&&repeatSimilarity(e.signature,signature)>.985));
+      this.entries.unshift({pid,signature,aspect:(bbox.x1-bbox.x0)/Math.max(.001,bbox.y1-bbox.y0),
+        at:now,epoch,trusted,score:result.score,gap:result.gap,backgroundLead:result.backgroundLead});
+      this.entries.length=Math.min(this.entries.length,this.max);
+    }
+    find(signature,bbox,now,epoch){
+      if(!signature||signature.edge<5)return null;
+      const aspect=(bbox.x1-bbox.x0)/Math.max(.001,bbox.y1-bbox.y0);
+      const bySku=new Map();
+      for(const entry of this.entries){
+        if(entry.epoch!==epoch||now-entry.at>this.ttlMs||now<entry.at)continue;
+        const ratio=aspect/entry.aspect;if(ratio<.8||ratio>1.25)continue;
+        const score=repeatSimilarity(signature,entry.signature);
+        if(score>(bySku.get(entry.pid)?.similarity||0))bySku.set(entry.pid,{entry,similarity:score});
+      }
+      const ranked=[...bySku.values()].sort((a,b)=>b.similarity-a.similarity);
+      const best=ranked[0],second=ranked[1];
+      if(!best||best.similarity<(best.entry.trusted?.962:.985)||
+        second&&best.similarity-second.similarity<.055)return null;
+      return {pid:best.entry.pid,similarity:best.similarity,entry:best.entry};
+    }
+  }
+  const api={detect,fuseProposals,foregroundShare,Tracker,iou,area,decide,selectInventoryMatch,canAutoAdd,
+    repeatFingerprint,repeatSimilarity,RepeatCache,PROVISIONAL_AUTO_MIN,textEvidence};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RetailScan=api;
 })(globalThis);

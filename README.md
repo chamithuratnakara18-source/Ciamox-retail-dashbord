@@ -1,3 +1,43 @@
+# Repeat-aware multi-product checkout
+
+This is the complete dashboard ZIP. Extract it and upload **all contents** to
+the root of the dashboard repository's AI camera branch, including `api/` and
+both AI workers. It does not update the separate phone scanner. After the
+preview deployment reports Ready, refresh the AI Detection Cam page and set an
+empty-counter view before scanning.
+
+The first product still needs a match against the Firebase inventory photos.
+The model warms up when the page loads, upright crops are processed together
+(up to four per GPU batch, two per CPU batch), and failed crops are checked at
+180, 90, and 270 degrees. For an item already confirmed during this camera
+session, a new crop is compared with its remembered color and texture. A
+near-identical repeat can be suggested without another model pass; only a
+particularly strong, unambiguous repeat from an already verified match may
+auto-add. Competing lookalike products, a changed camera calibration, or a
+changed inventory bypass that shortcut. Each physical copy retains its own
+track and stock is checked before adding it to the cart. Once the *entire*
+counter is visibly empty for 400 ms, the next copy may receive a new track;
+brief occlusion does not rearm a counted item.
+
+The Match threshold slider accepts 0–100, but it is **image similarity, not
+measured accuracy**. The provisional 86% minimum for auto-add also requires
+two consistent observations, a sufficient lead over other inventory products,
+and a lead over the calibrated empty view. Below 86%, matches are suggestions
+for manual confirmation. Ambiguous English labels receive an additional OCR
+check; an unreadable or conflicting label is manual only. Other scripts are
+not yet covered by that text check. Unknown goods must stay out of automatic
+checkout, but you should still check the cart before payment.
+
+Run the included deterministic checks with `node --test tests/*.test.cjs`.
+They cover duplicate product tracks, a clean-empty rearm, brief occlusion,
+background rejection, cache expiry, similar SKU ambiguity, and manual-only
+gating. A four-second batch or an accuracy percentage cannot be promised
+without measuring your actual camera, GPU, lighting, product catalogue and
+network. Test a held-out set of six-view goods and unknown items on the Vercel
+preview before enabling unattended auto-add.
+
+## Previous release notes
+
 # Faster two-product recognition
 
 This full dashboard update preserves product identity and recognition votes
