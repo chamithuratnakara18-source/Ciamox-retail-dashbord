@@ -191,10 +191,10 @@
     }
     return winner;
   }
-  const PROVISIONAL_AUTO_MIN=.86;
+  const PROVISIONAL_AUTO_MIN=.24;
   function canAutoAdd(result,hits,threshold,margin){
     return threshold>=PROVISIONAL_AUTO_MIN&&hits>=2&&result?.level==='ok'&&!result.manualOnly&&
-      result.score>=threshold&&result.gap>=Math.max(.08,margin)&&result.backgroundLead>=.10;
+      result.score>=threshold&&result.gap>=Math.max(.08,margin)&&result.backgroundLead>=.06;
   }
   function textEvidence(text,name,names){
     const tokens=s=>(String(s||'').toUpperCase().match(/[A-Z0-9]{4,}/g)||[]);
@@ -233,7 +233,7 @@
     clear(){this.entries=[];}
     remember(pid,signature,bbox,result,now,epoch){
       if(!pid||!signature||!bbox||!result||result.level!=='ok')return;
-      const trusted=!result.manualOnly&&result.score>=.90&&result.gap>=.14&&result.backgroundLead>=.14;
+      const trusted=!result.manualOnly&&result.score>=PROVISIONAL_AUTO_MIN&&result.gap>=.08&&result.backgroundLead>=.06;
       this.entries=this.entries.filter(e=>now-e.at<this.ttlMs&&!(e.pid===pid&&repeatSimilarity(e.signature,signature)>.985));
       this.entries.unshift({pid,signature,aspect:(bbox.x1-bbox.x0)/Math.max(.001,bbox.y1-bbox.y0),
         at:now,epoch,trusted,score:result.score,gap:result.gap,backgroundLead:result.backgroundLead});

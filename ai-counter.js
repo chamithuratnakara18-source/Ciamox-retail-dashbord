@@ -50,7 +50,7 @@ function rebuildBank() {
     for(const buf of [...p.samples,...(p.trainingSamples||[])])bank.push({pid:p.id,vec:new Float32Array(buf)});
     if(p.photoSample)bank.push({pid:p.id,vec:new Float32Array(p.photoSample)});
   }
-  $('readyStat').textContent=`${new Set(bank.map(s=>s.pid)).size} / ${products.length} products ready`;
+  $('readyStat').textContent=`${new Set(bank.map(s=>s.pid)).size} / ${products.length} products ready · ${products.filter(p=>p.trainingSamples?.length===6).length} with six views`;
   $('pCount').textContent = products.length;
   $('sCount').textContent = new Set(bank.map(sample=>sample.pid)).size;
 }
@@ -62,7 +62,7 @@ const pendingVision=new Map();
 function setModelState(t){ $('modelState').textContent=t; }
 function visionRequest(type, images=[]){
   if(!visionWorker){
-    visionWorker=new Worker('./ai-vision-worker.js?v=repeat-20261110-1');
+    visionWorker=new Worker('./ai-vision-worker.js?v=low-threshold-20261110-1');
     visionWorker.onmessage=({data})=>{
       if(data.type==='status'){setModelState(data.text);return;}
       const request=pendingVision.get(data.id);if(!request)return;
@@ -152,7 +152,7 @@ function resetDetector(error){
 }
 function detectorRequest(type,image){
   if(!detectorWorker){
-    detectorWorker=new Worker('./ai-detector-worker.js?v=repeat-20261110-1');
+    detectorWorker=new Worker('./ai-detector-worker.js?v=low-threshold-20261110-1');
     detectorWorker.onmessage=({data})=>{
       const item=detectorPending.get(data.id);if(!item)return;
       clearTimeout(item.timer);detectorPending.delete(data.id);
@@ -332,7 +332,7 @@ function drawBoxes(){
         `${p?.name||'Inventory match'} · ${Math.round(Math.max(0,r.score)*100)}% match${r?.manualOnly?' · confirm':''}`;
     }
   }
-  $('visibleStat').textContent=`${tracker.tracks.filter(t=>t.visible&&!t.blocked&&(t.counted||t.result?.level==='ok'&&t.hits>=2)).length} inventory matches`;
+  $('visibleStat').textContent=`${tracker.tracks.filter(t=>t.visible&&!t.blocked&&(t.counted||t.result?.level==='ok'&&t.hits>=2)).length} inventory suggestions`;
 }
 function canScan(){return counter.stream&&counter.baseline&&counter.backgroundBank.length&&!counter.paused&&!counter.calibrating&&!checkoutBusy&&!$('payDlg').open&&inventoryReady&&!document.hidden;}
 function tick(){
@@ -372,7 +372,7 @@ function tick(){
       }
     }else batchWaitingSince=0;
   }
-  if(!counter.busy)setState(tracker.tracks.some(t=>t.blocked)?'Objects overlap · keep items visible and retry':tracker.tracks.some(t=>t.visible&&t.hits>=2&&t.result?.level==='ok'&&!t.counted)?'Inventory match ready · tap Add below':tracker.tracks.filter(t=>t.visible).every(t=>t.counted)?'Items added · remove before the next batch':'Checking view against inventory photos…');
+  if(!counter.busy)setState(tracker.tracks.some(t=>t.blocked)?'Objects overlap · keep items visible and retry':tracker.tracks.some(t=>t.visible&&t.hits>=2&&t.result?.level==='ok'&&!t.counted)?'Suggestions ready · confirm the visible products below':tracker.tracks.filter(t=>t.visible).every(t=>t.counted)?'Items added · remove before the next batch':'Checking view against inventory photos…');
 }
 async function recogniseTracks(tracks){
   counter.busy=true;const revision=inventoryRevision,referenceEpoch=counter.referenceEpoch;
@@ -418,9 +418,10 @@ async function recogniseTracks(tracks){
         if(candidate&&(!picks[search[i].i]||candidate.rank>picks[search[i].i].rank))picks[search[i].i]=candidate;
       }
     }
-    // Start all ambiguous label checks together. A slow OCR worker has a
-    // shared 1.7-second budget, rather than multiplying delay by item count.
-    const evidence=await Promise.all(jobs.map(async(job,i)=>{
+    // At the user's low auto-add setting, visual matching is the chosen
+    // policy. Keep optional OCR for conservative settings without delaying
+    // every low-threshold checkout batch by a model download.
+    const evidence=threshold<.86?jobs.map(()=>null):await Promise.all(jobs.map(async(job,i)=>{
       const result=picks[i];if(!result||result.level!=='ok'||result.score>=.94)return null;
       const p=byId(result.pid),last=tracker.tracks.find(t=>t.id===job.token.id);
       const previous=last?.ocrRevision===job.token.revision&&last.ocrPid===result.pid?last.ocrStatus:null;
@@ -467,26 +468,49 @@ function addTrack(t,pid=t.result?.pid){
   t.counted=true;t.result={...t.result,pid,level:'ok'};drawBoxes();renderCandidates(true);return true;
 }
 let candidatesKey='';
+function isAutoEligible(t){
+  return RetailScan.canAutoAdd(t.result,t.hits,$('thr').value/100,$('mar').value/100);
+}
+function updateCartGate(visible){
+  const gate=$('cartGate'),threshold=Number($('thr').value),minimum=Math.round(RetailScan.PROVISIONAL_AUTO_MIN*100);
+  const highest=Math.max(0,...visible.map(t=>Math.round(t.result.score*100)));
+  let message,ready=false;
+  if(!inventoryReady)message='Waiting for Firebase inventory. The cart cannot accept camera matches yet.';
+  else if(!$('autoAdd').checked)message='Automatic cart additions are off. Confirm each suggested product before adding it.';
+  else if(threshold<86)message=`Fast auto-add is on at ${threshold}% (minimum ${minimum}%). ${visible.length?`${visible.length} suggestion${visible.length===1?'':'s'} (highest ${highest}%) may enter the cart after two stable scans.`:'Low-scoring lookalikes may enter the cart.'} Review every cart item before payment.`;
+  else if(visible.length){
+    const manual=visible.filter(t=>!isAutoEligible(t));
+    message=manual.length?`${manual.length} suggestion${manual.length===1?' needs':'s need'} confirmation. Repeated matches must also beat competing products and the empty counter.`:'Verified items will enter the cart automatically when stock is available.';
+    ready=!manual.length;
+  }else{message=`Auto-add is on for verified matches at ${threshold}% or higher. Lower-scoring objects remain out of the cart.`;ready=true;}
+  if(gate.textContent!==message)gate.textContent=message;
+  gate.classList.toggle('ready',ready);
+}
 function renderCandidates(force=false){
   const visible=tracker.tracks.filter(t=>t.visible&&!t.blocked&&!t.counted&&t.result?.level==='ok'&&t.hits>=2);
-  const key=visible.map(t=>`${t.id}:${t.result?.pid}:${t.result?.level}:${t.hits}`).join('|')+inventoryReady;
+  updateCartGate(visible);
+  const key=visible.map(t=>`${t.id}:${t.result?.pid}:${t.result?.score}:${t.result?.manualOnly}:${t.hits}`).join('|')+inventoryReady+$('autoAdd').checked+$('thr').value+$('mar').value;
   if(!force&&key===candidatesKey)return;candidatesKey=key;
   const box=$('candBox'),quick=$('quickAdds');box.replaceChildren();quick.replaceChildren();
-  $('addVisibleBtn').disabled=!inventoryReady||!visible.some(t=>t.result?.level==='ok');
+  const eligible=visible.filter(isAutoEligible);
+  $('addVisibleBtn').disabled=!inventoryReady||!eligible.length;
+  $('addVisibleBtn').textContent=`Add ${eligible.length} eligible ${eligible.length===1?'match':'matches'}`;
   for(const t of visible){
     if(!t.result)continue;const r=t.result;
     const product=byId(r.pid);
     if(product){
       const button=document.createElement('button');button.type='button';
-      button.textContent=`Add ${product.name} · ${Math.round(r.score*100)}% match`;
-      button.onclick=()=>{if(!addTrack(t))toast('Could not add this item. Check stock and keep the product in view.');};
+      const manual=!isAutoEligible(t);
+      if(manual)button.className='needs-confirmation';
+      button.textContent=`${manual?'Confirm':'Add'} ${product.name} · ${Math.round(r.score*100)}% similarity`;
+      button.onclick=()=>{if(addTrack(t))toast(`${product.name} added to cart`);else toast('Could not add this item. Check stock and keep the product in view.');};
       quick.append(button);
     }
     const wrap=document.createElement('div');wrap.className='cand '+r.level;
     const title=document.createElement('div');title.className='t';title.textContent=`Item ${t.id} · ${r.manualOnly?'Confirm product':r.level==='ok'?'Match ready':r.level==='maybe'?'Confirm product':'Unknown item'}`;wrap.append(title);
     for(const m of r.top){
       const b=document.createElement('button');b.className='opt';const name=document.createElement('span');name.className='n';name.textContent=m.p.name;
-      const score=document.createElement('span');score.className='pct';score.textContent=`${Math.round(Math.max(0,m.score)*100)}% · Add`;
+      const score=document.createElement('span');score.className='pct';score.textContent=`${Math.round(Math.max(0,m.score)*100)}% · Confirm`;
       b.append(name,score);b.disabled=!inventoryReady;b.onclick=()=>addTrack(t,m.p.id);wrap.append(b);
     }
     if(r.level!=='ok'){
@@ -498,7 +522,7 @@ function renderCandidates(force=false){
   }
   if(visible.length){
     const note=document.createElement('small');
-    note.textContent='Review the product name before tapping Add. Lower-scoring matches require this confirmation.';
+    note.textContent='Confirm only items actually visible on the counter. A suggested name can be wrong.';
     quick.append(note);
   }
 }
@@ -562,10 +586,12 @@ function renderCart() {
   $('payBtn').disabled = !cart.size || !inventoryReady || checkoutBusy;
 }
 $('clearBtn').onclick = () => { if(checkoutBusy||$('payDlg').open)return; cart.clear(); renderCart(); };
-$('addVisibleBtn').onclick=()=>{for(const t of [...tracker.tracks])if(t.result?.level==='ok')addTrack(t);};
-$('autoAdd').onchange=()=>{if($('autoAdd').checked)for(const t of [...tracker.tracks])
-  if((t.result?.source!=='repeat'||t.result.repeatTrusted)&&
-    RetailScan.canAutoAdd(t.result,t.hits,$('thr').value/100,$('mar').value/100))addTrack(t);};
+$('addVisibleBtn').onclick=()=>{for(const t of [...tracker.tracks])if(isAutoEligible(t))addTrack(t);};
+$('autoAdd').onchange=()=>{
+  if($('autoAdd').checked)for(const t of [...tracker.tracks])
+    if((t.result?.source!=='repeat'||t.result.repeatTrusted)&&isAutoEligible(t))addTrack(t);
+  renderCandidates(true);
+};
 $('payBtn').onclick = () => { $('payTotal').textContent = money(cartTotal()); $('cashIn').value = ''; $('changeV').textContent = '0.00'; $('payMethod').dispatchEvent(new Event('change')); $('payDlg').showModal(); };
 $('payMethod').onchange = () => $('cashBox').classList.toggle('hide', $('payMethod').value !== 'Cash');
 $('cashIn').oninput = () => { $('changeV').textContent = money(Math.max(0, (+$('cashIn').value || 0) - cartTotal())); };
@@ -636,13 +662,19 @@ $('retryModel').onclick=()=>{
   loadModel().then(()=>indexInventoryPhotos()).catch(error=>toast(error.message));
 };
 $('rescanBtn').onclick=()=>{for(const t of tracker.tracks)if(!t.counted){t.revision++;t.result=null;t.hits=0;t.lastFingerprint=null;t.nextAt=0;}renderCandidates(true);};
+let previousScanSettings=null;
 $('thr').oninput = $('mar').oninput = () => {
   $('thrV').textContent=$('thr').value+'%';$('marV').textContent=$('mar').value+'%';
-  $('thresholdHelp').textContent=Number($('thr').value)<RetailScan.PROVISIONAL_AUTO_MIN*100
-    ?'Manual only below 86%. The 0–100 number is visual similarity, not measured accuracy.'
-    :'Auto-add can use this level after two matching scans and background checks. 86% is provisional until tested on your products.';
+  $('thresholdHelp').textContent=Number($('thr').value)<86
+    ?'Low threshold mode: matches above this score can auto-add after two stable scans. False matches can enter the cart; verify every item before payment.'
+    :'Auto-add needs a score above this level, two matching scans, and separation from competing products and the empty view.';
+  const settings=`${$('thr').value}:${$('mar').value}`;
+  if(previousScanSettings!==null&&settings!==previousScanSettings)for(const t of tracker.tracks)if(!t.counted){
+    t.revision++;t.result=null;t.hits=0;t.matchPid=null;t.lastFingerprint=null;t.nextAt=0;
+  }
+  previousScanSettings=settings;
   renderCandidates(true);
-  try{localStorage.setItem('aic-thr',$('thr').value);localStorage.setItem('aic-mar',$('mar').value);}catch{}
+  try{localStorage.setItem('aic-thr-low-auto-v1',$('thr').value);localStorage.setItem('aic-mar',$('mar').value);}catch{}
 };
 
 /* ---------- enrolment ---------- */
@@ -1048,8 +1080,8 @@ function switchTab(t) {
 $('tabCounter').onclick = () => switchTab('counter'); $('tabCatalogue').onclick = () => switchTab('catalogue');
 
 (async () => {
-  try { const a = localStorage.getItem('aic-thr'), b = localStorage.getItem('aic-mar');
-    if (a!==null) $('thr').value = Math.max(0,Math.min(100,Number(a)||0));
+  try { const a = localStorage.getItem('aic-thr-low-auto-v1'), b = localStorage.getItem('aic-mar');
+    if (a!==null) $('thr').value = Math.max(24,Math.min(100,Number(a)||24));
     if (b) $('mar').value = Math.max(8,Math.min(30,Number(b)||8));
   } catch { /* ignore */ }
   $('thr').dispatchEvent(new Event('input'));

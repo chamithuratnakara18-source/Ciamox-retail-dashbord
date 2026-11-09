@@ -33,6 +33,9 @@ main{max-width:1200px;margin:0 auto;padding:16px}
 .object-box[data-state=none]{border-color:#f5a797}.object-box[data-state=none] span{background:#f5a797}
 .scan-metrics{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.scan-metrics span{font-size:12px;background:#edf6f1;border:1px solid #d5e8dc;border-radius:99px;padding:5px 9px;color:#34584a}
 .quick-add{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.quick-add button{background:#0f9f71;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.quick-add small{align-self:center;color:#526675}
+.quick-add button.needs-confirmation{background:#fff3da;color:#6e4300;border:1px solid #e9b858}
+.checkout-gate{margin:10px 0;padding:10px 12px;border:1px solid #ecd19b;background:#fff8e9;color:#674916;border-radius:9px;font-size:13px;font-weight:600}
+.checkout-gate.ready{border-color:#cae8d5;background:#eef8f1;color:#276048}
 .scan-note{padding:10px 12px;background:#eff5f9;border-radius:9px;margin:12px 0;color:#56707d;font-size:13px}
 header{flex-wrap:wrap}#modelState{margin-left:auto}nav button{padding:8px 10px}
 @media(max-width:480px){header h1{display:none}.object-box span{font-size:10px;max-width:120px}main{padding:10px}.card{padding:12px}}
@@ -100,6 +103,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
           <div class="box" id="bboxC"></div>
           <span class="badge" id="stateC">Camera off</span>
         </div>
+        <div id="cartGate" class="checkout-gate" role="status">Auto-add starts at 24% similarity after two stable matches. Low settings can add the wrong item; review the cart before payment.</div>
         <div id="quickAdds" class="quick-add" aria-live="polite"></div>
         <div class="row">
           <button class="btn acc" id="camBtn">Start camera</button>
@@ -111,8 +115,8 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
         <p class="mute" style="margin:4px 0 0">If this embedded view is blocked, <a href="./ai-counter.html" target="_blank" rel="noopener">open the camera directly</a>.</p>
         <p class="scan-note">Set the empty counter first. RT-DETRv2 finds object regions; changes from the empty view catch packages it misses. Only regions matching your Firebase product photos can enter the cart. New scanner photos are indexed automatically after Firebase sync. Keep items visible until matched and check the cart before payment.</p>
         <div class="row">
-          <button class="btn acc" id="addVisibleBtn" disabled>Add matched items</button>
-          <label class="mute"><input type="checkbox" id="autoAdd" checked> Auto-add verified products</label>
+          <button class="btn acc" id="addVisibleBtn" disabled>Add eligible matches</button>
+          <label class="mute"><input type="checkbox" id="autoAdd" checked> Auto-add eligible matches</label>
         </div>
         <div id="candBox"></div>
       </div>
@@ -131,9 +135,9 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
       <div class="card" style="margin-top:16px">
         <h2>Recognition settings</h2>
         <button class="btn ghost" id="retryModel">Retry model</button>
-        <label class="f">Match threshold (0–100): <b id="thrV"></b></label>
-        <input type="range" id="thr" min="0" max="100" value="86" style="width:100%">
-        <div class="mute" id="thresholdHelp">Provisional auto-add minimum: 86%. Lower settings show manual matches only. Similarity is not measured accuracy.</div>
+        <label class="f">Auto-add similarity threshold (24–100): <b id="thrV"></b></label>
+        <input type="range" id="thr" min="24" max="100" value="24" style="width:100%">
+        <div class="mute" id="thresholdHelp">At 24%, weak visual matches may enter the cart. Similarity is not measured accuracy; review every item before payment.</div>
         <label class="f">Required lead over the 2nd best product: <b id="marV"></b></label>
         <input type="range" id="mar" min="8" max="30" value="8" style="width:100%">
         <div class="mute" style="margin-top:6px">Unknown goods remain out of the cart. A recently confirmed product may be suggested quickly when another copy appears. Check the cart before payment.</div>
@@ -206,7 +210,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
 <div class="toast" id="toast"></div>
 <canvas id="work" class="hide"></canvas>
 
-<script src="./ai-scan-engine.js?v=repeat-20261110-1"></script>
-<script src="./ai-counter.js?v=repeat-20261110-1"></script>
+<script src="./ai-scan-engine.js?v=low-threshold-20261110-1"></script>
+<script src="./ai-counter.js?v=low-threshold-20261110-1"></script>
 </body>
 </html>
