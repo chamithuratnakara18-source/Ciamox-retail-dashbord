@@ -1,4 +1,15 @@
-## Six photos from the separate barcode scanner
+# Finance save fix
+
+The Finance selling price editor now updates the existing Firestore product in
+a transaction. It checks the previously displayed price before writing, so a
+price changed on another device is not overwritten. One-time costs are created
+in the existing `expenses` collection. Both actions use the temporary public
+Firestore permissions from the included `firestore.rules` and no longer depend
+on missing nested Vercel API routes. Other API-backed actions still require
+the root-level `api` directory on the dashboard Vercel deployment. Upload the
+full package at the repository root; do not upload the ZIP file itself.
+
+## Category and scanner
 
 Category assignment now updates the existing Firestore product directly from
 the dashboard, using the same browser write permission as the separate phone

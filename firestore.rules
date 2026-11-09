@@ -2,7 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // Temporary password-free preview access for the phone scanner and
-    // dashboard category edit. Restore authenticated writes for real data.
+    // dashboard category, selling price, and expense edits. Restore
+    // authenticated writes for real data.
     match /products/{document} {
       allow read: if true;
       allow create, update: if true;

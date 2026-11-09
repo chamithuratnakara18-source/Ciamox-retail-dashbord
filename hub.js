@@ -1,4 +1,4 @@
-import { api, watchPos, watchRetailFlow } from './firebase-store.js?category-direct-20261109-2';
+import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-direct-20261109-3';
 
 (() => {
   const dashboardScreen = document.getElementById('dashboardScreen');
