@@ -333,7 +333,7 @@ import { api, watchPos, watchRetailFlow } from './firebase-store.js?finance-dire
       await refreshSupplierDashboard();
     }
     if (view === 'ai-counter' && aiCounterFrame?.getAttribute('src') === 'about:blank') {
-      aiCounterFrame.src = './ai-counter.html?v=auto-inventory-20261109-2';
+      aiCounterFrame.src = './ai-counter.html?v=auto-focus-20261109-3';
     } else if (view === 'ai-counter') {
       aiCounterFrame?.contentWindow?.postMessage({ type: 'retailflow:refresh-inventory' }, location.origin);
     }

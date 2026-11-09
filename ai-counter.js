@@ -155,12 +155,12 @@ async function listCameras() {
   try { const ds = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput'); const sel = $('camSel'); const cur = sel.value; sel.replaceChildren(...ds.map((d, i) => Object.assign(document.createElement('option'), { value: d.deviceId, textContent: d.label || 'Camera ' + (i + 1) }))); if (cur) sel.value = cur; } catch { /* ignore */ }
 }
 
-function cropSquare(video, bbox) {   // bbox in 0..1 of the frame, or null → centre square. Returns 224×224 canvas.
+function cropSquare(video, bbox, padding=1.25) {   // bbox in 0..1 of the frame, or null → centre square. Returns 224×224 canvas.
   const vw = video.videoWidth, vh = video.videoHeight;
   let x, y, w, h;
   if (bbox) { x = bbox.x0 * vw; y = bbox.y0 * vh; w = (bbox.x1 - bbox.x0) * vw; h = (bbox.y1 - bbox.y0) * vh; }
   else { const s = Math.min(vw, vh) * .7; x = (vw - s) / 2; y = (vh - s) / 2; w = h = s; }
-  const side = Math.min(Math.max(w, h) * 1.25, Math.min(vw, vh));      // pad 25 % so the model's centre-crop keeps the item
+  const side = Math.min(Math.max(w, h) * padding, Math.min(vw, vh));
   let cx = x + w / 2 - side / 2, cy = y + h / 2 - side / 2;
   cx = Math.max(0, Math.min(vw - side, cx)); cy = Math.max(0, Math.min(vh - side, cy));
   const c = $('work'); c.width = c.height = 224;
@@ -168,10 +168,21 @@ function cropSquare(video, bbox) {   // bbox in 0..1 of the frame, or null → c
   const out = document.createElement('canvas'); out.width = out.height = 224; out.getContext('2d').drawImage(c, 0, 0);
   return out;
 }
+function focusRegions(bbox){
+  const regions=[bbox],w=bbox.x1-bbox.x0,h=bbox.y1-bbox.y0;
+  // A broad motion region can include a hand or moving cloth. Search smaller
+  // overlapping views, then display the region that actually matches inventory.
+  if(w*h>.11){
+    const cw=w*.68,ch=h*.68;
+    for(const dx of [0,.32])for(const dy of [0,.32])
+      regions.push({x0:bbox.x0+w*dx,y0:bbox.y0+h*dy,x1:bbox.x0+w*dx+cw,y1:bbox.y0+h*dy+ch});
+  }
+  return regions;
+}
 
 /* ---------- independent objects + identity-preserving tracking ---------- */
 const tracker=new RetailScan.Tracker({settleMs:180,missingMs:900,maxTracks:8});
-const counter={paused:false,stream:null,baseline:null,prev:null,busy:false,timer:null,calibrating:false,lastBBox:null};
+const counter={paused:false,stream:null,baseline:null,prev:null,busy:false,timer:null,calibrating:false,lastBBox:null,backgroundBank:[],referenceEpoch:0};
 const cart=new Map();
 let inventoryReady=false, checkoutBusy=false, inventoryRevision=0, recognitionFailures=0, retryAfter=0;
 function setState(t){$('stateC').textContent=t;$('stateE').textContent=t;}
@@ -180,21 +191,28 @@ const overlayMaps=new Map();
 function drawBoxes(){
   for(const id of ['bboxC','bboxE']){
     const root=$(id),nodes=overlayMaps.get(id)||new Map();overlayMaps.set(id,nodes);
-    const visible=tracker.tracks.filter(t=>t.visible),ids=new Set(visible.map(t=>t.id));
+    const video=$(id==='bboxC'?'vidC':'vidE'),width=root.parentElement.clientWidth,height=root.parentElement.clientHeight;
+    if(video.videoWidth&&video.videoHeight&&width&&height){
+      const scale=Math.min(width/video.videoWidth,height/video.videoHeight);
+      const shownWidth=video.videoWidth*scale,shownHeight=video.videoHeight*scale;
+      root.style.inset='auto';root.style.left=`${(width-shownWidth)/2}px`;root.style.top=`${(height-shownHeight)/2}px`;
+      root.style.width=`${shownWidth}px`;root.style.height=`${shownHeight}px`;
+    }
+    const visible=tracker.tracks.filter(t=>t.visible&&!t.blocked&&(t.counted||t.result?.level==='ok'&&t.hits>=2)),ids=new Set(visible.map(t=>t.id));
     for(const [key,node] of nodes)if(!ids.has(key)){node.remove();nodes.delete(key);}
     for(const t of visible){
       let node=nodes.get(t.id);if(!node){node=document.createElement('div');node.className='object-box';node.append(document.createElement('span'));root.append(node);nodes.set(t.id,node);}
-      const r=t.result,p=byId(r?.pid),b=t.bbox;
+      const r=t.result,p=byId(r?.pid),b=t.focusBBox||t.bbox;
       node.style.left=`${b.x0*100}%`;node.style.top=`${b.y0*100}%`;node.style.width=`${(b.x1-b.x0)*100}%`;node.style.height=`${(b.y1-b.y0)*100}%`;
       node.firstChild.style.transform=b.y0<.15?'none':'translateY(-100%)';
       node.firstChild.style.left=b.x0>.85?'auto':'-2px';node.firstChild.style.right=b.x0>.85?'-2px':'auto';
-      node.dataset.state=t.blocked?'maybe':t.counted?'added':r?.level||'pending';
-      node.firstChild.textContent=t.blocked?'Separate items':t.counted?`${p?.name||'Item'} · added`:r?.pid?`${p?.name||'Unavailable'} · ${Math.round(Math.max(0,r.score)*100)}% similarity`:`#${t.id} · ${t.busy?'Matching…':'Hold briefly'}`;
+      node.dataset.state=t.counted?'added':'ok';
+      node.firstChild.textContent=t.counted?`${p?.name||'Item'} · added`:`${p?.name||'Inventory match'} · ${Math.round(Math.max(0,r.score)*100)}% similarity`;
     }
   }
-  $('visibleStat').textContent=`${tracker.tracks.filter(t=>t.visible).length} items in view`;
+  $('visibleStat').textContent=`${tracker.tracks.filter(t=>t.visible&&!t.blocked&&(t.counted||t.result?.level==='ok'&&t.hits>=2)).length} inventory matches`;
 }
-function canScan(){return counter.stream&&counter.baseline&&!counter.paused&&!counter.calibrating&&!checkoutBusy&&!$('payDlg').open&&inventoryReady&&!document.hidden;}
+function canScan(){return counter.stream&&counter.baseline&&counter.backgroundBank.length&&!counter.paused&&!counter.calibrating&&!checkoutBusy&&!$('payDlg').open&&inventoryReady&&!document.hidden;}
 function tick(){
   const v=$('vidC');if(!counter.stream||!v.videoWidth||document.hidden||counter.calibrating)return;
   if(!counter.baseline){setState('Clear the counter → Set empty counter');return;}
@@ -202,7 +220,7 @@ function tick(){
   tracker.update(a.boxes,now);counter.lastBBox=a.boxes.length===1?a.boxes[0].bbox:null;
   drawBoxes();renderCandidates();$('rescanBtn').disabled=!tracker.tracks.some(t=>t.visible&&!t.counted);
   if(a.boxes.length>8){setState('Up to 8 separated items · scan the rest next');return;}
-  if(!canScan())return;
+  if(!canScan()){if(counter.baseline&&!counter.backgroundBank.length)setState('Preparing empty-counter reference…');return;}
   if(!a.boxes.length){setState('Ready · place separated items');return;}
   if(!bank.length){setState('Preparing inventory photos · train products without photos');return;}
   if(!modelReady){setState('Preparing recognition model…');return;}
@@ -210,19 +228,39 @@ function tick(){
     const ready=tracker.ready(now).filter(t=>!t.result||t.result.level!=='ok'||t.hits<2);
     if(ready.length)void recogniseTracks(ready.slice(0,modelBackend==='GPU'?4:2));
   }
-  if(!counter.busy)setState(tracker.tracks.some(t=>t.blocked)?'Separate touching items':tracker.tracks.some(t=>t.visible&&t.result?.level==='ok'&&!t.counted)?'Matches ready · check cart or add items':tracker.tracks.filter(t=>t.visible).every(t=>t.counted)?'Items added · remove before the next batch':'Tracking items…');
+  if(!counter.busy)setState(tracker.tracks.some(t=>t.blocked)?'Move touching items apart':tracker.tracks.some(t=>t.visible&&t.hits>=2&&t.result?.level==='ok'&&!t.counted)?'Inventory match ready · check cart':tracker.tracks.filter(t=>t.visible).every(t=>t.counted)?'Items added · remove before the next batch':'Checking view against inventory photos…');
 }
 async function recogniseTracks(tracks){
-  counter.busy=true;const revision=inventoryRevision;
-  const jobs=tracks.map(t=>{t.busy=true;return {token:tracker.token(t),crop:cropSquare($('vidC'),t.bbox)};});
+  counter.busy=true;const revision=inventoryRevision,referenceEpoch=counter.referenceEpoch;
+  const jobs=tracks.map(t=>{t.busy=true;return {token:tracker.token(t),regions:focusRegions(t.bbox)};});
   setState(`Matching ${jobs.length} ${jobs.length===1?'item':'items'}…`);
   try{
-    const vectors=await embedBatch(jobs.map(j=>j.crop));recognitionFailures=0;
-    if(revision!==inventoryRevision||!canScan())return;
+    // Run the full object crop first; only search smaller regions when it fails.
+    const primary=jobs.map(j=>cropSquare($('vidC'),j.regions[0],1.08));
+    const vectors=await embedBatch(primary);recognitionFailures=0;
+    if(revision!==inventoryRevision||referenceEpoch!==counter.referenceEpoch||!canScan())return;
+    const threshold=$('thr').value/100,margin=$('mar').value/100;
+    const picks=jobs.map((job,i)=>RetailScan.selectInventoryMatch([{bbox:job.regions[0],top:match(vectors[i])}],
+      [Math.max(...counter.backgroundBank.map(bg=>dot(vectors[i],bg)))],threshold,margin));
+    const search=[];
+    for(let i=0;i<jobs.length;i++)if(!picks[i]&&jobs[i].regions.length>1)
+      for(const bbox of jobs[i].regions.slice(1))search.push({i,bbox,crop:cropSquare($('vidC'),bbox,1.05)});
+    if(search.length){
+      const extra=[];
+      for(let i=0;i<search.length;i+=modelBackend==='GPU'?8:2)
+        extra.push(...await embedBatch(search.slice(i,i+(modelBackend==='GPU'?8:2)).map(s=>s.crop)));
+      if(revision!==inventoryRevision||referenceEpoch!==counter.referenceEpoch||!canScan())return;
+      for(let i=0;i<search.length;i++){
+        const q=extra[i],candidate=RetailScan.selectInventoryMatch([{bbox:search[i].bbox,top:match(q)}],
+          [Math.max(...counter.backgroundBank.map(bg=>dot(q,bg)))],threshold,margin);
+        if(candidate&&(!picks[search[i].i]||candidate.rank>picks[search[i].i].rank))picks[search[i].i]=candidate;
+      }
+    }
     for(let i=0;i<jobs.length;i++){
       const t=tracker.resolve(jobs[i].token,performance.now());if(!t)continue;
-      const top=match(vectors[i]),result={...RetailScan.decide(top,$('thr').value/100,$('mar').value/100),top,q:vectors[i],crop:jobs[i].crop};
+      const picked=picks[i],result=picked?{...picked}:{pid:null,score:0,top:[],level:'none'};
       const stable=tracker.accept(t,result,performance.now());
+      t.focusBBox=result.level==='ok'?result.bbox:null;
       if(stable&&$('autoAdd').checked&&result.score>=Math.min(.98,$('thr').value/100+.08))addTrack(t);
     }
   }catch(error){
@@ -237,7 +275,7 @@ function addTrack(t,pid=t.result?.pid){
 }
 let candidatesKey='';
 function renderCandidates(force=false){
-  const visible=tracker.tracks.filter(t=>t.visible&&!t.blocked&&!t.counted);
+  const visible=tracker.tracks.filter(t=>t.visible&&!t.blocked&&!t.counted&&t.result?.level==='ok'&&t.hits>=2);
   const key=visible.map(t=>`${t.id}:${t.result?.pid}:${t.result?.level}:${t.hits}`).join('|')+inventoryReady;
   if(!force&&key===candidatesKey)return;candidatesKey=key;
   const box=$('candBox');box.replaceChildren();
@@ -262,13 +300,31 @@ function renderCandidates(force=false){
 async function calibrate(){
   if(!counter.stream||counter.calibrating)return;
   if(tracker.tracks.some(t=>t.visible)&&!confirm('Remove every item from the counter first. Is the camera view now empty?'))return;
-  counter.calibrating=true;tracker.reset();drawBoxes();renderCandidates(true);$('calBtn').disabled=true;
+  counter.calibrating=true;counter.backgroundBank=[];const epoch=++counter.referenceEpoch;
+  tracker.reset();drawBoxes();renderCandidates(true);$('calBtn').disabled=true;
   setState('Capturing empty counter…');
   try{
     const samples=[];for(let i=0;i<5;i++){await new Promise(r=>setTimeout(r,65));if(!counter.stream)return;samples.push(grab($('vidC')));}
     counter.baseline=new Uint8ClampedArray(samples[0].length);
     for(let i=0;i<counter.baseline.length;i++)counter.baseline[i]=samples.map(s=>s[i]).sort((a,b)=>a-b)[2];
-    counter.prev=samples.at(-1);setState('Ready · place separated items');$('cameraHelp').textContent='Keep the camera fixed. Place up to 8 items with gaps; remove counted items before scanning another batch.';
+    counter.prev=samples.at(-1);
+    // The empty scene is a negative example: a region matching it is background,
+    // even if movement segmentation proposed it as an item.
+    setState('Learning empty-counter background…');
+    const v=$('vidC');
+    const referencePhotos=[cropSquare(v,null,1),...[
+      {x0:0,y0:0,x1:.5,y1:.5},{x0:.5,y0:0,x1:1,y1:.5},
+      {x0:0,y0:.5,x1:.5,y1:1},{x0:.5,y0:.5,x1:1,y1:1},
+    ].map(box=>cropSquare(v,box,1.05))];
+    const refs=[];
+    for(let i=0;i<referencePhotos.length;i+=modelBackend==='GPU'?5:2)
+      refs.push(...await embedBatch(referencePhotos.slice(i,i+(modelBackend==='GPU'?5:2))));
+    if(epoch!==counter.referenceEpoch||!counter.stream)return;
+    counter.backgroundBank=refs;
+    setState('Ready · show an inventory product');
+    $('cameraHelp').textContent='Only confirmed inventory matches are outlined. Keep the camera fixed and show the product clearly.';
+  }catch(error){
+    counter.baseline=null;setState('Calibration failed');$('cameraHelp').textContent=error.message||'Could not prepare the empty-counter reference.';
   }finally{counter.calibrating=false;$('calBtn').disabled=!counter.stream;}
 }
 
@@ -346,7 +402,7 @@ async function startCounterCam() {
     counter.stream = await openCamera($('vidC'), $('camSel').value || null);
     $('vidE').srcObject = counter.stream; $('vidE').play().catch(() => {});
     await listCameras();
-    counter.baseline=null;counter.prev=null;tracker.reset();
+    counter.baseline=null;counter.prev=null;counter.backgroundBank=[];counter.referenceEpoch++;tracker.reset();
     for(const video of [$('vidC'),$('vidE')])video.parentElement.style.aspectRatio=`${$('vidC').videoWidth}/${$('vidC').videoHeight}`;
     $('camBtn').textContent = $('camBtnE').textContent = 'Stop camera'; $('calBtn').disabled = false; $('snapBtn').disabled = false;
     setState('Clear counter → Set empty counter');
@@ -358,7 +414,7 @@ async function startCounterCam() {
 }
 function stopCounterCam() {
   clearInterval(counter.timer); counter.stream?.getTracks().forEach(t => t.stop()); counter.stream = null; $('vidC').srcObject = null; $('vidE').srcObject = null;
-  $('camBtn').textContent = $('camBtnE').textContent = 'Start camera'; $('calBtn').disabled = true; $('snapBtn').disabled = true; setState('Camera off'); $('cameraHelp').textContent = 'Press Start camera to trigger your browser’s camera permission prompt.'; counter.baseline=null;tracker.reset();drawBoxes();renderCandidates(true);
+  $('camBtn').textContent = $('camBtnE').textContent = 'Start camera'; $('calBtn').disabled = true; $('snapBtn').disabled = true; setState('Camera off'); $('cameraHelp').textContent = 'Press Start camera to trigger your browser’s camera permission prompt.'; counter.baseline=null;counter.backgroundBank=[];counter.referenceEpoch++;tracker.reset();drawBoxes();renderCandidates(true);
 }
 $('camBtn').onclick = () => counter.stream ? stopCounterCam() : startCounterCam();
 $('camSel').onchange = () => { if (counter.stream) { stopCounterCam(); startCounterCam(); } };

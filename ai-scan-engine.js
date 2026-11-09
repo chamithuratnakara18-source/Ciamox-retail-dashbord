@@ -34,19 +34,33 @@
           if(nx>=0&&nx<w&&ny>=0&&ny<h&&clean[k]){clean[k]=0;queue[tail++]=k;}
         }
       }
-      if(n>=Math.max(24,size*.0025)&&x1-x0>=3&&y1-y0>=3)components.push({x0:x0/w,y0:y0/h,x1:(x1+1)/w,y1:(y1+1)/h,pixels:n,moved});
+      // Retain fragments for merging; reject noise after adjacent pieces join.
+      if(n>=24&&x1-x0>=3&&y1-y0>=3)
+        components.push({x0:x0/w,y0:y0/h,x1:(x1+1)/w,y1:(y1+1)/h,pixels:n,moved});
     }
     // Join fragments belonging to the same package. Keep a visible gap between items.
     let merged=true;
     while(merged){merged=false;outer:for(let i=0;i<components.length;i++)for(let j=i+1;j<components.length;j++){
       const a=components[i],b=components[j],gapX=Math.max(0,a.x0-b.x1,b.x0-a.x1),gapY=Math.max(0,a.y0-b.y1,b.y0-a.y1);
-      if(intersection(a,b)>0 || (gapX<2/w&&gapY<2/h)){
+      if(intersection(a,b)>0 || (gapX<4/w&&gapY<4/h)){
         components[i]={x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1),pixels:a.pixels+b.pixels,moved:a.moved+b.moved};
         components.splice(j,1);merged=true;break outer;
       }
     }
     }
-    return {fraction:changed/size, boxes:components.sort((a,b)=>b.pixels-a.pixels).map(c=>({bbox:{x0:c.x0,y0:c.y0,x1:c.x1,y1:c.y1},motion:previous?c.moved/c.pixels:1}))};
+    // A large package can leave small disjoint highlights around its edges.
+    // Keep separate substantial products, but do not track tiny bystanders.
+    // Text, fabric texture and reflections are too small to make a useful crop.
+    // A product below this size should be moved closer to the camera.
+    const candidates=components.filter(c=>c.pixels>=Math.max(96,size*.005) &&
+      (c.x1-c.x0)*w>=8 && (c.y1-c.y0)*h>=8 &&
+      c.x0<.96&&c.x1>.04&&c.y0<.96&&c.y1>.04);
+    candidates.sort((a,b)=>b.pixels-a.pixels);
+    const primary=candidates[0];
+    const visible=primary && area(primary)>.15
+      ?candidates.filter((c,i)=>i===0||c.pixels>=Math.max(160,primary.pixels*.04)||area(c)>.012)
+      :candidates;
+    return {fraction:changed/size, boxes:visible.map(c=>({bbox:{x0:c.x0,y0:c.y0,x1:c.x1,y1:c.y1},motion:previous?c.moved/c.pixels:1}))};
   }
   class Tracker {
     constructor({settleMs=180, missingMs=900, maxTracks=8}={}) {this.settleMs=settleMs;this.missingMs=missingMs;this.maxTracks=maxTracks;this.nextId=1;this.epoch=0;this.tracks=[];}
@@ -99,6 +113,19 @@
     const first=top[0],gap=top.length>1?first.score-top[1].score:1;
     return {pid:first?.p?.id||null,score:first?.score||0,gap,level:first&&first.score>=threshold&&gap>=margin?'ok':first&&first.score>=threshold-.15?'maybe':'none'};
   }
-  const api={detect,Tracker,iou,area,decide};
+  // Each region must beat both other inventory products and the empty-counter
+  // reference. Motion alone is never evidence that a region is a product.
+  function selectInventoryMatch(regions,backgroundScores,threshold,margin,backgroundLead=.06){
+    let winner=null;
+    for(let i=0;i<regions.length;i++){
+      const region=regions[i],decision=decide(region.top,threshold,margin);
+      const lead=decision.score-(backgroundScores[i]??1);
+      if(decision.level!=='ok'||lead<backgroundLead)continue;
+      const rank=decision.score+Math.min(.15,lead)*.25;
+      if(!winner||rank>winner.rank)winner={...decision,top:region.top,bbox:region.bbox,index:i,backgroundLead:lead,rank};
+    }
+    return winner;
+  }
+  const api={detect,Tracker,iou,area,decide,selectInventoryMatch};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RetailScan=api;
 })(globalThis);

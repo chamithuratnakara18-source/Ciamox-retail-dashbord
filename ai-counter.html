@@ -106,7 +106,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
         </div>
         <p id="cameraHelp" class="mute" role="status" style="margin:8px 0 0">Loading camera controls…</p>
         <p class="mute" style="margin:4px 0 0">If this embedded view is blocked, <a href="./ai-counter.html" target="_blank" rel="noopener">open the camera directly</a>.</p>
-        <p class="scan-note">1. Clear the counter and set its empty view. 2. Place up to 8 items with a gap between each. Green boxes show inventory matches; amber boxes need confirmation.</p>
+        <p class="scan-note">Set the empty counter first. The camera compares regions with your inventory photos and the empty scene; only confirmed product matches get a box. If a product is missed, show it clearly, adjust the similarity setting, or add better scanner photos. Check every cart item before payment.</p>
         <div class="row">
           <button class="btn acc" id="addVisibleBtn" disabled>Add matched items</button>
           <label class="mute"><input type="checkbox" id="autoAdd"> Auto-add stable matches</label>
@@ -132,7 +132,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
         <input type="range" id="thr" min="30" max="95" value="72" style="width:100%">
         <label class="f">Required lead over the 2nd best product: <b id="marV"></b></label>
         <input type="range" id="mar" min="0" max="30" value="8" style="width:100%">
-        <div class="mute" style="margin-top:6px">Scores show visual similarity, not guaranteed accuracy. Auto-add needs two agreeing matches and a higher score. Check the cart before payment. Use Firebase Products → Self-test to tune for your products.</div>
+        <div class="mute" style="margin-top:6px">Unmatched objects stay unmarked. Scores are image similarity, not a probability of correctness. Two agreeing checks are needed before a box appears. Check the cart before payment. Use Firebase Products → Self-test and live counter trials to tune this setting.</div>
       </div>
     </div>
   </section>
@@ -202,7 +202,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
 <div class="toast" id="toast"></div>
 <canvas id="work" class="hide"></canvas>
 
-<script src="./ai-scan-engine.js?v=six-views-1"></script>
-<script src="./ai-counter.js?v=auto-inventory-20261109-2"></script>
+<script src="./ai-scan-engine.js?v=semantic-focus-20261109-1"></script>
+<script src="./ai-counter.js?v=semantic-focus-20261109-1"></script>
 </body>
 </html>

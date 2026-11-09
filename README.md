@@ -1,3 +1,40 @@
+# Inventory-verified camera focus
+
+This package changes the camera display and checkout candidate list so
+movement alone never counts as a product. When **Set empty counter** is
+pressed, the camera embeds five empty-scene views as negative references.
+It compares each changed region to the six inventory photo references and
+to those empty-scene views. For a broad region containing a hand or cloth,
+it also checks four overlapping smaller views and focuses the outline on
+the strongest accepted product region. A region must exceed the configured
+similarity, beat the next inventory product, beat the empty scene by at
+least six similarity points, and match twice before its name/box appears.
+Unrecognized regions remain unmarked and cannot be added through the camera.
+
+Upload the **complete contents** of this ZIP at the dashboard repository
+root, retaining the root-level `api` folder. Hard-refresh the deployment
+after it reaches Ready. Recalibrate with an actually empty counter after
+moving the camera. The camera has to finish preparing both inventory and
+empty-scene references before scanning.
+
+This is conservative image matching, **not** a trained object detector.
+Unknown objects with similar colors/shapes can still look like a product,
+and a real product against very different lighting or a cluttered scene can
+be missed. Validate on the actual products and surroundings before enabling
+Auto-add. The 12 unit tests cover candidate rejection, choosing the matching
+region, segmentation, and tracking; they do not measure live camera accuracy.
+
+# Earlier camera focus and automatic inventory recognition
+
+The camera now discards tiny changed regions such as fabric texture, print,
+reflections, and movement at the edge. It joins adjacent fragments of a
+package before drawing a box, while retaining a second separated product.
+The 10 segmentation and tracking tests pass. This is a noise filter, not a
+semantic object detector: first fix the camera over an empty counter, click
+**Set empty counter**, then show the products against that stable background.
+Holding a box in front of a moving person or changing the background after
+calibration can still produce false regions. Review the cart before payment.
+
 # Six-view AI reference indexing
 
 This full dashboard package prepares the six front, back, top, bottom, left,
