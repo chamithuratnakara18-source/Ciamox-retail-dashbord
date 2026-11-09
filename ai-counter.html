@@ -15,9 +15,10 @@ header .sp{flex:1}
 nav{display:flex;gap:6px}
 nav button{background:transparent;border:0;color:#b9c7d2;padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:600}
 nav button.on{background:#1f3140;color:#fff}
-#modelState{font-size:12px;color:#9fb3c2}
+#modelState,#detectorState{font-size:12px;color:#9fb3c2}
 main{max-width:1200px;margin:0 auto;padding:16px}
 .grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px}
+.catalogue-layout{display:flex;flex-direction:column;gap:16px}.catalogue-inventory{order:-1}.manual-tools summary{cursor:pointer;font-weight:700;padding:14px;background:#fff;border:1px solid var(--line);border-radius:var(--r)}.manual-tools details[open] summary{margin-bottom:10px}
 @media(max-width:860px){.grid{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px}
 .card h2{font-size:13px;margin:0 0 10px;color:var(--mute);letter-spacing:.8px;text-transform:uppercase}
@@ -31,6 +32,10 @@ main{max-width:1200px;margin:0 auto;padding:16px}
 .object-box[data-state=maybe]{border-color:#ffbe57}.object-box[data-state=maybe] span{background:#ffbe57}
 .object-box[data-state=none]{border-color:#f5a797}.object-box[data-state=none] span{background:#f5a797}
 .scan-metrics{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.scan-metrics span{font-size:12px;background:#edf6f1;border:1px solid #d5e8dc;border-radius:99px;padding:5px 9px;color:#34584a}
+.quick-add{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.quick-add button{background:#0f9f71;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.quick-add small{align-self:center;color:#526675}
+.quick-add button.needs-confirmation{background:#fff3da;color:#6e4300;border:1px solid #e9b858}
+.checkout-gate{margin:10px 0;padding:10px 12px;border:1px solid #ecd19b;background:#fff8e9;color:#674916;border-radius:9px;font-size:13px;font-weight:600}
+.checkout-gate.ready{border-color:#cae8d5;background:#eef8f1;color:#276048}
 .scan-note{padding:10px 12px;background:#eff5f9;border-radius:9px;margin:12px 0;color:#56707d;font-size:13px}
 header{flex-wrap:wrap}#modelState{margin-left:auto}nav button{padding:8px 10px}
 @media(max-width:480px){header h1{display:none}.object-box span{font-size:10px;max-width:120px}main{padding:10px}.card{padding:12px}}
@@ -82,6 +87,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
     <button id="tabCatalogue">Firebase Products</button>
   </nav>
   <span class="sp"></span>
+  <span id="detectorState">Object detector: starts with camera</span>
   <span id="modelState">Model: not loaded</span>
 </header>
 
@@ -97,6 +103,8 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
           <div class="box" id="bboxC"></div>
           <span class="badge" id="stateC">Camera off</span>
         </div>
+        <div id="cartGate" class="checkout-gate" role="status">Auto-add starts at 24% similarity after two stable matches. Low settings can add the wrong item; review the cart before payment.</div>
+        <div id="quickAdds" class="quick-add" aria-live="polite"></div>
         <div class="row">
           <button class="btn acc" id="camBtn">Start camera</button>
           <select id="camSel" style="max-width:220px"></select>
@@ -105,10 +113,10 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
         </div>
         <p id="cameraHelp" class="mute" role="status" style="margin:8px 0 0">Loading camera controls…</p>
         <p class="mute" style="margin:4px 0 0">If this embedded view is blocked, <a href="./ai-counter.html" target="_blank" rel="noopener">open the camera directly</a>.</p>
-        <p class="scan-note">1. Clear the counter and set its empty view. 2. Place up to 8 items with a gap between each. Green boxes show inventory matches; amber boxes need confirmation.</p>
+        <p class="scan-note">Set the empty counter first. RT-DETRv2 finds object regions; changes from the empty view catch packages it misses. Only regions matching your Firebase product photos can enter the cart. New scanner photos are indexed automatically after Firebase sync. Keep items visible until matched and check the cart before payment.</p>
         <div class="row">
-          <button class="btn acc" id="addVisibleBtn" disabled>Add matched items</button>
-          <label class="mute"><input type="checkbox" id="autoAdd"> Auto-add stable matches</label>
+          <button class="btn acc" id="addVisibleBtn" disabled>Add eligible matches</button>
+          <label class="mute"><input type="checkbox" id="autoAdd" checked> Auto-add eligible matches</label>
         </div>
         <div id="candBox"></div>
       </div>
@@ -127,20 +135,22 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
       <div class="card" style="margin-top:16px">
         <h2>Recognition settings</h2>
         <button class="btn ghost" id="retryModel">Retry model</button>
-        <label class="f">Minimum similarity to accept: <b id="thrV"></b></label>
-        <input type="range" id="thr" min="30" max="95" value="72" style="width:100%">
+        <label class="f">Auto-add similarity threshold (24–100): <b id="thrV"></b></label>
+        <input type="range" id="thr" min="24" max="100" value="24" style="width:100%">
+        <div class="mute" id="thresholdHelp">At 24%, weak visual matches may enter the cart. Similarity is not measured accuracy; review every item before payment.</div>
         <label class="f">Required lead over the 2nd best product: <b id="marV"></b></label>
-        <input type="range" id="mar" min="0" max="30" value="8" style="width:100%">
-        <div class="mute" style="margin-top:6px">Scores show visual similarity, not guaranteed accuracy. Auto-add needs two agreeing matches and a higher score. Check the cart before payment. Use Firebase Products → Self-test to tune for your products.</div>
+        <input type="range" id="mar" min="8" max="30" value="8" style="width:100%">
+        <div class="mute" style="margin-top:6px">Unknown goods remain out of the cart. A recently confirmed product may be suggested quickly when another copy appears. Check the cart before payment.</div>
       </div>
     </div>
   </section>
 
   <!-- ======================= CATALOGUE ======================= -->
-  <section id="viewCatalogue" class="grid hide">
-    <div>
+  <section id="viewCatalogue" class="catalogue-layout hide">
+    <div class="manual-tools">
+      <details id="manualTraining"><summary>Optional: add camera examples if similar packages get confused</summary>
       <div class="card">
-        <h2 id="enrolTitle">Train a Firebase product</h2>
+        <h2 id="enrolTitle">Optional camera examples</h2>
         <div class="cam">
           <video id="vidE" playsinline muted autoplay></video>
           <div class="box" id="bboxE"></div>
@@ -150,7 +160,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
           <button class="btn acc" id="camBtnE">Start camera</button>
           <button class="btn" id="snapBtn" disabled>Capture sample</button>
           <button class="btn ghost" id="usePhotoBtn" disabled>Use Firebase product photo</button>
-          <span class="mute" id="snapHint">Select an onboarded product below, then capture it from several angles. Saved AI samples sync through Firebase.</span>
+          <span class="mute" id="snapHint">Scanner photos from six angles are prepared automatically. You can also capture extra camera samples here.</span>
         </div>
         <div class="samples" id="samplesRow"></div>
         <label class="f" for="pProduct">Onboarded Firebase product</label>
@@ -161,11 +171,13 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
           <button class="btn ghost" id="resetEnrol">Clear samples</button>
         </div>
       </div>
+      </details>
     </div>
-    <div>
+    <div class="catalogue-inventory">
       <div class="card">
-        <h2>Firebase inventory · <span id="pCount">0</span> products · <span id="sCount">0</span> camera samples</h2>
-        <div class="row" style="margin-top:0;margin-bottom:8px"><button class="btn ghost" id="syncProducts">Refresh from Firebase</button><span class="mute" id="firebaseState">Connecting to Firebase inventory… Inventory photos are prepared automatically for recognition.</span></div>
+        <h2>Automatic inventory recognition · <span id="pCount">0</span> products · <span id="sCount">0</span> ready</h2>
+        <p class="mute">The scanner's product photos are prepared automatically. No extra camera capture is needed for products marked <b>Six views ready</b>.</p>
+        <div class="row" style="margin-top:0;margin-bottom:8px"><button class="btn ghost" id="syncProducts">Refresh from Firebase</button><span class="mute" id="firebaseState">Connecting to Firebase inventory… Six scanner views are prepared automatically for recognition.</span></div>
         <input type="search" id="pSearch" placeholder="Search products…">
         <div class="plist" id="pList"></div>
         <div class="row">
@@ -198,7 +210,7 @@ pre.out{background:#0b141b;color:#cfe6dc;padding:10px;border-radius:10px;font-si
 <div class="toast" id="toast"></div>
 <canvas id="work" class="hide"></canvas>
 
-<script src="./ai-scan-engine.js?v=six-views-1"></script>
-<script src="./ai-counter.js?v=six-views-1"></script>
+<script src="./ai-scan-engine.js?v=low-threshold-20261110-1"></script>
+<script src="./ai-counter.js?v=low-threshold-20261110-1"></script>
 </body>
 </html>
