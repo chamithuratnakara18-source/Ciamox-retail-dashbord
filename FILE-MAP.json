@@ -1,0 +1,182 @@
+[
+  {
+    "source": ".env.example",
+    "destination": ".env.example"
+  },
+  {
+    "source": ".gitignore",
+    "destination": ".gitignore"
+  },
+  {
+    "source": "Ciamox-supplier-dashboard.html",
+    "destination": "Ciamox-supplier-dashboard.html"
+  },
+  {
+    "source": "README.md",
+    "destination": "README.md"
+  },
+  {
+    "source": "ai-counter.html",
+    "destination": "ai-counter.html"
+  },
+  {
+    "source": "ai-counter.js",
+    "destination": "ai-counter.js"
+  },
+  {
+    "source": "ai-detector-worker.js",
+    "destination": "ai-detector-worker.js"
+  },
+  {
+    "source": "ai-scan-engine.js",
+    "destination": "ai-scan-engine.js"
+  },
+  {
+    "source": "ai-vision-worker.js",
+    "destination": "ai-vision-worker.js"
+  },
+  {
+    "source": "api__[...path].js",
+    "destination": "api/[...path].js"
+  },
+  {
+    "source": "api__ai-models.js",
+    "destination": "api/ai-models.js"
+  },
+  {
+    "source": "api__health.js",
+    "destination": "api/health.js"
+  },
+  {
+    "source": "api__inventory__category.js",
+    "destination": "api/inventory/category.js"
+  },
+  {
+    "source": "api__inventory.js",
+    "destination": "api/inventory.js"
+  },
+  {
+    "source": "api__sales.js",
+    "destination": "api/sales.js"
+  },
+  {
+    "source": "api__suppliers.js",
+    "destination": "api/suppliers.js"
+  },
+  {
+    "source": "api__ultralytics__sync.js",
+    "destination": "api/ultralytics/sync.js"
+  },
+  {
+    "source": "auth-guard.js",
+    "destination": "auth-guard.js"
+  },
+  {
+    "source": "backend.js",
+    "destination": "backend.js"
+  },
+  {
+    "source": "firebase-app.js",
+    "destination": "firebase-app.js"
+  },
+  {
+    "source": "firebase-config.js",
+    "destination": "firebase-config.js"
+  },
+  {
+    "source": "firebase-store.js",
+    "destination": "firebase-store.js"
+  },
+  {
+    "source": "firestore.rules",
+    "destination": "firestore.rules"
+  },
+  {
+    "source": "hub.js",
+    "destination": "hub.js"
+  },
+  {
+    "source": "index.html",
+    "destination": "index.html"
+  },
+  {
+    "source": "inventory-analytics.html",
+    "destination": "inventory-analytics.html"
+  },
+  {
+    "source": "inventory-analytics.js",
+    "destination": "inventory-analytics.js"
+  },
+  {
+    "source": "lib__ultralytics-sync.js",
+    "destination": "lib/ultralytics-sync.js"
+  },
+  {
+    "source": "lib__vercel-direct.js",
+    "destination": "lib/vercel-direct.js"
+  },
+  {
+    "source": "login.html",
+    "destination": "login.html"
+  },
+  {
+    "source": "package-lock.json",
+    "destination": "package-lock.json"
+  },
+  {
+    "source": "package.json",
+    "destination": "package.json"
+  },
+  {
+    "source": "render.yaml",
+    "destination": "render.yaml"
+  },
+  {
+    "source": "scanner-app.js",
+    "destination": "scanner-app.js"
+  },
+  {
+    "source": "scanner.html",
+    "destination": "scanner.html"
+  },
+  {
+    "source": "schema.sql",
+    "destination": "schema.sql"
+  },
+  {
+    "source": "server.js",
+    "destination": "server.js"
+  },
+  {
+    "source": "supplier-dashboard.html",
+    "destination": "supplier-dashboard.html"
+  },
+  {
+    "source": "supplier-dashboard.js",
+    "destination": "supplier-dashboard.js"
+  },
+  {
+    "source": "suppliers.js",
+    "destination": "suppliers.js"
+  },
+  {
+    "source": "tests__ai-scan-engine.test.cjs",
+    "destination": "tests/ai-scan-engine.test.cjs"
+  },
+  {
+    "source": "tests__repeat-cache.test.cjs",
+    "destination": "tests/repeat-cache.test.cjs"
+  },
+  {
+    "source": "tests__ultralytics-sync.test.cjs",
+    "destination": "tests/ultralytics-sync.test.cjs"
+  },
+  {
+    "source": "tests__vercel-routes.test.cjs",
+    "destination": "tests/vercel-routes.test.cjs"
+  },
+  {
+    "source": "vercel.json",
+    "destination": "vercel.json"
+  }
+]
